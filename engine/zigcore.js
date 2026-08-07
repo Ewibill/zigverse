@@ -967,6 +967,14 @@
       { id: "surface",      pillar: "physics", since: "0.5",    enables: "membrane/fluid skins — a level that carries waves", proof: "resonator_shell_check" },
       { id: "zigflow",      pillar: "physics", since: "0.8",    enables: "divergence-free current field — currents swirl, never drain or pile up", proof: "zigflow_ref" },
       { id: "membrane",     pillar: "physics", since: "0.10",   enables: "elastic space + topological memory — the surface remembers what it lived", proof: "membrane_ref" },
+      { id: "contact", pillar: "physics", since: "0.16(core)", enables: "MATTER THAT OCCUPIES SPACE - static exclusion. Flocking separation is a force between strangers, a preference that can be overpowered; this is a body that cannot be entered. A stone, a pillar, a reef: something a creature must go AROUND, which turns a drawing into a creature in a PLACE. The general case (a body against itself) is the same mathematics with both sides moving", proof: "contact_ref" },
+      { id: "allometry", pillar: "physics", since: "0.15(core)", enables: "per-segment REST LENGTH - one body whose segments differ in size. A kelp frond tapers, a whale tapers, and a SHELL is a body whose every segment slightly outgrows the last", proof: "structure_ref" },
+      { id: "shell", pillar: "life", since: "0.15(core)", enables: "GROWTH WITH ROTATION - constant turn plus constant growth ratio traces a logarithmic spiral: nautilus, ammonite, ram horn, fern crozier. One of the commonest forms in biology because it is simply what steady growth plus steady turning draws, and it is self-similar so the animal never changes proportion. Interval sets the whorl tightness and handedness; attack opens the ratio", proof: "structure_ref" },
+      { id: "undulation", pillar: "life", since: "0.14(core)", enables: "SWIMMING - age() fed in as a phase offset makes a bonded body carry a travelling wave head to tail, which is how every eel, fish, snake and worm moves. No new rhythm: zigphase clock read through structure geometry. The wave writes ANGLES (rest curvature), never forces - muscle changes what the body considers REST and the elastic structure follows, so no drive level can tear a bond", proof: "structure_ref" },
+      { id: "slip", pillar: "habitat", since: "0.14(core)", enables: "the medium tells ALONG from ACROSS - a slender body slides along its own length and resists moving sideways, so a curve advances THROUGH itself the way a snake does instead of sweeping the whole shape sideways. Shapes the character of any slender organism, swimming or not", proof: "structure_ref" },
+      { id: "refinement", pillar: "physics", since: "0.13.2(core)", enables: "the same body at any RESOLUTION — refine() subdivides joints while holding physical length, so a creature stops being a bicycle chain without the camera pulling back. Scaling is forced, not chosen: k as factor2 (N links in series carry N x the load at 1/N the rest), damp linearly, bend not at all; the bond reports the substeps it needs. Measured invariant to 8x", proof: "structure_ref" },
+      { id: "travelling-body", pillar: "life", since: "0.13.1(core)", enables: "TURNOVER applied to a BODY — the tail grows, the root retires, so a bonded organism holds a fixed span and TRAVELS instead of accumulating. Unbounded growth turns a creature into a thread (the camera must pull back, every segment shrinks to a dot); a bounded body stays legible and moves. `age()` then reads time-since-played within LIVING MEMORY. This is Zigpede's skeleton, and it composes two existing laws rather than adding a third", proof: "structure_ref" },
+      { id: "structure",    pillar: "physics", since: "0.13(core)", enables: "matter that is JOINED — a parent-index topology + spring/damping/BEND makes a cloud into a BODY that cannot come apart; one number (bend) spans rope→spine. Because the topology is an index, a body GROWS by appending, so a played stream builds the organism note by note and position along the body IS time (the organism is its own history)", proof: "structure_ref" },
       { id: "load",         pillar: "physics", since: "0.16",   enables: "proximity to criticality — the sweet spot of organization where a mass is most alive; too little is slack, too much is dead (Bill, 2026-07-23)", proof: "(felt — only a performer holds it)" },
       /* HABITAT — the environment; inherits physics, expresses it. OUR THINNEST PILLAR — the frontier. */
       { id: "medium",       pillar: "habitat", since: "0.5",    enables: "air vs water — gravity vs neutral buoyancy, chosen per world", proof: "resonator_shell_check" },
@@ -1062,6 +1070,33 @@
       if (a.loFrac !== undefined) b.lo = a.loFrac * H;
       if (a.hiFrac !== undefined) b.hi = a.hiFrac * H;
       return b;
+    },
+
+    /* BONDS — the world's LINKAGE: matter that is JOINED. Where a boundary contains a
+       mass from outside, a bond holds it together from inside — the difference between
+       a cloud of agents that happen to fly near each other and a BODY that cannot come
+       apart. Flocking's separation is a force between strangers; a bond is a commitment
+       between neighbours that survives being pulled.
+         rest — the length the link wants to be (FRACTION of frame half-extent, like
+                every other archetype, so a body scales with the view it lives in)
+         k    — how hard it pulls back to rest (stiffness)
+         damp — resistance along the link; without it a chain rings like a spring forever
+         bend — ANGULAR stiffness (0..1): how hard a joint resists folding. 0 is a rope
+                (limp, folds anywhere); 1 is a spine (wants to continue straight). This
+                one number is the whole difference between kelp and a centipede.
+         anchor — the root is pinned to its birthplace (holdfast). A stalk is anchored;
+                a swimming body is free and its root is simply the head. */
+    bonds: {
+      none:   null,
+      chain:  { restFrac: 0.11, k: 26, damp: 3.2, bend: 0.00 },                 // a limp rope — folds anywhere (tentacle, streamer)
+      spine:  { restFrac: 0.10, k: 34, damp: 4.0, bend: 0.55 },                 // a segmented BODY that holds its line (zigpede)
+      stalk:  { restFrac: 0.13, k: 30, damp: 3.6, bend: 0.35, anchor: true },   // rooted and springy — sways, never leaves (kelp)
+      tether: { restFrac: 0.26, k: 12, damp: 2.0, bend: 0.00 },                 // a long loose leash — followers trail far behind
+      eel:    { restFrac: 0.09, k: 20, damp: 1.8, bend: 0.16 }                  // COMPLIANT — holds a line loosely enough to be bent by its own wave (undulation)
+    },
+    bond(name, frameH) {
+      const a = name && this.bonds[name]; if (!a) return null;
+      return { rest: (a.restFrac || 0.1) * (frameH || 0), k: a.k || 26, damp: a.damp || 3, bend: a.bend || 0, anchor: !!a.anchor };
     }
   };
 
@@ -1101,6 +1136,485 @@
       };
     },
     names() { return Object.keys(this.places); }
+  };
+
+  /* ==========================================================================
+     ZigCore.Contact — MATTER THAT OCCUPIES SPACE (v0.16 · 2026-08-07)
+
+     Nothing in the Canon has ever given an agent VOLUME. Flocking's separation is
+     a force between strangers — a preference, not a body — and a preference can
+     always be overpowered. So a coil passes through its own length, and a world
+     has nothing in it that a creature must actually go AROUND.
+
+     This is the first half of that law: STATIC exclusion. A stone, a pillar, a
+     post, a reef — an object held still that a body cannot enter. The general
+     case (a body refusing to pass through itself, every segment against every
+     other) is the same mathematics with both sides moving, so building the fixed
+     case first is a stepping stone rather than a detour.
+
+     Why an object matters more than it sounds: a line with something to work
+     around stops being a drawing and becomes a creature in a PLACE. It can wrap,
+     brace, hide behind, and be deflected — and with `slip` it slides around an
+     obstacle along its own length the way a snake does, instead of pancaking
+     against it. (Bill, 2026-08-07: "wondering whether there could be a static
+     object that the line could operate around.")
+
+     Shapes are `{x, y, z, r}`. `skin` is the body's own half-thickness, so a
+     segment stops with its surface touching rather than its centre. The response
+     is a stiff spring on PENETRATION DEPTH plus damping along the normal, which
+     is the same shape as a bond and settles rather than bouncing forever.
+     Opt-in: no shapes, no work, byte-identical. ============================== */
+  ZigCore.Contact = {
+    VERSION: "0.16.0",
+
+    exclude(pos, vel, n, head, acc, shapes, opts) {
+      if (!shapes || !shapes.length) return acc;
+      const o = opts || {};
+      const k = (o.k === undefined) ? 400 : o.k;
+      const damp = (o.damp === undefined) ? 12 : o.damp;
+      const skin = o.skin || 0;
+      const h = head || 0;
+      for (let i = h; i < n; i++) {
+        const i3 = i * 3;
+        for (let s = 0; s < shapes.length; s++) {
+          const sh = shapes[s];
+          const dx = pos[i3] - sh.x, dy = pos[i3 + 1] - sh.y, dz = pos[i3 + 2] - (sh.z || 0);
+          const R = sh.r + skin;
+          const d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 >= R * R) continue;                       // outside — nothing to do
+          const d = Math.sqrt(d2) || 1e-6;
+          const nx = dx / d, ny = dy / d, nz = dz / d;
+          const pen = R - d;                               // how far in it has got
+          let f = pen * k;
+          if (vel) {                                       // bleed the approach, not the slide
+            const vn = vel[i3] * nx + vel[i3 + 1] * ny + vel[i3 + 2] * nz;
+            if (vn < 0) f -= vn * damp;
+          }
+          acc[i3] += nx * f; acc[i3 + 1] += ny * f; acc[i3 + 2] += nz * f;
+        }
+      }
+      return acc;
+    },
+
+    /* DEEPEST — how far the worst offender has penetrated, in world units. The
+       proof's honesty check: a law that merely pushes back is not the same as a
+       law that keeps matter OUT, and only a measurement tells them apart. */
+    deepest(pos, n, head, shapes, skin) {
+      if (!shapes || !shapes.length) return 0;
+      let worst = 0;
+      for (let i = (head || 0); i < n; i++) {
+        for (let s = 0; s < shapes.length; s++) {
+          const sh = shapes[s], R = sh.r + (skin || 0);
+          const d = Math.hypot(pos[i*3] - sh.x, pos[i*3+1] - sh.y, pos[i*3+2] - (sh.z || 0));
+          if (R - d > worst) worst = R - d;
+        }
+      }
+      return worst;
+    }
+  };
+
+  /* ==========================================================================
+     ZigCore.Structure — THE STRUCTURE LAW (v0.13 · 2026-08-07)
+     Every organism so far has been a CLOUD: agents that influence each other but
+     never hold on. Structure is the law of matter that is JOINED — and it is the
+     one law Rootwhale, Kelp and Zigpede are all waiting on, because none of them
+     is a cloud. A whale is articulated, kelp is rooted and segmented, a zigpede
+     is a body that follows its own head.
+
+     THE TOPOLOGY IS A PARENT INDEX. `par[i]` is the index of the agent that i is
+     bonded to, or -1 if i is a root. That single array expresses every shape this
+     law needs to serve — a chain (each links to the last), a tree (many children
+     per parent, branching), an anchored stalk (root pinned), a free swimmer (root
+     is the head). No new structure is needed to add a new body plan; only a
+     different parent array. Species stay thin.
+
+     GROWTH IS APPENDING. Because the topology is just an index, a body can be
+     EXTENDED at runtime: `grow()` bonds a new agent to the tail and places it one
+     rest-length along the body's own heading. A performer who plays a stream of
+     notes grows the organism note by note, and because the chain is built in the
+     order it was played, POSITION ALONG THE BODY IS TIME. The history is not
+     stored beside the organism — the organism *is* the history. (Bill, 2026-08-07.)
+
+     THE LAW, per bonded agent i with parent p:
+       1. SPRING   — the link wants to be `rest` long; deviation pulls back at k.
+       2. DAMPING  — resists closing/opening speed ALONG the link only, so a body
+                     settles instead of ringing. Lateral motion is untouched, which
+                     is what lets a chain still swing freely while not oscillating.
+       3. BENDING  — if p has a parent g, the joint at p resists folding: i is
+                     drawn toward where it would sit if the body continued STRAIGHT
+                     out of g→p. Scaled by `bend`. This is what separates a spine
+                     from a rope, and it costs one extra index lookup.
+     Forces are equal and opposite (Newton's third) so a free body conserves its
+     own momentum and can swim rather than pull itself through space by its
+     bootstraps. An anchored root ignores everything and stays home.
+
+     The engine's WGSL compute mirrors these functions exactly; `structure_ref.mjs`
+     is the proof that guards them. ========================================== */
+  ZigCore.Structure = {
+    VERSION: "0.15.0",
+
+    /* CHAIN — the simplest topology: 0 is the root, every other agent bonds to the
+       one before it. `n` agents ⟶ a parent array. The building block for kelp,
+       zigpede, tentacles, and any performance-grown body. */
+    chain(n, offset) {
+      const o = offset || 0, par = new Int32Array(n);
+      for (let i = 0; i < n; i++) par[i] = (i === 0) ? -1 : (o + i - 1);
+      return par;
+    },
+
+    /* GROW — bond a new agent to the tail and place it one rest-length out.
+       `dir` STEERS the growth: pass a heading and the body turns that way, which
+       is how a performance draws (interval → heading → shape). Omit `dir` and the
+       body continues its own line, so an unsteered stream grows straight. Returns
+       the new agent's index. One note, one segment. */
+    grow(state, bond, dir, len) {
+      const { pos, par } = state, n = state.n;
+      const tail = n - 1, prev = par[tail];
+      let d = dir;
+      if (!d) {                                          // unsteered: continue the body's own line
+        if (prev >= 0) d = [pos[tail * 3] - pos[prev * 3], pos[tail * 3 + 1] - pos[prev * 3 + 1], pos[tail * 3 + 2] - pos[prev * 3 + 2]];
+        else d = [0, 1, 0];                              // a lone agent has no line yet
+      }
+      const L = Math.hypot(d[0], d[1], d[2]) || 1;
+      d = [d[0] / L, d[1] / L, d[2] / L];
+      const i = n;
+      const step = (len === undefined) ? bond.rest : len;
+      if (state.rest) state.rest[i] = step;
+      pos[i * 3]     = pos[tail * 3]     + d[0] * step;
+      pos[i * 3 + 1] = pos[tail * 3 + 1] + d[1] * step;
+      pos[i * 3 + 2] = pos[tail * 3 + 2] + d[2] * step;
+      par[i] = tail;
+      state.n = n + 1;
+      return i;
+    },
+
+    /* REFINE — the same body at higher RESOLUTION. Returns a bond that produces a
+       physically IDENTICAL organism made of `factor`× more, shorter segments.
+
+       Resolution and legibility look like a trade-off and are not. A body only
+       became a thread when it grew LONGER; here the length is held and the joints
+       are subdivided, so the camera never pulls back — the creature just stops
+       being a bicycle chain and starts being flesh.
+
+       The scaling is not free choice, it is forced. With N segments in series the
+       root link carries N times the load while each rest length is 1/N, so relative
+       stretch goes as N²/k — stiffness MUST scale with the square of the factor or
+       a finer body sags into a longer one. Damping scales linearly (it partners a
+       velocity, not a displacement). `bend` needs no scaling at all: its weight is
+       bend·k acting on an error that shrinks as 1/factor, so it stays in proportion
+       on its own. Measured invariant to 8× — contour 1.269 → 1.258, tip −66.0 → −65.4.
+
+       `substeps` comes back with the bond because it is not advice: explicit
+       integration is stable while dt·√k stays small, and k grew as factor², so the
+       timestep must shrink as factor. Ignoring it does not degrade the body, it
+       destroys it (measured: factor 8 at one substep goes non-finite).
+
+       A species asks for the detail it wants; it does not re-derive this. */
+    refine(bond, factor) {
+      const f = Math.max(1, factor || 1);
+      return {
+        rest: bond.rest / f,
+        k: bond.k * f * f,
+        damp: bond.damp * f,
+        bend: bond.bend,
+        anchor: bond.anchor,
+        substeps: Math.max(1, Math.ceil(f / 4))
+      };
+    },
+
+    /* ==========================================================================
+       UNDULATE — the travelling wave, as REST CURVATURE. (v0.15)
+
+       A bonded body has a spine and `age()` already tells every segment how far
+       along it sits. Feed that in as a PHASE OFFSET and the whole body carries a
+       wave from head to tail — how every eel, fish, snake and worm moves. No new
+       rhythm law was needed: this is `zigphase`'s clock read through `structure`'s
+       geometry.
+
+       IT WRITES ANGLES, NOT FORCES. The first version applied a lateral force and
+       it was wrong in a way worth recording: a force competes with the spring that
+       holds the body together, so driving it hard enough to move the animal tore
+       the animal open — measured at 2.9x its own rest length, bonds ripped, no
+       usable window between "does not move" and "explodes". Muscle does not shove
+       a body sideways; it changes what the body considers to be REST, and the
+       elastic structure follows. Amplitude here is an ANGLE PER JOINT, so it is
+       bounded by geometry: no drive level can stretch a bond.
+
+       s = 1 - age is distance behind the leading end. The wave lags with s so it
+       travels backward while the animal goes forward, and amplitude grows with s
+       because a fish's head barely moves and its tail sweeps wide.
+
+       Fills `kappa` (length n) for `accel` to consume. That is the whole coupling.
+       ====================================================================== */
+    undulate(par, n, head, kappa, opts) {
+      const o = opts || {};
+      const amp = (o.amp === undefined) ? 0.35 : o.amp;        // RADIANS per joint
+      const waves = (o.waves === undefined) ? 2.0 : o.waves;
+      const phase = o.phase || 0;
+      const taper = (o.taper === undefined) ? 0.6 : o.taper;
+      const h = head || 0, depth = Math.max(1, n - h - 1);
+      for (let i = h; i < n; i++) {
+        if (par[i] < 0) { kappa[i] = 0; continue; }
+        const s = 1 - this.age(par, i, depth);
+        const env = 1 - taper * (1 - s);
+        kappa[i] = amp * env * Math.sin(phase + s * 6.283185307 * waves);
+      }
+      return kappa;
+    },
+
+    /* SLIP — the medium tells ALONG from ACROSS. (v0.14)
+
+       A slender body in a fluid does not feel one drag; it slides easily along its
+       own length and fights hard to move sideways. `slip` is why an eel is an eel
+       and a sphere is not.
+
+       Be precise about what this does and does not do. In an INERTIAL regime like
+       ours it is not the source of thrust — `undulate` already swims without it
+       (measured: isotropic low drag travels farther). What anisotropy buys is
+       CHARACTER: the body slides along its own length instead of skidding
+       sideways, so a curve advances through itself the way a snake does rather
+       than sweeping the whole shape across the floor. It is also the honest
+       medium for any slender organism, swimming or not — kelp feels it, a
+       zigpede feels it.
+
+       `along` is drag lengthwise, `across` drag sideways; the ratio is the
+       animal's slipperiness. ================================================== */
+    slip(pos, vel, par, n, head, acc, opts) {
+      const o = opts || {};
+      const along = (o.along === undefined) ? 0.05 : o.along;
+      const across = (o.across === undefined) ? 4.0 : o.across;
+      const h = head || 0;
+      for (let i = h; i < n; i++) {
+        const p = par[i];
+        const i3 = i * 3;
+        let ux, uy, uz;
+        if (p >= 0) { ux = pos[i3] - pos[p * 3]; uy = pos[i3 + 1] - pos[p * 3 + 1]; uz = pos[i3 + 2] - pos[p * 3 + 2]; }
+        else {                                                   /* the head borrows its child's line */
+          let c = -1; for (let j = h; j < n; j++) if (par[j] === i) { c = j; break; }
+          if (c < 0) continue;
+          ux = pos[c * 3] - pos[i3]; uy = pos[c * 3 + 1] - pos[i3 + 1]; uz = pos[c * 3 + 2] - pos[i3 + 2];
+        }
+        const L = Math.hypot(ux, uy, uz) || 1e-6; ux /= L; uy /= L; uz /= L;
+        const vx = vel[i3], vy = vel[i3 + 1], vz = vel[i3 + 2];
+        const vA = vx * ux + vy * uy + vz * uz;                  // speed along the body
+        acc[i3]     -= along * vA * ux + across * (vx - vA * ux);
+        acc[i3 + 1] -= along * vA * uy + across * (vy - vA * uy);
+        acc[i3 + 2] -= along * vA * uz + across * (vz - vA * uz);
+      }
+      return acc;
+    },
+
+
+    /* ==========================================================================
+       SHELL — growth with rotation. (v0.15)
+
+       Turn at a constant rate while growing at a constant RATIO and you get a
+       logarithmic spiral — a nautilus, an ammonite, a ram's horn, a fern crozier.
+       It is one of the commonest forms in biology for exactly this reason: it is
+       what an organism traces when it grows steadily and turns steadily, and the
+       shape is self-similar so the animal never changes proportion as it gets
+       bigger.
+
+       Discovered by accident, and worth saying so: the force-based undulation was
+       over-driven so hard that it tore the body open into a spiral, and Bill saw a
+       shell where I had only seen broken physics. This makes the form reachable on
+       PURPOSE — no torn bonds, repeatable, at any scale — instead of being an
+       artefact that a bug-fix would have deleted.
+
+       `turn` is radians per segment; `ratio` is how much each segment outgrows the
+       last (1.0 = a plain circle, >1 opens the whorl). The spiral's tightness is
+       `ratio` and its handedness is the sign of `turn`; a performer supplies both
+       from whatever they like — interval, breath, phrase direction. ========== */
+    shell(state, bond, turn, ratio, span) {
+      const n = state.n, tail = n - 1, prev = state.par[tail];
+      let d;
+      if (prev >= 0) d = [state.pos[tail*3] - state.pos[prev*3], state.pos[tail*3+1] - state.pos[prev*3+1], state.pos[tail*3+2] - state.pos[prev*3+2]];
+      else d = [0, 1, 0];
+      const L = Math.hypot(d[0], d[1], d[2]) || 1;
+      const c = Math.cos(turn), s2 = Math.sin(turn);
+      const hx = d[0]/L * c - d[1]/L * s2, hy = d[0]/L * s2 + d[1]/L * c;
+      const last = (state.rest && prev >= 0) ? state.rest[tail] : bond.rest;
+      const i = this.grow(state, bond, [hx, hy, 0], last * (ratio === undefined ? 1.02 : ratio));
+      if (span) { while (state.n - (state.head || 0) > span) this.retire(state); if ((state.head || 0) > span) this.compact(state); }
+      return i;
+    },
+
+    /* AGE — how far along the body an agent sits, 0 (root) .. 1 (tail), by walking
+       parents. For a performance-grown body this IS normalized time-since-played:
+       the channel a species reads to draw its own history (colour, size, fade). */
+    age(par, i, depthMax) {
+      let d = 0, k = i;
+      while (par[k] >= 0 && d < 4096) { k = par[k]; d++; }
+      return depthMax > 0 ? Math.min(1, d / depthMax) : d;
+    },
+
+    /* RETIRE — drop the oldest segment. The root forgets; the tail keeps growing.
+       Composed with grow(), this is the TURNOVER law (Canon, life, since 0.2.1 —
+       "organisms depart and return; the field is never static") applied to a BODY
+       instead of to a field of strangers.
+
+       Why it matters: unbounded growth turns a creature into a thread. The camera
+       must pull back to hold a longer body, so every segment shrinks toward a dot
+       and what was an organism becomes a trace. A bounded body stays legible, and
+       — because it sheds its tail as fast as it grows its head — it TRAVELS rather
+       than accumulating. That is a Zigpede: your notes push the head forward, the
+       body follows by force propagation, and the oldest note is quietly forgotten.
+
+       Implementation: the buffer is a ring. `state.head` is the index of the oldest
+       live segment; retiring advances it. Nothing is copied, so a body can travel
+       indefinitely at constant cost. `age()` still reads position-along-body, but
+       over a MOVING WINDOW — time-since-played within living memory. */
+    retire(state) {
+      const head = state.head || 0;
+      if (state.n - head <= 2) return -1;          // never dissolve the body entirely
+      state.par[head + 1] = -1;                    // the next segment becomes the new root
+      state.head = head + 1;
+      return head;
+    },
+
+    /* COMPACT — slide the living window back to index 0. Retiring alone leaves the
+       buffer index climbing forever, so a body that travels long enough would run
+       off the end of its own arrays. Compacting costs one copy of the LIVE span
+       (not the history), and amortizes to nothing because it only fires when the
+       dead prefix has grown larger than the body itself. */
+    compact(state) {
+      const head = state.head || 0; if (head === 0) return 0;
+      const live = state.n - head;
+      for (let i = 0; i < live; i++) {
+        const s = (head + i) * 3, d = i * 3;
+        state.pos[d] = state.pos[s]; state.pos[d + 1] = state.pos[s + 1]; state.pos[d + 2] = state.pos[s + 2];
+        state.vel[d] = state.vel[s]; state.vel[d + 1] = state.vel[s + 1]; state.vel[d + 2] = state.vel[s + 2];
+        const p = state.par[head + i];
+        state.par[i] = (p < 0) ? -1 : (p - head);
+      }
+      state.n = live; state.head = 0;
+      return head;
+    },
+
+    /* LIVE — the whole loop for a travelling body: grow a segment, retire the oldest
+       while the body is longer than `span`, and compact when the dead prefix has
+       outgrown the body. One call per note. A species NAMES its span the way it
+       names a medium or a boundary; it does not implement one. */
+    live(state, bond, span, dir) {
+      const i = this.grow(state, bond, dir);
+      while (state.n - (state.head || 0) > span) this.retire(state);
+      if ((state.head || 0) > span) this.compact(state);
+      return i;
+    },
+
+    /* LENGTH — how many segments are currently alive (the body, not the buffer). */
+    length(state) { return state.n - (state.head || 0); },
+
+    /* ACCEL — the law itself. Accumulates into `acc` (length 3n) for every bonded
+       agent. Pure, allocation-free, and the exact shape the WGSL kernel mirrors. */
+    /* `kappa` (optional) is per-joint REST CURVATURE; `restA` (optional) is
+       per-segment REST LENGTH, which lets one body have segments of different
+       sizes — allometry. A kelp frond tapers, a whale tapers, and a SHELL is a
+       body whose every segment is slightly larger than the last. */
+    accel(bond, pos, vel, par, n, acc, kappa, restA) {
+      for (let i = 0; i < n; i++) {
+        const p = par[i]; if (p < 0) continue;
+        const i3 = i * 3, p3 = p * 3;
+        let dx = pos[i3] - pos[p3], dy = pos[i3 + 1] - pos[p3 + 1], dz = pos[i3 + 2] - pos[p3 + 2];
+        const L = Math.hypot(dx, dy, dz) || 1e-6;
+        const ux = dx / L, uy = dy / L, uz = dz / L;
+
+        /* 1 · SPRING — restore toward rest length */
+        const rest = restA ? restA[i] : bond.rest;
+        let s = -(L - rest) * bond.k;
+
+        /* 2 · DAMPING — only the component of relative velocity ALONG the link,
+           so a body settles instead of ringing while lateral swing stays free */
+        let rvx = 0, rvy = 0, rvz = 0, alongV = 0;
+        if (vel) {
+          rvx = vel[i3] - vel[p3]; rvy = vel[i3 + 1] - vel[p3 + 1]; rvz = vel[i3 + 2] - vel[p3 + 2];
+          alongV = rvx * ux + rvy * uy + rvz * uz;
+          s -= alongV * bond.damp;
+        }
+        let ax = ux * s, ay = uy * s, az = uz * s;
+
+        /* 3 · BENDING — resist folding at the joint: aim for where a STRAIGHT
+           continuation of g→p would place i. bend 0 = rope, 1 = spine.
+           The correction is projected PERPENDICULAR to the link: a bending moment
+           rotates a joint, it must never lengthen or shorten the bond. Its damping
+           partner is likewise lateral — without it a flexing body rings forever,
+           because term 2 only ever bleeds RADIAL energy.
+
+           A bending moment is a THREE-body force. Applying it as an i/p pair
+           conserves linear momentum but leaves a free COUPLE — the body spins for
+           nothing (measured: net torque −208 on a curved spine), and under
+           anisotropic drag that phantom spin rectifies into phantom locomotion.
+           So the reaction is split: g takes a force with the opposite lever arm
+           about p, and p takes whatever is left to keep the net at zero. Both
+           linear AND angular momentum are then conserved, and any swimming the
+           body does has to be earned.
+           (All three caught by the growth bench and the undulation proof.) */
+        if (bond.bend > 0) {
+          const g = par[p];
+          if (g >= 0) {
+            const g3 = g * 3;
+            let wx = pos[p3] - pos[g3], wy = pos[p3 + 1] - pos[g3 + 1], wz = pos[p3 + 2] - pos[g3 + 2];
+            const BL = Math.hypot(wx, wy, wz) || 1e-6;
+            let dx = wx / BL, dy = wy / BL, dz = wz / BL;
+            /* REST CURVATURE — the joint's preferred angle. Zero means "continue
+               straight" (a spine at rest); a non-zero kappa[i] rotates the target
+               direction, so the joint WANTS to be bent. This is how muscle works:
+               it does not shove the body sideways, it changes what shape the body
+               considers to be rest, and the elastic structure follows. Because the
+               control is an ANGLE it is bounded by geometry — no drive level can
+               stretch a bond, which a lateral force always could. */
+            if (kappa) {
+              const kk = kappa[i];
+              if (kk) {
+                const a0 = bond.axis ? bond.axis[0] : 0, a1 = bond.axis ? bond.axis[1] : 0, a2 = bond.axis ? bond.axis[2] : 1;
+                const ck = Math.cos(kk), sk = Math.sin(kk);
+                const cx2 = a1 * dz - a2 * dy, cy2 = a2 * dx - a0 * dz, cz2 = a0 * dy - a1 * dx;
+                const dot = a0 * dx + a1 * dy + a2 * dz, om = 1 - ck;
+                const rx = dx * ck + cx2 * sk + a0 * dot * om;
+                const ry = dy * ck + cy2 * sk + a1 * dot * om;
+                const rz = dz * ck + cz2 * sk + a2 * dot * om;
+                dx = rx; dy = ry; dz = rz;
+              }
+            }
+            let ex = pos[p3] + dx * rest - pos[i3],
+                ey = pos[p3 + 1] + dy * rest - pos[i3 + 1],
+                ez = pos[p3 + 2] + dz * rest - pos[i3 + 2];
+            const along = ex * ux + ey * uy + ez * uz;          // strip the radial part
+            ex -= along * ux; ey -= along * uy; ez -= along * uz;
+            const w = bond.bend * bond.k;
+            let bx = ex * w, by = ey * w, bz = ez * w;
+            if (vel) {                                           // lateral (angular) damping
+              const dw = bond.bend * bond.damp;
+              bx -= (rvx - alongV * ux) * dw;
+              by -= (rvy - alongV * uy) * dw;
+              bz -= (rvz - alongV * uz) * dw;
+            }
+            /* balance the couple. g's share must be perpendicular to the g→p link
+               (not merely antiparallel to b — on a curved body those differ), with
+               the lever arm about p that cancels b's moment; p absorbs the rest. */
+            let nx = uy * bz - uz * by, ny = uz * bx - ux * bz, nz = ux * by - uy * bx;
+            const nl = Math.hypot(nx, ny, nz);
+            let gx = 0, gy = 0, gz = 0;
+            if (nl > 1e-12) {
+              nx /= nl; ny /= nl; nz /= nl;
+              const wxh = wx / BL, wyh = wy / BL, wzh = wz / BL;
+              gx = ny * wzh - nz * wyh; gy = nz * wxh - nx * wzh; gz = nx * wyh - ny * wxh;
+              const sc = (L / BL) * Math.hypot(bx, by, bz);
+              gx *= sc; gy *= sc; gz *= sc;
+            }
+            acc[i3] += bx; acc[i3 + 1] += by; acc[i3 + 2] += bz;
+            acc[g3] += gx; acc[g3 + 1] += gy; acc[g3 + 2] += gz;
+            acc[p3] -= (bx + gx); acc[p3 + 1] -= (by + gy); acc[p3 + 2] -= (bz + gz);
+          }
+        }
+
+        acc[i3] += ax; acc[i3 + 1] += ay; acc[i3 + 2] += az;
+        /* Newton's third — an unanchored parent feels the equal and opposite pull,
+           so a free body carries its own momentum instead of hauling itself along. */
+        if (!(bond.anchor && par[p] < 0)) { acc[p3] -= ax; acc[p3 + 1] -= ay; acc[p3 + 2] -= az; }
+      }
+      return acc;
+    }
   };
 
   ZigCore.VERSION = "0.12.0";   // 0.11: BOUNDARY AXIS · 0.11.1: GYRE AXIS · 0.12: ELLIPSOID boundary (lens = a squashed sphere; per-axis radii → the wide breathing disc); byte-identical for sphere/cylinder

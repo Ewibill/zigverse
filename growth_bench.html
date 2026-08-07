@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ZIGVERSE · GROWTH BENCH — the performed body (ZigCore Structure v0.13)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #04060a; overflow: hidden;
+               font: 12px/1.5 "Cascadia Code", "SF Mono", Consolas, monospace; color: #8f9aa4; }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; left: 14px; top: 12px; user-select: none; pointer-events: none;
+         text-shadow: 0 1px 3px #000; }
+  #hud .title { color: #b8cfd8; letter-spacing: 0.18em; font-size: 11px; }
+  #hud .dim { color: #55606b; }
+  #hud div { margin-top: 3px; }
+  .pill { padding: 1px 8px; border-radius: 9px; font-size: 11px; letter-spacing: 0.08em; }
+  .pill.ok  { background: #0f2024; color: #7ae0ff; border: 1px solid #285a5a; }
+  .pill.bad { background: #2a0d0d; color: #ff8a7a; border: 1px solid #5a2828; }
+  #panel { position: fixed; right: 14px; top: 12px; user-select: none; text-align: right; }
+  #panel label { color: #55606b; margin-left: 10px; }
+  #panel select, #panel input { background: #0b1016; color: #b8cfd8; border: 1px solid #22303c;
+                                font: inherit; padding: 1px 4px; }
+  #hint { position: fixed; left: 14px; bottom: 10px; color: #3a434c; user-select: none; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div id="hud">
+  <div class="title">ZIGVERSE · GROWTH BENCH <span class="dim">the organism IS its history</span></div>
+  <div id="probe"><span class="pill bad">MIDI …</span> <span class="dim">looking for the EWI</span></div>
+  <div id="status" class="dim">booting…</div>
+  <div id="readout" class="dim"></div>
+</div>
+<div id="panel">
+  <label>bond</label><select id="bond">
+    <option value="spine">spine</option>
+    <option value="chain">chain</option>
+    <option value="stalk">stalk</option>
+    <option value="tether">tether</option>
+    <option value="eel">eel</option>
+  </select>
+  <label>current</label><input id="cur" type="range" min="0" max="6" step="0.1" value="0.8" style="width:80px">
+  <label>detail</label><select id="detail">
+    <option value="1">1×</option>
+    <option value="2">2×</option>
+    <option value="4" selected>4×</option>
+    <option value="8">8×</option>
+  </select>
+  <label>mode</label><select id="mode">
+    <option value="draw" selected>draw</option>
+    <option value="swim">swim</option>
+    <option value="shell">shell</option>
+  </select>
+  <label>stones</label><select id="stones">
+    <option value="0" selected>none</option>
+    <option value="1">sparse</option>
+    <option value="2">reef</option>
+    <option value="3">dense</option>
+  </select>
+  <label>span</label><select id="span">
+    <option value="0">unbounded</option>
+    <option value="60">60</option>
+    <option value="30" selected>30</option>
+    <option value="16">16</option>
+  </select>
+</div>
+<div id="hint">play the EWI · SPACE straight · ↑/↓ bend · R reset · 1–5 bond · mode: draw / swim / shell · stones to work around · span: unbounded records, bounded TRAVELS</div>
+
+<script src="engine/zigcore.js"></script>
+<script>
+/* =============================================================================
+   GROWTH BENCH — a played stream builds a body, segment by segment.
+
+   This is a BEHAVIOR bench, not a beauty bench: plain 2D canvas, no WebGPU, so
+   it boots anywhere and nothing about the look is doing the arguing. What is
+   being demonstrated is the STRUCTURE law (ZigCore.Structure v0.13) driven by a
+   live performance, and one claim in particular:
+
+       because the chain is built in the order it was played,
+       POSITION ALONG THE BODY IS TIME.
+
+   `age()` walks parents to give 0 (oldest, the root) .. 1 (newest, the tail).
+   Here it drives hue and radius — the body draws its own history. Any channel a
+   species wants (colour, size, brightness, letterform) can read the same number.
+
+   PITCH BENDS THE GROWTH. The interval from the last note rotates the heading, so
+   a rising line curls one way and a falling line the other. A melody is a shape.
+   That is the whole idea: you are not triggering an animation, you are drawing
+   with breath and interval.
+
+   The engine is loaded, not copied — this page calls the same ZigCore.Structure
+   that structure_ref.mjs guards.
+   ========================================================================== */
+const say = (t) => { const n = document.getElementById("status"); if (n) n.textContent = t; };
+addEventListener("error", (e) => say("script error: " + e.message + " — " +
+  ((e.filename || "").split(/[\\/]/).pop() || "?") + ":" + e.lineno));
+
+const S = ZigCore.Structure;
+const H = 20;                                  // frame half-extent — the unit every Env law scales to
+const CAP = 900;                               // how long a body may grow before it rolls
+
+const cv = document.getElementById("stage"), cx = cv.getContext("2d");
+let W = 0, Ht = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(devicePixelRatio || 1, 2);
+  W = cv.clientWidth; Ht = cv.clientHeight;
+  cv.width = Math.floor(W * DPR); cv.height = Math.floor(Ht * DPR);
+  cx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+addEventListener("resize", resize); resize();
+
+/* ---- the body -------------------------------------------------------------
+   state is exactly what ZigCore.Structure expects: flat pos/vel and a parent
+   index. Nothing bespoke — a species would hand the engine the same shapes. */
+const st = { n: 1, head: 0, rest: new Float64Array(CAP), pos: new Float64Array(CAP * 3), vel: new Float64Array(CAP * 3), par: new Int32Array(CAP).fill(-1) };
+const acc = new Float64Array(CAP * 3);
+const kap = new Float64Array(CAP);
+
+/* STONES — static objects the body has to work around. This is CONTACT with one
+   side held still: the easy half of the law, and the half that turns a drawing
+   into a creature in a PLACE.
+
+   They are a FIELD, not a handful. A fixed few only matter if the creature
+   happens to go there, and a body under current simply leaves them behind. So
+   stones live on a deterministic LATTICE and are generated for whatever cells the
+   body currently occupies — infinite extent, no memory, and the same seed always
+   gives the same world, so a performance is repeatable. (Bill's idea, 2026-08-07.) */
+let stoneDensity = 0, stones = [];
+const stoneHash = (i, j) => { let h = (i * 374761393 + j * 668265263) ^ 0x5bf03635; h = (h ^ (h >> 13)) * 1274126177; return ((h ^ (h >> 16)) >>> 0) / 4294967296; };
+function gatherStones() {
+  stones.length = 0;
+  if (!stoneDensity) return;
+  const cell = H * (2.6 - stoneDensity * 0.5);
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (let i = st.head; i < st.n; i++) {
+    const x = st.pos[i * 3], y = st.pos[i * 3 + 1];
+    if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  if (x0 > x1) return;
+  const m = cell;
+  for (let ci = Math.floor((x0 - m) / cell); ci <= Math.floor((x1 + m) / cell); ci++) {
+    for (let cj = Math.floor((y0 - m) / cell); cj <= Math.floor((y1 + m) / cell); cj++) {
+      const a = stoneHash(ci, cj);
+      if (a > 0.28 + stoneDensity * 0.16) continue;            // most cells are empty water
+      const b = stoneHash(ci + 991, cj - 17), c = stoneHash(ci - 53, cj + 7);
+      stones.push({ x: (ci + 0.2 + b * 0.6) * cell, y: (cj + 0.2 + c * 0.6) * cell,
+                    r: cell * (0.10 + a * 0.5) });
+      if (stones.length > 120) return;
+    }
+  }
+}
+const setStones = (n) => { stoneDensity = n; gatherStones(); };
+
+let heading = [0, 1, 0];                        // the direction the body is growing
+let lastNote = null, grown = 0, bad = 0;
+let bondName = "spine";
+let bond;
+
+let swimPhase = 0, breath = 0, swimOn = false;
+/* BREATH IS THE LIFE-FORCE, so silence must be stillness. `breath` is driven by
+   the EWI's breath controller (CC2) and channel aftertouch — the continuous
+   signal, not the note-on — and decays to zero when nothing arrives. The wave's
+   tempo AND its amplitude both scale with it, so an unplayed organism is limp and
+   motionless. It does not come alive until you blow. */
+let breathTarget = 0, lastBreathMsg = 0;
+
+let detail = 4;
+/* the bond a species actually runs is the ARCHETYPE refined to the detail it wants.
+   refine() holds the body physically identical and only subdivides the joints —
+   k goes as factor², damp linearly, and it reports the substeps it needs. */
+const setBond = (name) => {
+  bondName = name;
+  detail = parseInt(document.getElementById("detail").value, 10) || 1;
+  bond = S.refine(ZigCore.Env.bond(name, H), detail);
+  document.getElementById("bond").value = name;
+};
+
+function reset() {
+  st.n = 1; st.head = 0; st.pos.fill(0); st.vel.fill(0); st.par.fill(-1); st.rest.fill(bond.rest); kap.fill(0);
+  heading = [0, 1, 0]; lastNote = null; grown = 0; bad = 0; camInit = false;
+}
+
+/* ---- growth: one note, one segment ---------------------------------------
+   `bend` is the interval in semitones. It rotates the heading in the XY plane,
+   so the melodic contour becomes the body's contour. */
+function growNote(bendSemis, vel) {
+  if (st.n >= CAP - detail) return;
+  const spanSel = parseInt(document.getElementById("span").value, 10) || 0;
+  /* span 0 = accumulate forever (a record of the whole performance);
+     span N = a TRAVELLING body — the tail grows, the root retires, the creature moves.
+     Both span and segments-per-note scale with detail, so raising detail changes only
+     SMOOTHNESS: the body keeps its length and the head advances the same per note. */
+  const span = spanSel ? spanSel * detail : 0;
+  const th = (bendSemis || 0) * 0.13;
+  /* the turn is SPREAD across the sub-segments. Rotating once and then laying down
+     `detail` straight segments leaves the path polygonal at note resolution — more
+     points along runs that were already straight, and a sharp kink at each note that
+     a stiff refined bond rings against. Turning a little per segment is what actually
+     makes a curve, and it is what a played glissando physically is. */
+  const step = th / detail;
+  let i = -1;
+  for (let d = 0; d < detail; d++) {
+    const c = Math.cos(step), sn = Math.sin(step);
+    const hx = heading[0] * c - heading[1] * sn, hy = heading[0] * sn + heading[1] * c;
+    const L = Math.hypot(hx, hy) || 1;
+    heading = [hx / L, hy / L, 0];
+    if (document.getElementById("mode").value === "shell") {
+      /* SHELL — constant turn, constant growth RATIO: a logarithmic spiral.
+         Interval sets the turn (so the melody sets the whorl's tightness and
+         handedness); attack opens the ratio. A nautilus, drawn by playing. */
+      i = S.shell(st, bond, step + 0.16, 1.0 + 0.02 + (vel || 0.5) * 0.03, span || 0);
+      heading = [st.pos[i*3] - st.pos[st.par[i]*3], st.pos[i*3+1] - st.pos[st.par[i]*3+1], 0];
+      const HL = Math.hypot(heading[0], heading[1]) || 1; heading = [heading[0]/HL, heading[1]/HL, 0];
+    } else i = span ? S.live(st, bond, span, heading) : S.grow(st, bond, heading);
+  }
+  /* breath becomes a kick: a harder attack throws the new head outward and the bond
+     has to catch it. Velocity is intention made physical. */
+  const k = 0.6 + (vel || 0.5) * 2.2;
+  st.vel[i * 3]     = heading[0] * k;
+  st.vel[i * 3 + 1] = heading[1] * k;
+  grown++;
+}
+
+/* ---- the loop ------------------------------------------------------------- */
+let tPrev = performance.now();
+function frame(now) {
+  const dt = Math.min((now - tPrev) / 1000, 0.05); tPrev = now;
+  /* breath decays if the controller has gone quiet — a released note is a held
+     one that stopped, and the body should ease to rest rather than snap to it. */
+  if (now - lastBreathMsg > 120) breathTarget = 0;
+  breath += (breathTarget - breath) * Math.min(1, dt * 7);
+  if (breath < 0.002) breath = 0;
+  const cur = parseFloat(document.getElementById("cur").value) || 0;
+  if (stoneDensity) gatherStones();
+  const curSpan = parseInt(document.getElementById("span").value, 10) || 0;
+  const mode = document.getElementById("mode").value;
+  swimOn = (mode === "swim");
+
+  /* physics — 4 substeps keeps a stiff spine stable at any framerate */
+  const sub = 4 * (bond.substeps || 1), h = dt / sub;
+  for (let s = 0; s < sub; s++) {
+    acc.fill(0, 0, st.n * 3);
+    S.accel(bond, st.pos, st.vel, st.par, st.n, acc, swimOn ? kap : null, st.rest);   // ← STRUCTURE
+    if (swimOn) {
+      /* UNDULATION as REST CURVATURE — age() as a phase offset writes a travelling
+         wave of preferred ANGLE down the spine; the elastic body follows. Because
+         the control is an angle, no drive level can tear a bond. Breath sets the
+         tempo, so the same signal that grows the body also moves it. */
+      swimPhase += breath * 11 * h;            // no breath, no wave — the phase does not advance
+      S.undulate(st.par, st.n, st.head, kap, { amp: 1.35 * breath, waves: 2.0, taper: 0.6, phase: swimPhase });
+    } else if (kap[st.head] !== 0) kap.fill(0);
+    for (let i = st.head; i < st.n; i++) {
+      acc[i * 3] += cur;                                      // a steady current
+      if (swimOn) { }
+      else {
+        acc[i * 3 + 1] -= 1.6;                                // a little weight
+        acc[i * 3]     -= st.vel[i * 3]     * 0.9;
+        acc[i * 3 + 1] -= st.vel[i * 3 + 1] * 0.9;
+      }
+    }
+    /* the stones push back before the medium does — a body should never be
+       integrated into an object it is already inside of. */
+    if (stones.length) ZigCore.Contact.exclude(st.pos, st.vel, st.n, st.head, acc, stones,
+      { skin: (st.rest[st.n - 1] || bond.rest) * 0.5, k: 900, damp: 18 });
+    if (swimOn) S.slip(st.pos, st.vel, st.par, st.n, st.head, acc, { along: 0.1, across: 8.0 });
+    for (let i = st.head; i < st.n; i++) {
+      if (bond.anchor && st.par[i] < 0) { st.vel[i * 3] = st.vel[i * 3 + 1] = 0; continue; }
+      for (let k = 0; k < 2; k++) {
+        st.vel[i * 3 + k] += acc[i * 3 + k] * h;
+        st.pos[i * 3 + k] += st.vel[i * 3 + k] * h;
+      }
+    }
+  }
+
+  draw();
+  /* ON-SCREEN EXTENT — a bench must be able to say whether its subject is in
+     shot. "Not broken" and "visible" are different claims. */
+  let sx0 = 1e9, sx1 = -1e9, sy0 = 1e9, sy1 = -1e9;
+  for (let i = st.head; i < st.n; i++) {
+    const x = W * 0.5 + (st.pos[i * 3] - camX) * camS, y = Ht * 0.5 - (st.pos[i * 3 + 1] - camY) * camS;
+    if (x < sx0) sx0 = x; if (x > sx1) sx1 = x; if (y < sy0) sy0 = y; if (y > sy1) sy1 = y;
+  }
+  const inShot = sx1 > 0 && sx0 < W && sy1 > 0 && sy0 < Ht;
+  const pctW = Math.round((sx1 - sx0) / W * 100), pctH = Math.round((sy1 - sy0) / Ht * 100);
+  document.getElementById("readout").innerHTML =
+    `${S.length(st)} segments · bond ${bondName} (rest ${bond.rest.toFixed(2)}, bend ${bond.bend}${bond.anchor ? ", anchored" : ""}) · grown ${grown} · detail ${detail}× · ${document.getElementById('mode').value.toUpperCase()}${swimOn ? ' · breath ' + breath.toFixed(2) : ''}${stones.length ? ' · ' + stones.length + ' stones' : ''}${curSpan ? ' · span ' + curSpan : ' · unbounded'}${bad ? " · <b>" + bad + " rejected</b>" : ""}` +
+    `<br><span style="color:${inShot ? "#55606b" : "#ff8a7a"}">frame: ${pctW}% × ${pctH}% of glass · zoom ${camS.toFixed(1)} · ${inShot ? "in shot" : "OFF SCREEN"}</span>`;
+  requestAnimationFrame(frame);
+}
+
+/* ---- drawing: AGE is the only channel -------------------------------------
+   Everything visual here reads S.age() — the body's own sense of how far along
+   itself a segment sits, which for a performed body is time-since-played.
+
+   The camera AUTO-FRAMES: it fits the body's bounding box every frame and eases
+   toward it. A fixed scale is useless for a body whose whole nature is to grow —
+   two segments would be a speck and two hundred would run off the glass. The
+   view follows the organism instead of the organism having to fit the view. */
+let camS = 0, camX = 0, camY = 0, camInit = false;
+function draw() {
+  cx.clearRect(0, 0, W, Ht);
+  const depth = Math.max(1, S.length(st) - 1);
+
+  /* --- fit --- */
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (let i = st.head; i < st.n; i++) {
+    const x = st.pos[i * 3], y = st.pos[i * 3 + 1];
+    if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  const pad = bond.rest * 2.2;
+  const bw = Math.max(x1 - x0 + pad * 2, bond.rest * 6), bh = Math.max(y1 - y0 + pad * 2, bond.rest * 6);
+  const want = Math.min(W / bw, Ht / bh) * 0.86;
+  const wantX = (x0 + x1) * 0.5, wantY = (y0 + y1) * 0.5;
+  if (!camInit) { camS = want; camX = wantX; camY = wantY; camInit = true; }
+  const e = 0.06;                                    // ease — the camera never snaps
+  camS += (want - camS) * e; camX += (wantX - camX) * e; camY += (wantY - camY) * e;
+
+  const P = (i) => [W * 0.5 + (st.pos[i * 3] - camX) * camS, Ht * 0.5 - (st.pos[i * 3 + 1] - camY) * camS];
+  /* stroke weight tracks the SEGMENT's on-screen length, not the raw zoom —
+     tie it to zoom alone and a long body draws itself hairline as it shrinks. */
+  const segPx = (st.rest[st.n - 1] || bond.rest) * detail * camS;   // body scale, not segment scale
+  const gw = Math.max(1.3, Math.min(segPx * 0.14, 9));
+
+  /* THE BODY — drawn as overlapping short polylines with round caps AND round
+     joins, so consecutive segments fuse instead of meeting at a visible butt.
+     Each stroke spans two segments and starts one back, which hides the seam
+     where width and colour step. A body should read as one continuous thing. */
+  cx.lineCap = "round"; cx.lineJoin = "round";
+  for (let i = st.head + 1; i < st.n; i++) {
+    const p = st.par[i]; if (p < 0) continue;
+    const g = st.par[p];
+    const a = S.age(st.par, i, depth);
+    cx.strokeStyle = `hsla(${190 + a * 130}, 74%, ${32 + a * 34}%, ${0.5 + a * 0.45})`;
+    cx.lineWidth = gw * (0.45 + a * 1.15);
+    cx.beginPath();
+    if (g >= 0) { const [xg, yg] = P(g); cx.moveTo(xg, yg); const [xp, yp] = P(p); cx.lineTo(xp, yp); }
+    else { const [xp, yp] = P(p); cx.moveTo(xp, yp); }
+    const [x2p, y2p] = P(i); cx.lineTo(x2p, y2p);
+    cx.stroke();
+  }
+  /* NODES — only while they still read as articulation. Once a node's diameter
+     approaches the on-screen gap between nodes they stop showing joints and turn
+     the body into a string of pearls, which fights the continuous form the links
+     already draw. So they fade out as the body refines, and vanish entirely when
+     they would overlap. Drawn joints are for a linkage; flesh has none. */
+  const gapPx = (st.rest[st.n - 1] || bond.rest) * camS;
+  const nodeR = Math.min(gw * 0.55, gapPx * 0.42);
+  const nodeFade = Math.max(0, Math.min(1, (gapPx / Math.max(gw, 0.001) - 1.1) / 0.9));
+  if (nodeFade > 0.01) {
+    for (let i = st.head; i < st.n; i++) {
+      const a = S.age(st.par, i, depth), [x, y] = P(i);
+      cx.fillStyle = `hsla(${190 + a * 130}, 80%, ${42 + a * 38}%, ${(0.35 + a * 0.45) * nodeFade})`;
+      cx.beginPath(); cx.arc(x, y, nodeR * (0.7 + a * 0.9), 0, 6.2832); cx.fill();
+    }
+  }
+  /* the stones — drawn first so the body reads as passing in front of them */
+  for (const sn of stones) {
+    const sx = W * 0.5 + (sn.x - camX) * camS, sy = Ht * 0.5 - (sn.y - camY) * camS;
+    const sr = sn.r * camS;
+    cx.fillStyle = "#0d1418"; cx.beginPath(); cx.arc(sx, sy, sr, 0, 6.2832); cx.fill();
+    cx.strokeStyle = "#243440"; cx.lineWidth = 1.2;
+    cx.beginPath(); cx.arc(sx, sy, sr, 0, 6.2832); cx.stroke();
+  }
+
+  /* origin crosshair — the frame is never empty, so "nothing visible" always
+     means "the body is elsewhere" rather than "the page is dead" */
+  {
+    const ox = W * 0.5 + (0 - camX) * camS, oy = Ht * 0.5 - (0 - camY) * camS;
+    cx.strokeStyle = "#1a2630"; cx.lineWidth = 1;
+    cx.beginPath(); cx.moveTo(ox - 9, oy); cx.lineTo(ox + 9, oy);
+    cx.moveTo(ox, oy - 9); cx.lineTo(ox, oy + 9); cx.stroke();
+  }
+
+  /* the holdfast, when there is one */
+  if (bond.anchor) {
+    const [x, y] = P(st.head);
+    cx.strokeStyle = "#3a5a66"; cx.lineWidth = 1;
+    cx.beginPath(); cx.arc(x, y, gw * 2.6, 0, 6.2832); cx.stroke();
+  }
+}
+
+/* ---- input: EWI first, keyboard as the stand-in --------------------------- */
+addEventListener("keyup", (e) => {
+  if (["Space", "ArrowUp", "ArrowDown"].includes(e.code)) { breathTarget = 0; lastBreathMsg = performance.now(); }
+});
+addEventListener("keydown", (e) => {
+  if (["Space", "ArrowUp", "ArrowDown"].includes(e.code)) { breathTarget = 0.85; lastBreathMsg = performance.now(); }
+  if (e.repeat) return;
+  if (e.code === "Space")      { growNote(0, 0.6);  e.preventDefault(); }
+  else if (e.code === "ArrowUp")   growNote(+3, 0.7);
+  else if (e.code === "ArrowDown") growNote(-3, 0.7);
+  else if (e.key === "r" || e.key === "R") reset();
+  else if (e.key >= "1" && e.key <= "5") setBond(["spine", "chain", "stalk", "tether", "eel"][+e.key - 1]);
+});
+addEventListener("pointerdown", () => { breathTarget = 0.8; lastBreathMsg = performance.now(); growNote((Math.random() * 6 - 3) | 0, 0.6); });
+addEventListener("pointerup", () => { breathTarget = 0; lastBreathMsg = performance.now(); });
+document.getElementById("bond").addEventListener("change", (e) => setBond(e.target.value));
+document.getElementById("detail").addEventListener("change", () => { setBond(bondName); reset(); });
+document.getElementById("stones").addEventListener("change", (e) => setStones(+e.target.value));
+
+if (navigator.requestMIDIAccess) {
+  navigator.requestMIDIAccess().then((m) => {
+    let n = 0;
+    for (const inp of m.inputs.values()) {
+      n++;
+      inp.onmidimessage = (ev) => {
+        const [a, b, c] = ev.data;
+        const st4 = a & 0xf0;
+        /* CC2 is the EWI's breath controller and 0xD0 is channel aftertouch —
+           between them they carry the continuous breath. This is the life signal;
+           note-on is only the articulation. */
+        if (st4 === 0xB0 && b === 2) { breathTarget = c / 127; lastBreathMsg = performance.now(); }
+        else if (st4 === 0xD0)       { breathTarget = b / 127; lastBreathMsg = performance.now(); }
+        else if (st4 === 0x80 || (st4 === 0x90 && c === 0)) { breathTarget = 0; lastBreathMsg = performance.now(); }
+        if (st4 === 0x90 && c > 0) {                     // note-on
+          const interval = lastNote === null ? 0 : (b - lastNote);
+          lastNote = b;
+          if (!breathTarget) { breathTarget = c / 127; lastBreathMsg = performance.now(); }
+          growNote(interval, c / 127);
+        }
+      };
+    }
+    document.getElementById("probe").innerHTML = n
+      ? `<span class="pill ok">MIDI ${n}</span> <span class="dim">play — interval bends the body</span>`
+      : `<span class="pill bad">NO MIDI</span> <span class="dim">keyboard works: SPACE · ↑ · ↓</span>`;
+  }).catch(() => {
+    document.getElementById("probe").innerHTML = `<span class="pill bad">NO MIDI</span> <span class="dim">keyboard works: SPACE · ↑ · ↓</span>`;
+  });
+} else {
+  document.getElementById("probe").innerHTML = `<span class="pill bad">NO MIDI</span> <span class="dim">keyboard works: SPACE · ↑ · ↓</span>`;
+}
+
+setBond("spine"); reset();          // resolve the bond and clear the body before the first frame
+say(`ZigCore ${ZigCore.Structure.VERSION} · Canon ${ZigCore.Canon.count()} laws · structure is CPU (no GPU needed)`);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
