@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ZIGMESH · THE ALPHABET — letterform study v0.7 — the MATERIAL STUDIO: organic fractals</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #010204; overflow: hidden;
+               font: 12px/1.5 "Cascadia Code", "SF Mono", Consolas, monospace; color: #9aa48f; }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; left: 14px; top: 12px; user-select: none; pointer-events: none;
+         text-shadow: 0 1px 3px #000; }
+  #hud .title { color: #cfd8b8; letter-spacing: 0.18em; font-size: 11px; }
+  #hud .dim { color: #5b6355; }
+  .pill { padding: 1px 8px; border-radius: 9px; font-size: 11px; letter-spacing: 0.08em; }
+  .pill.ok  { background: #10240f; color: #8aff7a; border: 1px solid #2d5a28; }
+  .pill.bad { background: #2a0d0d; color: #ff8a7a; border: 1px solid #5a2828; }
+  #hud div { margin-top: 3px; }
+  #params { color: #a9b784; }
+  #hint { position: fixed; right: 14px; bottom: 10px; color: #3d443a; text-align: right; user-select: none; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div id="hud">
+  <div class="title">ZIGMESH · THE ALPHABET <span class="dim">letterform study v0.7 — the MATERIAL STUDIO · organic fractals · any letter, any composition · judge before we print 6000</span></div>
+  <div id="probe"><span class="pill bad">PROBE …</span> <span class="dim">asking the GPU</span></div>
+  <div id="params" class="dim"></div>
+  <div id="status" class="dim">booting…</div>
+</div>
+<div id="hint">
+  ←/→ — walk BOTH alphabets · 1-9,0 — jump: sickle/ribbon/ember/woodblock/halo/whisper/compass/sail/chime/seed (→ echo, kite, BUBBLE, ORB)<br>
+  Q/A curve (sweep, on halo) · W/S twist · E/D taper · C/V camber · Z/X width<br>
+  T — THE MINT: cut gem ×1 → polished ×2 → blown glass ×3 (same DNA, finer cloth)<br>
+  M/N — THE MATERIALS: classic → pearl → … → mineral (19 compositions) · B — grain ×1/½/2/0<br>
+  <b>mouse wheel — ZOOM into the matter</b>: dive in and watch the organic fractal detail keep resolving<br>
+  G — 3×3 orientation grid · Space — freeze · R — reset this letter<br>
+  like what you see? read Glyph the name + numbers, top left
+</div>
+
+<script src="engine/zigcore.js"></script>
+<script src="engine/zigwebgpu.js"></script>
+<script src="engine/zigmesh.js"></script>
+<script>
+"use strict";
+const say = (t) => { const n = document.getElementById("status"); if (n) n.textContent = t; };
+addEventListener("error", (e) => say("script error: " + e.message + " — " +
+  ((e.filename || "").split(/[\\/]/).pop() || "?") + ":" + e.lineno));
+addEventListener("unhandledrejection", (e) => say("async error: " + ((e.reason && e.reason.message) || e.reason)));
+
+const WGSL = `
+struct Uni {
+  vp: mat4x4f,
+  cam: vec4f,          // xyz eye · w time
+  opts: vec4f,         // x grid on · y (free) · z (free) · w (free)
+  colA: vec4f,         // material dark (dome) · w iridescence gain
+  colB: vec4f,         // material light (hollow) · w subsurface gain
+  texA: vec4f,         // grain type · grain scale · grain depth · spec power
+  texB: vec4f,         // spec gain · fiber contrast · weathering · (free)
+};
+@group(0) @binding(0) var<uniform> U: Uni;
+
+fn h1(n: f32) -> f32 { return fract(sin(n * 127.1) * 43758.5453); }
+fn hv(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }
+fn vn(p: vec2f) -> f32 {
+  let i = floor(p); let f = fract(p);
+  let u2 = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hv(i), hv(i + vec2f(1.0, 0.0)), u2.x),
+             mix(hv(i + vec2f(0.0, 1.0)), hv(i + vec2f(1.0, 1.0)), u2.x), u2.y);
+}
+/* fBm — organic fractal: five octaves of value noise, structure inside
+   structure. This is what lets a surface keep revealing detail as you zoom,
+   the way a coastline or a fern is the same kind of complex at every scale. */
+fn fbm(p: vec2f) -> f32 {
+  var v = 0.0; var a = 0.5; var q = p;
+  for (var i = 0; i < 5; i = i + 1) { v = v + a * vn(q); q = q * 2.03 + vec2f(11.3, 7.7); a = a * 0.5; }
+  return v;
+}
+fn rotY(a: f32) -> mat3x3f { let c = cos(a); let s = sin(a);
+  return mat3x3f(vec3f(c, 0.0, -s), vec3f(0.0, 1.0, 0.0), vec3f(s, 0.0, c)); }
+fn rotX(a: f32) -> mat3x3f { let c = cos(a); let s = sin(a);
+  return mat3x3f(vec3f(1.0, 0.0, 0.0), vec3f(0.0, c, s), vec3f(0.0, -s, c)); }
+fn rotAxis(ax: vec3f, a: f32) -> mat3x3f {
+  let c = cos(a); let s = sin(a); let t = 1.0 - c;
+  let x = ax.x; let y = ax.y; let z = ax.z;
+  return mat3x3f(
+    vec3f(t*x*x + c,   t*x*y + s*z, t*x*z - s*y),
+    vec3f(t*x*y - s*z, t*y*y + c,   t*y*z + s*x),
+    vec3f(t*x*z + s*y, t*y*z - s*x, t*z*z + c));
+}
+
+/* ---------------- night backdrop ---------------- */
+struct BgOut { @builtin(position) cp: vec4f, @location(0) uv: vec2f };
+@vertex fn bgVs(@builtin(vertex_index) vi: u32) -> BgOut {
+  var o: BgOut;
+  let xy = vec2f(f32((vi << 1u) & 2u), f32(vi & 2u)) * 2.0 - 1.0;
+  o.cp = vec4f(xy, 0.9999, 1.0); o.uv = xy; return o;
+}
+@fragment fn bgFs(inp: BgOut) -> @location(0) vec4f {
+  var col = mix(vec3f(0.012, 0.019, 0.033), vec3f(0.003, 0.005, 0.014),
+                smoothstep(-1.0, 1.0, inp.uv.y));
+  /* the faintest stars — presence, not decoration */
+  let cell = floor(inp.uv * 90.0);
+  let hh = h1(dot(cell, vec2f(1.0, 57.0)));
+  let d = fract(inp.uv * 90.0) - 0.5;
+  col += vec3f(0.5, 0.56, 0.7) * smoothstep(0.08, 0.0, length(d)) * step(0.985, hh)
+         * (0.25 + 0.35 * sin(U.cam.w * 0.7 + hh * 40.0));
+  return vec4f(col, 1.0);
+}
+
+/* ---------------- the shard ---------------- */
+struct SOut {
+  @builtin(position) cp: vec4f,
+  @location(0) wp: vec3f, @location(1) wn: vec3f,
+  @location(2) side: f32, @location(3) lu: f32,
+};
+@vertex fn shardVs(@location(0) pos: vec3f, @location(1) nrm: vec3f,
+                   @location(2) side: f32, @location(3) lu: f32,
+                   @builtin(instance_index) ii: u32) -> SOut {
+  var o: SOut;
+  let gi = f32(ii);
+  var m: mat3x3f;
+  var off = vec3f(0.0);
+  if (U.opts.x > 0.5) {
+    let ax = normalize(vec3f(h1(gi * 3.1) * 2.0 - 1.0, h1(gi * 5.7) * 2.0 - 1.0, h1(gi * 9.3) * 2.0 - 1.0) + vec3f(0.001));
+    m = rotAxis(ax, U.cam.w * (0.22 + 0.45 * h1(gi * 7.7)) + h1(gi * 13.0) * 6.283);
+    off = vec3f((f32(ii % 3u) - 1.0) * 2.5, (f32(ii / 3u) - 1.0) * 2.05, 0.0);
+  } else {
+    /* the tumble: slow yaw, breathing pitch — every silhouette state visits */
+    m = rotX(0.42 * sin(U.cam.w * 0.21) + 0.35) * rotY(U.cam.w * 0.5);
+  }
+  let wp = m * pos + off;
+  o.wp = wp; o.wn = m * nrm; o.side = side; o.lu = lu;
+  o.cp = U.vp * vec4f(wp, 1.0);
+  return o;
+}
+@fragment fn shardFs(inp: SOut, @builtin(front_facing) front: bool) -> @location(0) vec4f {
+  let Vv = normalize(U.cam.xyz - inp.wp);
+  var N = normalize(inp.wn);
+  if (!front) { N = -N; }
+  let moonDir = normalize(vec3f(0.35, 0.62, 0.42));
+  let moonCol = vec3f(0.55, 0.63, 0.82);
+
+  /* THE MATERIAL LAW — the organism isn't painted, it is COMPOSED.
+     Microstructure lives in the letter's OWN coordinates (u along the
+     length, side across the width): grain anchored to flesh, not screen. */
+  let uv = vec2f(inp.lu, inp.side * 0.5 + 0.5);
+  let g = u32(U.texA.x + 0.5);
+  var fiberK = 1.0;
+  var poreK = 1.0;
+  if (g == 1u) {          /* FACETS — crystal/mineral/glass: cells flash one face at a time, sub-fractured within */
+    let cell = floor(uv * U.texA.y);
+    let tl = vec3f(hv(cell) - 0.5, hv(cell + vec2f(19.7, 7.1)) - 0.5, hv(cell + vec2f(47.3, 31.9)) - 0.5);
+    N = normalize(N + tl * (2.0 * U.texA.z));
+    N = normalize(N + vec3f(fbm(uv * U.texA.y * 3.5) - 0.5, 0.0, fbm(uv.yx * U.texA.y * 3.5) - 0.5) * U.texA.z * 0.7);  // sub-facets
+  } else if (g == 2u) {   /* FIBERS — wood/nacre/silk: grain runs ALONG the letter, fractal striations within bands */
+    let w = fbm(vec2f(uv.y * U.texA.y, uv.x * U.texA.y * 0.12));
+    N = normalize(N + vec3f(0.0, w - 0.5, (fbm(vec2f(w * 3.0, uv.x * 4.0)) - 0.5) * 0.5) * U.texA.z);
+    fiberK = 1.0 - U.texB.y * (0.5 - fbm(vec2f(uv.y * U.texA.y * 1.7, uv.x * 2.0))) * 0.8;
+  } else if (g == 3u) {   /* PORES — coral/volcanic/tissue: pores within pores, built in the skin */
+    let cell = floor(uv * U.texA.y);
+    let f2 = fract(uv * U.texA.y) - 0.5;
+    let jit = vec2f(hv(cell) - 0.5, hv(cell + vec2f(7.7, 3.3)) - 0.5) * 0.6;
+    let pore = smoothstep(0.32, 0.10, length(f2 - jit)) * step(0.35, hv(cell + vec2f(3.1, 9.4)));
+    let cell2 = floor(uv * U.texA.y * 2.7);                   // finer pores nested in the coarse skin
+    let f3 = fract(uv * U.texA.y * 2.7) - 0.5;
+    let pore2 = smoothstep(0.34, 0.12, length(f3)) * step(0.55, hv(cell2 + vec2f(2.2, 8.1)));
+    poreK = 1.0 - max(pore, pore2 * 0.6) * (0.25 + 0.85 * U.texA.z);
+    N = normalize(N + vec3f(f2.x - jit.x, 0.35, f2.y - jit.y) * (pore * U.texA.z * 1.4)
+                      + vec3f(f3.x, 0.2, f3.y) * (pore2 * U.texA.z * 0.9));
+  }
+  /* ORGANIC FRACTAL DETAIL (2026-07-23 · Bill's "organic fractals"): a fine
+     multi-octave micro-surface on EVERY material — the structure that keeps
+     resolving as you zoom. Scaled by grain depth, always subtle: it deepens
+     matter without smothering behavior (governed by Load, dialed by B). */
+  if (U.texA.z > 0.001) {
+    N = normalize(N + vec3f(fbm(uv * U.texA.y * 6.0) - 0.5, 0.0,
+                            fbm(uv.yx * U.texA.y * 6.0 + vec2f(3.3, 1.7)) - 0.5) * U.texA.z * 0.35);
+  }
+
+  var base = select(U.colB.rgb, U.colA.rgb, front);
+
+  let wrap = clamp(dot(N, moonDir) * 0.5 + 0.5, 0.0, 1.0);
+  var col = base * (vec3f(0.020, 0.028, 0.045) + moonCol * (0.18 + 0.85 * wrap * wrap)) * fiberK * poreK;
+  if (!front) { col += U.colB.rgb * 0.075; }                 // the belly holds a little of its own light
+
+  /* SPECULAR — the material's voice in the highlight: 6 = velvet, 140 = glass */
+  let Hh = normalize(moonDir + Vv);
+  col += moonCol * pow(max(dot(N, Hh), 0.0), U.texA.w) * U.texB.x;
+
+  /* SUBSURFACE — bone, nacre, tissue: light gets IN, and the shadow side glows */
+  let bl = clamp(dot(-N, moonDir) * 0.5 + 0.5, 0.0, 1.0);
+  col += U.colB.rgb * vec3f(1.0, 0.82, 0.72) * pow(bl, 2.2) * U.colB.w * 0.55;
+
+  /* IRIDESCENCE at grazing — gain now belongs to the material */
+  let graze = pow(1.0 - abs(dot(N, Vv)), 2.4);
+  let hue = 0.5 + 0.5 * cos(6.2831 * (graze * 1.15 + inp.lu * 0.35 + vec3f(0.0, 0.33, 0.66)));
+  col += hue * graze * U.colA.w;
+
+  /* WEATHERING — age and history mottle the surface; crystal has none */
+  let mw = fbm(uv * 2.6 + vec2f(5.0, 9.0));   // geological mottle across scales
+  col *= mix(1.0, 0.55 + 0.75 * mw, U.texB.z);
+
+  /* moon rim + edge occlusion (side = −1..1 across the width) */
+  col += moonCol * pow(graze, 2.2) * 0.35;
+  col *= 0.82 + 0.18 * (1.0 - abs(inp.side));
+  return vec4f(col, 1.0);
+}`;
+
+async function boot() {
+  const canvas = document.getElementById("stage");
+  const H = {
+    pill(ok, txt) { document.getElementById("probe").innerHTML =
+      '<span class="pill ' + (ok ? "ok" : "bad") + '">PROBE ' + (ok ? "●" : "✕") + " " + (ok ? "GREEN" : "RED") +
+      "</span> <span class='dim'>" + txt + "</span>"; }
+  };
+  if (!navigator.gpu) { H.pill(false, "navigator.gpu missing — use Chrome/Edge"); say("gate closed"); return; }
+  let gpu;
+  try { gpu = await Promise.race([ZigWebGPU.init(canvas, { msaa: true }),
+    new Promise((_, rej) => setTimeout(() => rej(new Error("adapter/device request stalled (10s)")), 10000))]); }
+  catch (e) { H.pill(false, e.message); say("gate closed — fix WebGPU, then reload"); return; }
+  H.pill(true, gpu.probe.desc);
+  gpu.device.lost.then((i) => { H.pill(false, "device lost: " + (i.message || i.reason)); });
+
+  const device = gpu.device;
+  const mod = device.createShaderModule({ code: WGSL });
+  const ubuf = device.createBuffer({ size: 40 * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const uarr = new Float32Array(40);
+
+  /* THE MATERIAL STUDIO — the cabinet comes from ZigCore.Materials (the
+     same table the color ecology uses: one source of truth). "classic" is
+     the golden look: zero grain, no spec term, moss/bone, iri 0.30. */
+  const CLASSIC = { dark: [0.062, 0.082, 0.046], light: [0.78, 0.75, 0.66],
+                    iriBase: 0.30, tex: [0, 0, 0, 30, 0, 0, 0, 0] };
+  const MATS = [["classic", CLASSIC]].concat(Object.entries(window.ZigCore.Materials));
+  let matIdx = 0, depthMul = 1;                 // B — the restraint dial: ×1 → ×½ → ×2 → ×0
+  const DEPTHS = [1, 0.5, 2, 0];
+  let depthIdx = 0;
+  function writeMaterial() {
+    const m = MATS[matIdx][1], t = m.tex;
+    uarr.set(m.dark, 24);  uarr[27] = Math.min(m.iriBase, 0.9);
+    uarr.set(m.light, 28); uarr[31] = t[6];
+    uarr[32] = t[0]; uarr[33] = t[1]; uarr[34] = t[2] * depthMul; uarr[35] = t[3];
+    uarr[36] = t[4]; uarr[37] = t[5]; uarr[38] = t[7]; uarr[39] = 0;
+  }
+  writeMaterial();
+
+  const bgPipe = device.createRenderPipeline({
+    layout: "auto",
+    vertex: { module: mod, entryPoint: "bgVs" },
+    fragment: { module: mod, entryPoint: "bgFs", targets: [{ format: gpu.format }] },
+    primitive: { topology: "triangle-list" },
+    depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" },
+    multisample: { count: gpu.sampleCount }
+  });
+  const shardPipe = device.createRenderPipeline({
+    layout: "auto",
+    vertex: { module: mod, entryPoint: "shardVs", buffers: [{ arrayStride: 32, attributes: [
+      { shaderLocation: 0, offset: 0,  format: "float32x3" },
+      { shaderLocation: 1, offset: 12, format: "float32x3" },
+      { shaderLocation: 2, offset: 24, format: "float32" },
+      { shaderLocation: 3, offset: 28, format: "float32" }] }] },
+    fragment: { module: mod, entryPoint: "shardFs", targets: [{ format: gpu.format }] },
+    primitive: { topology: "triangle-list", cullMode: "none" },
+    depthStencil: { format: "depth24plus", depthWriteEnabled: true, depthCompare: "less" },
+    multisample: { count: gpu.sampleCount }
+  });
+  const bgBG = device.createBindGroup({ layout: bgPipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: ubuf } }] });
+  const shBG = device.createBindGroup({ layout: shardPipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: ubuf } }] });
+
+  /* mesh (re)build — buffer sized for the largest segs we allow */
+  const vbuf = device.createBuffer({ size: 64 * 1024, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });   // roomy: chime ×3 mint fits
+  const params = Object.assign({}, ZigMesh.presets.sicklePetal);
+  let vcount = 0, curName = "sicklePetal", mint = 1;   // THE MINT: ×1 cut gem · ×2 polished · ×3 blown glass
+  const ALPHABET = Object.keys(ZigMesh.presets);   // both alphabets, in order
+  function setLetter(name) {
+    curName = name;
+    for (const kk of Object.keys(params)) delete params[kk];
+    Object.assign(params, JSON.parse(JSON.stringify(ZigMesh.presets[name])));   // deep copy — composites carry parts
+    rebuild();
+  }
+  function rebuild() {
+    const m = ZigMesh.make(params, { refine: mint });
+    const inter = new Float32Array(m.verts * 8);
+    for (let i = 0; i < m.verts; i++) {
+      inter.set([m.pos[i*3], m.pos[i*3+1], m.pos[i*3+2], m.nrm[i*3], m.nrm[i*3+1], m.nrm[i*3+2], m.side[i], m.u[i]], i * 8);
+    }
+    device.queue.writeBuffer(vbuf, 0, inter);
+    vcount = m.verts;
+    document.getElementById("params").textContent =
+      curName.toUpperCase() + " in " + MATS[matIdx][0].toUpperCase() + (depthMul !== 1 ? " (grain ×" + depthMul + ")" : "") +
+      " · mint ×" + mint + " · " + (vcount / 3) + " tris · " + (params.gen === "merge"
+      ? "COMPOSITE · " + params.parts.length + " voices (dials frozen — edit the parts' DNA)"
+      : params.gen === "shell"
+      ? "SHELL · sweep " + params.sweep.toFixed(2) + " · squash " + params.squash.toFixed(2) +
+        " · swirl " + params.swirl.toFixed(2) + " · radius " + params.radius.toFixed(2) +
+        (params.breathe ? " · breathes in-world (×" + params.breathe.toFixed(2) + ")" : "")
+      : params.gen === "arc"
+      ? "sweep " + params.sweep.toFixed(2) + " · radius " + params.radius.toFixed(2) +
+        " · twist " + params.twist.toFixed(2) + " · taper " + params.taper.toFixed(2) +
+        " · camber " + params.camber.toFixed(2) + " · width " + params.width.toFixed(2)
+      : "curve " + params.curve.toFixed(2) + " · twist " + params.twist.toFixed(2) +
+        " · taper " + params.taper.toFixed(2) + " · camber " + params.camber.toFixed(2) +
+        " · width " + params.width.toFixed(2) + " · length " + params.length.toFixed(2));
+  }
+  rebuild();
+
+  /* interaction */
+  let grid = false, frozen = false, t = 0, last = 0, zoom = 4.6;   // zoom = eye distance; wheel to dive into the matter
+  addEventListener("wheel", (e) => { zoom = Math.min(9, Math.max(1.35, zoom + Math.sign(e.deltaY) * 0.3)); e.preventDefault(); }, { passive: false });
+  const step = { curve: [0.04, 0, 0.9], twist: [0.15, 0, 3.2], taper: [0.06, 0, 1], camber: [0.05, 0, 0.7], width: [0.04, 0.08, 1.0] };
+  addEventListener("keydown", (e) => {
+    const k = e.code;
+    const bump = (name, dir) => {
+      if (name === "curve" && (params.gen === "arc" || params.gen === "shell")) {
+        const hi = params.gen === "shell" ? 3.1 : 6.15;
+        params.sweep = Math.min(hi, Math.max(0.5, params.sweep + dir * 0.2)); rebuild(); return;
+      }
+      if (name === "twist" && params.gen === "shell") {
+        params.swirl = Math.min(3.0, Math.max(0, params.swirl + dir * 0.15)); rebuild(); return;
+      }
+      if (name === "camber" && params.gen === "shell") {
+        params.squash = Math.min(1.25, Math.max(0.45, params.squash + dir * 0.05)); rebuild(); return;
+      }
+      if (params[name] === undefined) return;
+      const [d, lo, hi] = step[name];
+      params[name] = Math.min(hi, Math.max(lo, params[name] + dir * d)); rebuild(); };
+    if (k === "KeyQ") bump("curve", 1);  else if (k === "KeyA") bump("curve", -1);
+    else if (k === "KeyW") bump("twist", 1);  else if (k === "KeyS") bump("twist", -1);
+    else if (k === "KeyE") bump("taper", 1);  else if (k === "KeyD") bump("taper", -1);
+    else if (k === "KeyC") bump("camber", 1); else if (k === "KeyV") bump("camber", -1);
+    else if (k === "KeyZ") bump("width", 1);  else if (k === "KeyX") bump("width", -1);
+    else if (k === "KeyG") grid = !grid;
+    else if (k === "KeyT") { mint = mint % 3 + 1; rebuild(); }   // T — THE MINT: cut gem → polished → blown glass
+    else if (k === "KeyM") { matIdx = (matIdx + 1) % MATS.length; writeMaterial(); rebuild(); }        // M — next MATERIAL
+    else if (k === "KeyN") { matIdx = (matIdx + MATS.length - 1) % MATS.length; writeMaterial(); rebuild(); }  // N — previous
+    else if (k === "KeyB") { depthIdx = (depthIdx + 1) % DEPTHS.length; depthMul = DEPTHS[depthIdx]; writeMaterial(); rebuild(); }  // B — restraint: grain ×1/½/2/0
+    else if (k === "KeyR") setLetter(curName)   // reset THIS letter's DNA
+    else if (k.slice(0, 5) === "Digit") {
+      const idx = (k[5] === "0") ? 9 : (+k[5] - 1);          // 1-9 then 0 = tenth
+      if (ALPHABET[idx]) setLetter(ALPHABET[idx]);
+    }
+    else if (k === "ArrowRight") setLetter(ALPHABET[(ALPHABET.indexOf(curName) + 1) % ALPHABET.length])
+    else if (k === "ArrowLeft") setLetter(ALPHABET[(ALPHABET.indexOf(curName) + ALPHABET.length - 1) % ALPHABET.length])
+    else if (k === "Space") { frozen = !frozen; e.preventDefault(); }
+  });
+
+  say("alive — tumbling. Space freezes a pose worth staring at");
+  function frame(now) {
+    const dt = Math.min((now - (last || now)) / 1000, 0.05); last = now;
+    if (!frozen) t += dt;
+    gpu.ensureTargets();
+    const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
+    const eye = [0, 0, zoom], fov = 0.75;   // wheel dives in — watch the fractal octaves resolve
+    const vp = ZigWebGPU.mat.mul(ZigWebGPU.mat.persp(fov, aspect, 0.1, 100),
+                                 ZigWebGPU.mat.lookAt(eye, [0, 0, 0], [0, 1, 0]));
+    uarr.set(vp, 0);
+    uarr.set([eye[0], eye[1], eye[2], t], 16);
+    uarr.set([grid ? 1 : 0, 0, 0, 0], 20);
+    device.queue.writeBuffer(ubuf, 0, uarr);
+
+    const enc = device.createCommandEncoder();
+    const swapView = gpu.context.getCurrentTexture().createView();
+    const rp = enc.beginRenderPass({
+      colorAttachments: [{
+        view: gpu.sampleCount > 1 ? gpu.msaaTex.createView() : swapView,
+        resolveTarget: gpu.sampleCount > 1 ? swapView : undefined,
+        clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: "clear", storeOp: gpu.sampleCount > 1 ? "discard" : "store"
+      }],
+      depthStencilAttachment: { view: gpu.depthTex.createView(), depthClearValue: 1, depthLoadOp: "clear", depthStoreOp: "discard" }
+    });
+    rp.setPipeline(bgPipe); rp.setBindGroup(0, bgBG); rp.draw(3);
+    rp.setPipeline(shardPipe); rp.setBindGroup(0, shBG); rp.setVertexBuffer(0, vbuf);
+    rp.draw(vcount, grid ? 9 : 1);
+    rp.end();
+    device.queue.submit([enc.finish()]);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+addEventListener("load", () => {
+  if (!window.ZigWebGPU || !window.ZigMesh) {
+    say("script load failed — missing " + ["ZigWebGPU", "ZigMesh"].filter((n) => !window[n]).join(", ") +
+        ". Open the single-file build, or keep this next to engine/.");
+    return;
+  }
+  boot().catch((e) => { say("boot error: " + (e && e.message || e)); console.error(e); });
+});
+</script>
+</body>
+</html>

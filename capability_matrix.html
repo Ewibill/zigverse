@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ZigCore · Capability Matrix</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#050608; --panel:#0b0e13; --edge:#1a1f28; --ink:#c9cdd6; --dim:#6b7280; --faint:#454b57;
+    --done:#7ad67a; --emerge:#e6c260; --none:#4a5060;
+    --behav:#8ab6ff; --mat:#f0a878; --env:#8ad6c8;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:radial-gradient(1200px 700px at 50% -10%, #0a0d13 0%, #050608 60%);color:var(--ink);
+    font:13px/1.5 "Cascadia Code","SF Mono",Consolas,monospace;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1220px;margin:0 auto;padding:34px 22px 60px}
+  header{text-align:center;margin-bottom:6px}
+  h1{font-size:19px;letter-spacing:.34em;margin:0 0 10px;color:#e7ebf2;font-weight:600}
+  .rule{color:var(--dim);max-width:760px;margin:0 auto;font-size:12.5px}
+  .rule b{color:#d8dde6}
+  .q{margin:14px auto 0;max-width:720px;padding:9px 14px;border:1px solid var(--edge);border-radius:10px;
+    background:#0a0d12;color:#aeb6c2;font-size:12px}
+  .q span{color:var(--emerge)}
+  .legend{display:flex;gap:20px;justify-content:center;margin:20px 0 26px;color:var(--dim);font-size:12px;flex-wrap:wrap}
+  .legend b{font-weight:400;color:var(--ink)}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .d-done{background:var(--done)} .d-em{background:var(--emerge)} .d-no{background:transparent;border:1px solid var(--none)}
+  .cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+  @media(max-width:960px){.cols{grid-template-columns:1fr}}
+  .col{background:var(--panel);border:1px solid var(--edge);border-radius:14px;padding:16px 15px 18px}
+  .col > h2{margin:0 0 3px;font-size:13px;letter-spacing:.2em}
+  .col.behav h2{color:var(--behav)} .col.mat h2{color:var(--mat)} .col.env h2{color:var(--env)}
+  .col .sub{color:var(--faint);font-size:11px;margin-bottom:12px}
+  .grp{margin:14px 0 4px;color:var(--dim);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;
+    border-top:1px dashed var(--edge);padding-top:10px}
+  .grp:first-of-type{border-top:none;padding-top:2px;margin-top:6px}
+  ul{list-style:none;margin:0;padding:0}
+  li{display:flex;gap:8px;align-items:baseline;padding:3px 0;font-size:12px}
+  li .nm{color:var(--ink);min-width:0}
+  li.no .nm{color:var(--dim)}
+  li .where{color:var(--faint);font-size:10.5px;margin-left:auto;text-align:right;white-space:nowrap;padding-left:8px}
+  .tag{font-size:9.5px;letter-spacing:.1em;color:var(--faint)}
+  footer{margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:960px){footer{grid-template-columns:1fr}}
+  .ph{background:#0a0d12;border:1px solid var(--edge);border-radius:12px;padding:14px 16px}
+  .ph h3{margin:0 0 6px;font-size:12px;letter-spacing:.14em;color:#d8dde6}
+  .ph.p1 h3{color:var(--done)} .ph.p2 h3{color:var(--env)}
+  .ph p{margin:0;color:var(--dim);font-size:11.5px}
+  .foot{margin-top:24px;text-align:center;color:var(--faint);font-size:11px}
+  .count{color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>ZIGCORE · CAPABILITY MATRIX</h1>
+    <div class="rule">The board we build from. Phase 1 is not a collection of organisms — it is teaching the engine the
+      <b>vocabulary</b> every organism is composed from. <b>Nothing enters ZigCore unless it becomes reusable.</b>
+      Not an effect. Not a demo. A capability.</div>
+    <div class="q">Before any project begins, it must answer: <span>what permanent behavior or material will ZigCore
+      understand after this that it did not before?</span></div>
+  </header>
+
+  <div class="legend">
+    <span><i class="dot d-done"></i><b>in engine</b> — a law or preset, proven</span>
+    <span><i class="dot d-em"></i><b>emerging</b> — a seed exists, not yet reusable</span>
+    <span><i class="dot d-no"></i><b>not yet</b> — frontier</span>
+  </div>
+
+  <div class="cols">
+
+    <!-- ============ BEHAVIORS ============ -->
+    <section class="col behav">
+      <h2>BEHAVIORS</h2>
+      <div class="sub">how things move & live</div>
+
+      <div class="grp">Collective — how a mass moves as one <span class="count">· mature</span></div>
+      <ul>
+        <li><i class="dot d-done"></i><span class="nm">Flocking · cohesion · separation</span><span class="where">flocking</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Schooling (fish)</span><span class="where">flocking</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Alignment · murmuration</span><span class="where">flocking</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Synchronization / phase-lock</span><span class="where">zigphase</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Flow field / current</span><span class="where">zigflow</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Morphing / deformation</span><span class="where">zigmesh·wardrobe</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Drift · turnover (depart/return)</span><span class="where">turnover</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Wavefront / impulse propagation</span><span class="where">flocking</span></li>
+        <li class="em"><i class="dot d-em"></i><span class="nm">Boundary following</span><span class="where">echo-space</span></li>
+        <li class="em"><i class="dot d-em"></i><span class="nm">Pulse (collective + vertex)</span><span class="where">zigphase·microbreath</span></li>
+        <li class="em"><i class="dot d-em"></i><span class="nm">Anchoring</span><span class="where">avatar</span></li>
+      </ul>
+
+      <div class="grp">Individual — how ONE organism lives <span class="count">· MATURE (core complete)</span></div>
+      <ul>
+        <li><i class="dot d-done"></i><span class="nm">Seek (attraction to a target)</span><span class="where">seek · v0.12</span></li>
+        <li class="em"><i class="dot d-em"></i><span class="nm">Remember (per-agent)</span><span class="where">field only</span></li>
+        <li class="em"><i class="dot d-em"></i><span class="nm">Transform (state → state)</span><span class="where">metamorphosis</span></li>
+        <li class="em"><i class="dot d-em"></i><span class="nm">Curiosity</span><span class="where">mood tint</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Rest / sleep</span><span class="where">arousal · v0.11</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Wake</span><span class="where">arousal · v0.11</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Avoid (goal repulsion)</span><span class="where">seek · v0.12</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Attach / detach</span><span class="where">attach · v0.13</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Fatigue</span><span class="where">metabolism · v0.14</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Recover</span><span class="where">metabolism · v0.14</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Aging</span><span class="where">aging · v0.15</span></li>
+        <li class="no"><i class="dot d-no"></i><span class="nm">Foraging</span><span class="where">situational</span></li>
+        <li class="no"><i class="dot d-no"></i><span class="nm">Growth</span><span class="where">situational</span></li>
+      </ul>
+
+      <div class="grp">Performance — how the player drives it <span class="count">· experience</span></div>
+      <ul>
+        <li><i class="dot d-done"></i><span class="nm">Solo — breath is the only pulse</span><span class="where">U toggle</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Performed targets (seek/void by breath+bend)</span><span class="where">v0.12</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Form Field — form expresses state (age→form)</span><span class="where">v0.16</span></li>
+      </ul>
+    </section>
+
+    <!-- ============ MATERIALS ============ -->
+    <section class="col mat">
+      <h2>MATERIALS</h2>
+      <div class="sub">what things are made of</div>
+
+      <div class="grp">The Law — reusable surface engine <span class="count">· mature</span></div>
+      <ul>
+        <li><i class="dot d-done"></i><span class="nm">Composition profiles</span><span class="where">material</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Fractal grain (organic fBm)</span><span class="where">v0.7+</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Normal-relief (carved light)</span><span class="where">v0.10.2</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Footprint-aware AA</span><span class="where">v0.10.3</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Fiber anisotropy (grain-along-body)</span><span class="where">material</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Weathering (habitat on life)</span><span class="where">material</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Fluid / surface skin</span><span class="where">surface</span></li>
+        <li><i class="dot d-done"></i><span class="nm">Membrane (elastic + memory)</span><span class="where">membrane</span></li>
+      </ul>
+
+      <div class="grp">The Cabinet — 19 composed presets <span class="count">· present</span></div>
+      <ul>
+        <li><i class="dot d-done"></i><span class="nm">pearl · bone · nacre · moonstone</span></li>
+        <li><i class="dot d-done"></i><span class="nm">wood · moss · botanical · coral</span></li>
+        <li><i class="dot d-done"></i><span class="nm">glass · crystal · ice · obsidian</span></li>
+        <li><i class="dot d-done"></i><span class="nm">copper · chitin · ceramic · mineral</span></li>
+        <li><i class="dot d-done"></i><span class="nm">tissue · smoke · volcanic</span></li>
+      </ul>
+
+      <div class="grp">Optics — per-substance light behavior <span class="count">· the frontier</span></div>
+      <ul>
+        <li class="em"><i class="dot d-em"></i><span class="nm">Subsurface / translucency</span><span class="where">shallow</span></li>
+        <li class="em"><i class="dot d-em"></i><span class="nm">Anisotropic sheen (silk/feather)</span><span class="where">spec only</span></li>
+        <li class="em"><i class="dot d-em"></i><span class="nm">Fiber depth (wood/bark)</span><span class="where">relief seed</span></li>
+        <li class="no"><i class="dot d-no"></i><span class="nm">Refraction (glass/crystal/ice)</span></li>
+        <li class="no"><i class="dot d-no"></i><span class="nm">Volumetric (smoke/pollen/sand)</span></li>
+        <li class="no"><i class="dot d-no"></i><span class="nm">Substances: bark · silk · feather · pollen · sand</span></li>
+      </ul>
+    </section>
+
+    <!-- ============ ENVIRONMENTS ============ -->
+    <section class="col env">
+      <h2>ENVIRONMENTS</h2>
+      <div class="sub">where things live — Phase 2</div>
+
+      <div class="grp">Seeds — thin today <span class="count">· habitat is our thinnest pillar</span></div>
+      <ul>
+        <li class="em"><i class="dot d-em"></i><span class="nm">Medium (air/water · buoyancy)</span><span class="where">medium</span></li>
+        <li class="em"><i class="dot d-em"></i><span class="nm">Sky / atmosphere</span><span class="where">sky</span></li>
+        <li class="em"><i class="dot d-em"></i><span class="nm">Echo-space (walls reflect)</span><span class="where">echo-space</span></li>
+        <li class="em"><i class="dot d-em"></i><span class="nm">Light filtering / caustics</span><span class="where">lake</span></li>
+      </ul>
+
+      <div class="grp">Forces — not started</div>
+      <ul>
+        <li class="no"><i class="dot d-no"></i><span class="nm">Gravity (weight, settling)</span></li>
+        <li class="no"><i class="dot d-no"></i><span class="nm">Current as habitat (not behavior)</span></li>
+        <li class="no"><i class="dot d-no"></i><span class="nm">Pressure / depth</span></li>
+        <li class="no"><i class="dot d-no"></i><span class="nm">Temperature</span></li>
+      </ul>
+
+      <div class="grp">Formative worlds — the far horizon</div>
+      <ul>
+        <li class="no"><i class="dot d-no"></i><span class="nm">Ocean · Fire · Forest · Body · Cold</span></li>
+      </ul>
+      <div style="color:var(--faint);font-size:10.5px;margin-top:8px;line-height:1.5">
+        The worlds our matter already remembers. Not built until Phase 1's vocabulary can inhabit them.
+      </div>
+    </section>
+
+  </div>
+
+  <footer>
+    <div class="ph p1">
+      <h3>PHASE 1 — behavior & matter</h3>
+      <p>Teach ZigCore how things behave and what they are made of. Close it not with more organisms, but by
+        maturing the individual-behavior axis and the material optics until each is a reusable component. <b style="color:#9aa2ad">We are here.</b></p>
+    </div>
+    <div class="ph p2">
+      <h3>PHASE 2 — environment</h3>
+      <p>Teach ZigCore <i>where</i> things live. The environment becomes the protagonist; organisms become the
+        instruments that let a person perceive the invisible law. Begins only when Phase 1's vocabulary is rich enough to inhabit a world.</p>
+    </div>
+  </footer>
+
+  <div class="foot">Every completed capability is added to the permanent engine. A specimen is spent; a capability compounds.</div>
+</div>
+</body>
+</html>

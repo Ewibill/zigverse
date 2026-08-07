@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stomata Breathing — ZigGlow S1 (lawful climate)</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #05070a; overflow: hidden; }
+  #gl { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+  /* Faint fading hint — restraint. Disappears and never returns unless summoned. */
+  #hint {
+    position: fixed; left: 50%; bottom: 6.5vh; transform: translateX(-50%);
+    font: 400 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+    letter-spacing: .06em; color: rgba(190,214,170,.55);
+    text-align: center; pointer-events: none; user-select: none;
+    transition: opacity 2s ease; opacity: 1;
+  }
+  #hint.gone { opacity: 0; }
+  /* Debug read-out — proves the lawful loop. Off by default. */
+  #dbg {
+    position: fixed; left: 16px; top: 14px; display: none;
+    font: 400 11px/1.55 ui-monospace, Menlo, monospace;
+    color: rgba(150,190,140,.72); letter-spacing: .02em;
+    background: rgba(5,8,10,.35); padding: 10px 12px; border-radius: 8px;
+    border: 1px solid rgba(110,166,68,.15); pointer-events: none; white-space: pre;
+  }
+  #dbg b { color: rgba(171,224,99,.9); font-weight: 600; }
+  #fail {
+    position: fixed; inset: 0; display: none; place-content: center;
+    font: 400 14px/1.6 ui-monospace, monospace; color: #9fb98f; text-align: center;
+    padding: 8vw;
+  }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="hint">hold anywhere to breathe&nbsp;&nbsp;·&nbsp;&nbsp;space to breathe with it&nbsp;&nbsp;·&nbsp;&nbsp;d&nbsp;for the pulse</div>
+<div id="dbg"></div>
+<div id="fail">This organism needs a WebGL2 context with float render targets.<br>Try a recent Chrome / Edge on a GPU machine (eyeZ class).</div>
+
+<script>
+/* ────────────────────────────────────────────────────────────────────────────
+   STOMATA BREATHING — ZigGlow Stage 1  ·  the LAWFUL climate stage
+   Glyph / Zigverse Studio
+
+   THE LAW being proved here:
+       Nothing controls the organism. Everything only changes its world.
+
+   The pipeline, made real:
+       ZigSense   breath (autonomous rhythm + your hold/space)  — the source of life
+         ↓  writes CO₂ + humidity INTO the air, never into the stomata
+       ZigField   a GPU climate texture: R=CO₂  G=humidity  B=light   — the world
+         ↓  diffuses + relaxes toward ambient on its own
+       ZigCoupling  the stomata SAMPLES the field at its own location   — perception
+         ↓
+       Organism   its own physiology (turgor) decides to open — with latency,
+                  inertia, hysteresis, a resting drift, and micro-life.
+
+   Breath never touches the aperture. Breath changes the air; the stomata reads
+   the air and chooses. The half-second of lag between your breath and its opening
+   is the whole point — that beat is where "alive" lives.
+
+   This is a CAPABILITY, not a specimen. What the engine gains:
+     · respiration-through-climate  (Kelp, Rootwhale inherit this)
+     · a field-sampling coupling    (any organism, any population)
+     · a turgor/physiology behavior  (reusable "decide-to-act" integrator)
+   The leaf is just the first body to wear it.
+──────────────────────────────────────────────────────────────────────────── */
+
+const CFG = {
+  // ── ZigField (the world) ───────────────────────────────────────────────
+  fieldSize: 256,
+  diffuse:  [0.16, 0.11, 0.02],   // CO₂ spreads fastest, humidity slower, light barely
+  relax:    [0.55, 0.34, 0.55],   // per-sec pull back toward ambient (breath fades)
+  ambientHumidity: 0.16,
+  ambientLight:    0.50,
+  circadianAmp:    0.14,           // slow light drift — the world's own day
+  circadianPeriod: 84.0,           // seconds
+
+  // ── ZigSense (breath) ──────────────────────────────────────────────────
+  restBreathPeriod: 5.4,           // the world breathing on its own (~11/min)
+  restBreathAmount: 0.11,          // gentle — resting, not performing
+  restBreathSigma2: 0.014,
+  handBreathAmount: 0.95,          // your hold / space — a real exhale
+  handBreathSigma2: 0.010,
+
+  // ── Organism physiology (the decision) ─────────────────────────────────
+  restingTurgor: 0.10,             // where it sits at night
+  responseGain:  2.35,             // saturation of stimulus → desired openness
+  humWeight:     0.72,
+  co2Weight:     0.66,
+  lightGate:     [0.04, 0.34],     // needs some light to justify opening
+  stiffness:     3.0,              // spring toward desired  → latency
+  damping:       2.55,             // near-critical  → gentle settle, faint overshoot
+  hysteresis:    0.012,            // dead-zone: ignore trembles (restraint / calm)
+  microLife:     0.0035,           // never perfectly still
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl2', { antialias: true, alpha: false, premultipliedAlpha: false });
+const failEl = document.getElementById('fail');
+if (!gl) { failEl.style.display = 'grid'; throw new Error('no webgl2'); }
+const extF = gl.getExtension('EXT_color_buffer_float');
+if (!extF) { failEl.style.display = 'grid'; throw new Error('no float color buffer'); }
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function program(vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p;
+}
+
+const VERT = `#version 300 es
+in vec2 aPos; out vec2 vUv;
+void main(){ vUv = aPos*0.5+0.5; gl_Position = vec4(aPos,0.,1.); }`;
+
+// ── ZigField step: diffuse + relax + inject breath. The world evolves. ───────
+const SIM = `#version 300 es
+precision highp float;
+in vec2 vUv; out vec4 frag;
+uniform sampler2D uField;
+uniform vec2  uTexel;
+uniform float uDt;
+uniform vec3  uDiffuse, uRelax, uAmbient;   // ambient = (0, hum, light)
+uniform vec4  uB0, uB1;                      // breath: xy pos, z co2 amt, w hum amt
+uniform vec2  uSigma2;                        // gaussian spread (b0, b1)
+void main(){
+  vec4 c = texture(uField, vUv);            // r=CO2 g=hum b=light
+  vec4 l = texture(uField, vUv - vec2(uTexel.x,0.));
+  vec4 r = texture(uField, vUv + vec2(uTexel.x,0.));
+  vec4 d = texture(uField, vUv - vec2(0.,uTexel.y));
+  vec4 u = texture(uField, vUv + vec2(0.,uTexel.y));
+  vec3 lap = (l.rgb + r.rgb + d.rgb + u.rgb - 4.0*c.rgb);
+  c.rgb += uDiffuse * lap;                          // diffusion
+  c.rgb += (uAmbient - c.rgb) * uRelax * uDt;       // relax toward ambient
+  // inject breath as air-change (CO₂ + humidity), never as "openness"
+  vec2 e0 = vUv - uB0.xy; float g0 = exp(-dot(e0,e0)/(2.0*uSigma2.x));
+  vec2 e1 = vUv - uB1.xy; float g1 = exp(-dot(e1,e1)/(2.0*uSigma2.y));
+  c.r += (g0*uB0.z + g1*uB1.z) * uDt;
+  c.g += (g0*uB0.w + g1*uB1.w) * uDt;
+  c.rgb = clamp(c.rgb, 0.0, 1.4);
+  frag = vec4(c.rgb, 1.0);
+}`;
+
+// ── Render: near-black leaf, breath made visible as AIR, stomata reads turgor ─
+const DRAW = `#version 300 es
+precision highp float;
+in vec2 vUv; out vec4 frag;
+uniform sampler2D uField;
+uniform float uTime, uAspect, uOpen, uBreathPhase, uHandBreath;
+uniform vec2  uStom;
+
+float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+float vn(vec2 p){ vec2 i=floor(p),f=fract(p); vec2 u=f*f*(3.-2.*f);
+  return mix(mix(hash(i),hash(i+vec2(1,0)),u.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x), u.y); }
+float fbm(vec2 p){ float s=0.,a=.5; for(int i=0;i<5;i++){ s+=a*vn(p); p=p*2.03+7.1; a*=.5; } return s; }
+
+// almond half-width profile at height y (pinched, eye-shaped)
+float lens(float y, float H, float W){ float t = clamp(1.0 - (y*y)/(H*H), 0.0, 1.0); return W * pow(t, 0.62); }
+
+void main(){
+  vec2 uv = vUv;
+  // camera breathes with the leaf — a whisper of drift + zoom
+  float camz = 1.0 - 0.014*sin(uBreathPhase);
+  vec2 cam = vec2(fbm(vec2(uTime*0.03, 1.7)), fbm(vec2(3.4, uTime*0.03))) - 0.5;
+  uv = (uv - 0.5)*camz + 0.5 + cam*0.006;
+
+  vec4 field = texture(uField, uv);
+  float co2 = field.r, hum = field.g, light = field.b;
+
+  // ── leaf epidermis: near-black, pavement cells, faint radiating walls ──
+  vec2 p = uv - uStom; p.x *= uAspect;
+  float rad = length(p);
+  vec2 cell = p * 7.4;
+  float pave = fbm(cell*1.3 + 11.0);
+  float walls = smoothstep(0.42, 0.5, fbm(cell*0.9)) ;       // faint cell-wall webbing
+  vec3 leaf = mix(vec3(0.018,0.041,0.020), vec3(0.045,0.090,0.038), pave);
+  leaf += vec3(0.02,0.05,0.02) * walls * (0.4 + 0.9*hum);     // walls glisten when humid
+  leaf *= smoothstep(1.15, 0.15, rad);                        // fall into darkness outward
+
+  // ── the stomata: a vertical almond that OPENS with turgor ──
+  float H   = 0.150;                                  // aperture half-height
+  float W   = mix(0.008, 0.060, uOpen);               // aperture half-width  ← turgor
+  float Ho  = 0.182;                                  // guard-cell half-height
+  float Wo  = 0.070 + 0.020*uOpen;                    // guard cells plump with turgor
+  float aw = lens(p.y, H,  W);                        // aperture edge
+  float ow = lens(p.y, Ho, Wo);                       // outer edge
+  float ax = abs(p.x);
+  float aa = 1.6/1000.0 + fwidth(ax)*1.2;
+
+  float inAperture = smoothstep(aw+aa, aw-aa, ax) * smoothstep(Ho, Ho-0.03, abs(p.y));
+  float inGuard    = smoothstep(ow+aa, ow-aa, ax) * (1.0 - smoothstep(aw+aa, aw-aa, ax))
+                     * smoothstep(Ho+0.01, Ho-0.02, abs(p.y));
+
+  // guard-cell body: turgid green, wet rim toward the pore, sub-surface depth
+  float acrossLobe = clamp((ax - aw)/max(ow-aw, 1e-3), 0.0, 1.0);  // 0 at pore, 1 at outer
+  float turgorPlump = smoothstep(0.0, 1.0, 1.0 - acrossLobe);       // bulge near the pore
+  vec3 guard = mix(vec3(0.055,0.135,0.052), vec3(0.135,0.290,0.120),
+                   turgorPlump*(0.55 + 0.45*uOpen));
+  guard += vec3(0.11,0.19,0.07) * pow(turgorPlump, 3.0) * (0.4 + 0.7*uOpen);  // turgor sheen
+  float wetRim = smoothstep(0.14, 0.0, acrossLobe);                 // moist inner lip
+  guard += vec3(0.16,0.24,0.13) * wetRim * (0.35 + 0.65*hum);
+
+  // dew: a few specular droplets that catch light — moisture = life
+  float dew = 0.0;
+  for (int i=0;i<5;i++){
+    float fi=float(i);
+    vec2 dp = vec2( (hash(vec2(fi,3.0))-0.5)*0.09, (hash(vec2(fi,7.0))-0.5)*0.30 );
+    dp.x += sign(dp.x==0.0?1.0:dp.x) * (aw+0.018);
+    float dd = length(p - dp);
+    float breathe = 0.006*(0.7+0.3*sin(uBreathPhase+fi));
+    dew += smoothstep(0.012+breathe, 0.0, dd) * (0.5+0.5*hash(vec2(fi,9.0)));
+  }
+  guard += vec3(0.55,0.75,0.5) * dew * inGuard * (0.3 + 0.7*hum);
+
+  // ── the interior cavity: mysterious. a breath of glow, never a reveal ──
+  float depth = smoothstep(aw, 0.0, ax);                           // deeper mid-pore
+  vec3 cavity = vec3(0.010,0.022,0.014) * (0.4 + depth);
+  float innerGlow = uOpen * depth * (0.10 + 0.22*hum + 0.10*uHandBreath);
+  cavity += vec3(0.10,0.24,0.13) * innerGlow;                      // faint life within
+  cavity += vec3(0.16,0.20,0.09) * innerGlow*innerGlow * 0.5;      // barest warm core
+
+  // compose stomata over leaf
+  vec3 col = leaf;
+  col = mix(col, guard,  inGuard);
+  col = mix(col, cavity, inAperture);
+
+  // ── breath made visible in the AIR: humidity vapor rising (lawful) ──
+  float mistN = fbm(vec2(p.x*6.0, p.y*6.0 - uTime*0.35));
+  float vapor = hum * smoothstep(0.35, 0.9, mistN) * smoothstep(0.9, 0.15, rad);
+  col += vec3(0.10,0.20,0.22) * vapor * 0.6;                       // soft teal breath
+
+  // CO₂ presence: a barely-there cool shimmer where the air is rich
+  col += vec3(0.03,0.07,0.06) * co2 * smoothstep(0.8,0.1,rad) * 0.5;
+
+  // ── finish: near-black premium. gentle vignette, film-fine grain ──
+  float vig = smoothstep(1.25, 0.25, length(vUv-0.5));
+  col *= 0.35 + 0.65*vig;
+  col += (hash(vUv*uTime)-0.5)*0.010;                              // dither, kills banding
+  col = max(col, 0.0);
+  frag = vec4(pow(col, vec3(0.92)), 1.0);                          // slight lift, keep dark
+}`;
+
+const simProg  = program(VERT, SIM);
+const drawProg = program(VERT, DRAW);
+
+// fullscreen triangle
+const vao = gl.createVertexArray();
+gl.bindVertexArray(vao);
+const vbo = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+for (const prog of [simProg, drawProg]) {
+  const loc = gl.getAttribLocation(prog, 'aPos');
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+}
+
+// ── ZigField: two float textures + FBOs, ping-pong ───────────────────────────
+const N = CFG.fieldSize;
+function makeFieldTex() {
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, N, N, 0, gl.RGBA, gl.FLOAT, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+let fieldA = makeFieldTex(), fieldB = makeFieldTex();
+function makeFBO(tex){ const f=gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER,f);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0); return f; }
+let fboA = makeFBO(fieldA), fboB = makeFBO(fieldB);
+// seed both to ambient
+for (const f of [fboA, fboB]) { gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+  gl.viewport(0,0,N,N); gl.clearColor(0.0, CFG.ambientHumidity, CFG.ambientLight, 1.0); gl.clear(gl.COLOR_BUFFER_BIT); }
+gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+// ── the ORGANISM: a physiology, not a value. reusable for the whole population ─
+class Stomata {
+  constructor(u, v, opts={}) {
+    this.u = u; this.v = v;               // location in the world (field uv)
+    this.turgor = CFG.restingTurgor;      // internal state — the real thing that opens
+    this.vel = 0;
+    this.driftPhase = Math.random()*6.28;
+    this.agency = opts.agency ?? 0;       // Stage-2 soloist knob (0 = an ordinary cell)
+    this.sample = { co2:0, hum:CFG.ambientHumidity, light:CFG.ambientLight };
+    this.desired = CFG.restingTurgor;
+  }
+  // physiology: what openness the air *invites* — a saturating response, gated by light,
+  // never below a living resting baseline. This is a want, not a command.
+  wants(s, t) {
+    const stim = s.hum*CFG.humWeight + s.co2*CFG.co2Weight;
+    let d = 1.0 - Math.exp(-stim*CFG.responseGain);
+    const gate = smoothstep(CFG.lightGate[0], CFG.lightGate[1], s.light);
+    d *= gate;
+    const drift = 0.02*Math.sin(t*0.11 + this.driftPhase);       // slow resting breath
+    return clamp(Math.max(d, CFG.restingTurgor + drift), 0, 1);
+  }
+  // integrate turgor toward the want — spring + damping give the LATENCY & settle
+  update(dt, s, t) {
+    this.sample = s;
+    let want = this.wants(s, t);
+    // hysteresis: don't chase trembles smaller than the dead-zone (calm)
+    if (Math.abs(want - this.turgor) < CFG.hysteresis) want = this.turgor;
+    this.desired = want;
+    const accel = CFG.stiffness*(want - this.turgor) - CFG.damping*this.vel;
+    this.vel += accel*dt;
+    this.turgor += this.vel*dt;
+    this.turgor += (Math.random()-0.5)*CFG.microLife;             // never perfectly still
+    this.turgor = clamp(this.turgor, 0, 1);
+  }
+}
+function clamp(x,a,b){ return x<a?a:x>b?b:x; }
+function smoothstep(a,b,x){ const t=clamp((x-a)/(b-a),0,1); return t*t*(3-2*t); }
+
+const stom = new Stomata(0.5, 0.5);
+
+// ── ZigCoupling: read the true field at the organism's location ───────────────
+const px1 = new Float32Array(4);
+function readField(u, v) {
+  const x = Math.min(N-1, Math.max(0, Math.floor(u*N)));
+  const y = Math.min(N-1, Math.max(0, Math.floor(v*N)));
+  gl.bindFramebuffer(gl.FRAMEBUFFER, currentFBO);
+  gl.readPixels(x, y, 1, 1, gl.RGBA, gl.FLOAT, px1);
+  return { co2: px1[0], hum: px1[1], light: px1[2] };
+}
+
+// ── ZigSense: breath sources. the world's own rhythm + your hands ────────────
+let handOn = false, handU = 0.5, handV = 0.5;
+let breathPhase = 0;
+function autonomousBreath(t) {
+  // slightly irregular so it's alive, not a metronome
+  const wobble = 0.6*Math.sin(t*0.37) + 0.4*Math.sin(t*0.13+1.1);
+  const period = CFG.restBreathPeriod * (1.0 + 0.12*wobble);
+  breathPhase = (t / period) * 6.2831853;
+  const exhale = Math.max(0, Math.sin(breathPhase));   // only exhale adds to the air
+  return exhale * CFG.restBreathAmount;
+}
+
+// ── main loop ────────────────────────────────────────────────────────────────
+let currentFBO = fboA, currentTex = fieldA, otherFBO = fboB, otherTex = fieldB;
+let last = performance.now()*0.001, tGlobal = 0;
+const uS = {}; // sim uniform locs
+for (const k of ['uField','uTexel','uDt','uDiffuse','uRelax','uAmbient','uB0','uB1','uSigma2'])
+  uS[k] = gl.getUniformLocation(simProg, k);
+const uD = {};
+for (const k of ['uField','uTime','uAspect','uOpen','uStom','uBreathPhase','uHandBreath'])
+  uD[k] = gl.getUniformLocation(drawProg, k);
+
+function resize() {
+  const dpr = Math.min(2, window.devicePixelRatio||1);
+  canvas.width  = Math.floor(innerWidth*dpr);
+  canvas.height = Math.floor(innerHeight*dpr);
+}
+resize(); addEventListener('resize', resize);
+
+function frame(now) {
+  now *= 0.001;
+  let dt = Math.min(0.05, now - last); last = now; tGlobal += dt;
+
+  // circadian light — the world's own slow day
+  const light = CFG.ambientLight + CFG.circadianAmp*Math.sin(tGlobal*6.2831853/CFG.circadianPeriod);
+
+  // ── ZigSense → breath sources ──
+  const restAmt = autonomousBreath(tGlobal);
+  const b0 = [stom.u, stom.v, restAmt*0.8, restAmt];               // world breathes near the leaf
+  const handAmt = handOn ? CFG.handBreathAmount : 0.0;
+  const b1 = [handU, handV, handAmt*0.85, handAmt];                // your exhale
+
+  // ── ZigField step (ping-pong) ──
+  gl.bindFramebuffer(gl.FRAMEBUFFER, otherFBO);
+  gl.viewport(0,0,N,N);
+  gl.useProgram(simProg);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, currentTex);
+  gl.uniform1i(uS.uField, 0);
+  gl.uniform2f(uS.uTexel, 1/N, 1/N);
+  gl.uniform1f(uS.uDt, dt);
+  gl.uniform3fv(uS.uDiffuse, CFG.diffuse);
+  gl.uniform3fv(uS.uRelax, CFG.relax);
+  gl.uniform3f(uS.uAmbient, 0.0, CFG.ambientHumidity, light);
+  gl.uniform4fv(uS.uB0, b0);
+  gl.uniform4fv(uS.uB1, b1);
+  gl.uniform2f(uS.uSigma2, CFG.restBreathSigma2, CFG.handBreathSigma2);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  // swap
+  [currentFBO, otherFBO] = [otherFBO, currentFBO];
+  [currentTex, otherTex] = [otherTex, currentTex];
+
+  // ── ZigCoupling → organism reads the world, then decides ──
+  const s = readField(stom.u, stom.v);
+  stom.update(dt, s, tGlobal);
+
+  // ── render the world + the organism's chosen openness ──
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0,0,canvas.width, canvas.height);
+  gl.useProgram(drawProg);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, currentTex);
+  gl.uniform1i(uD.uField, 0);
+  gl.uniform1f(uD.uTime, tGlobal);
+  gl.uniform1f(uD.uAspect, canvas.width/canvas.height);
+  gl.uniform1f(uD.uOpen, stom.turgor);
+  gl.uniform2f(uD.uStom, stom.u, stom.v);
+  gl.uniform1f(uD.uBreathPhase, breathPhase);
+  gl.uniform1f(uD.uHandBreath, handAmt);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  if (dbgOn) {
+    dbg.innerHTML =
+      `<b>ZigField (the air the stomata reads)</b>\n` +
+      ` CO₂       ${bar(s.co2)}  ${s.co2.toFixed(3)}\n` +
+      ` humidity  ${bar(s.hum)}  ${s.hum.toFixed(3)}\n` +
+      ` light     ${bar(s.light)}  ${s.light.toFixed(3)}\n` +
+      `<b>Organism (it decides)</b>\n` +
+      ` wants     ${bar(stom.desired)}  ${stom.desired.toFixed(3)}\n` +
+      ` turgor    ${bar(stom.turgor)}  ${stom.turgor.toFixed(3)}   ← lags, on purpose`;
+  }
+  requestAnimationFrame(frame);
+}
+function bar(x){ const n=Math.round(clamp(x,0,1)*14); return '▓'.repeat(n)+'░'.repeat(14-n); }
+requestAnimationFrame(frame);
+
+// ── interaction: breathe onto the air, not onto the organism ─────────────────
+function toUV(e){ const r=canvas.getBoundingClientRect();
+  handU = (e.clientX-r.left)/r.width; handV = 1 - (e.clientY-r.top)/r.height; }
+canvas.addEventListener('pointerdown', e=>{ handOn=true; toUV(e); hideHint(); });
+canvas.addEventListener('pointermove', e=>{ if(handOn) toUV(e); });
+addEventListener('pointerup', ()=> handOn=false);
+addEventListener('keydown', e=>{
+  if (e.code==='Space'){ e.preventDefault(); handOn=true; handU=stom.u; handV=stom.v; hideHint(); }
+  if (e.key==='d' || e.key==='D'){ dbgOn=!dbgOn; dbg.style.display = dbgOn?'block':'none'; }
+});
+addEventListener('keyup', e=>{ if (e.code==='Space') handOn=false; });
+
+const hint = document.getElementById('hint');
+const dbg  = document.getElementById('dbg');
+let dbgOn = false;
+let hintTimer = setTimeout(hideHint, 7000);
+function hideHint(){ hint.classList.add('gone'); clearTimeout(hintTimer); }
+</script>
+</body>
+</html>

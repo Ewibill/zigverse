@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Zigverse Atlas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --physics:#6ec6ff; --habitat:#7fd4a0; --life:#f0b860; --experience:#c89ad4;
+    --ink:#cdd3de; --dim:#5a6273; --panel:#0a0e18;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#04060c;color:var(--ink);
+    font:13px/1.55 "Cascadia Code","SF Mono",Consolas,monospace;overflow-x:hidden}
+  #stars{position:fixed;inset:0;z-index:0;display:block}
+  #atlas{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:34px 22px 70px}
+  header{text-align:center;margin-bottom:26px}
+  h1{font-weight:300;letter-spacing:.42em;font-size:24px;margin:0 0 12px;color:#e6e2d6}
+  h1 .z{color:var(--physics)}
+  .preamble{max-width:760px;margin:0 auto;color:#9aa4b4;font-size:12.5px}
+  .preamble b{color:#e6e2d6;font-weight:600;letter-spacing:.04em}
+  .tally{margin-top:12px;color:var(--dim);letter-spacing:.14em;font-size:11px}
+  .flowdot{color:var(--dim);text-align:center;font-size:15px;line-height:1;margin:2px 0}
+  .band{position:relative;border:1px solid #121626;border-radius:9px;margin:10px 0;
+    padding:14px 16px 16px;background:linear-gradient(180deg,#070b14 0%,#05070e 100%)}
+  .band .head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+  .band .name{font-size:17px;letter-spacing:.28em;font-weight:400}
+  .band .essence{color:var(--dim);font-size:11.5px;flex:1;min-width:180px}
+  .band .n{font-size:11px;letter-spacing:.1em;color:var(--dim)}
+  .frontier{color:#f0b860;border:1px solid #5a4420;border-radius:20px;padding:1px 9px;font-size:10.5px;letter-spacing:.06em}
+  .nodes{display:flex;flex-wrap:wrap;gap:10px}
+  .node{position:relative;width:214px;padding:10px 12px 11px;border-radius:7px;
+    background:#0a0e18;border:1px solid #161c2c;cursor:default;transition:.18s;overflow:hidden}
+  .node:hover{border-color:currentColor;background:#0e1424;transform:translateY(-1px)}
+  .node .dot{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block;
+    margin-right:7px;box-shadow:0 0 8px currentColor,0 0 16px currentColor;
+    animation:tw 3.4s ease-in-out infinite}
+  @keyframes tw{0%,100%{opacity:.55}50%{opacity:1}}
+  .node .id{font-size:12.5px;font-weight:600;letter-spacing:.03em;color:#e6e2d6;vertical-align:middle}
+  .node .en{color:#8a94a6;font-size:11px;margin-top:5px;line-height:1.42}
+  .node .since{position:absolute;top:9px;right:11px;font-size:10px;color:var(--dim);letter-spacing:.05em}
+  .node .proof{color:var(--dim);font-size:10px;margin-top:5px;letter-spacing:.02em}
+  footer{text-align:center;margin-top:26px;color:var(--dim);font-size:11.5px;line-height:1.7}
+  footer b{color:#9aa4b4;font-weight:500}
+</style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<div id="atlas">
+  <header>
+    <h1>THE ZIG<span class="z">VERSE</span> ATLAS</h1>
+    <p class="preamble" id="prime"></p>
+    <p class="tally" id="tally"></p>
+  </header>
+  <div id="bands"></div>
+  <footer>
+    the pillars flow downward — a law added above is inherited by everything below<br>
+    <b>the measure of progress is the richness of this universe, not the count of scenes</b>
+  </footer>
+</div>
+
+<script src="engine/zigcore.js"></script>
+<script>
+(function(){
+  var C = (window.ZigCore && ZigCore.Canon) || null;
+  var meta = {
+    physics:    {color:"var(--physics)", essence:"the immutable rules — never artistic, they simply exist"},
+    habitat:    {color:"var(--habitat)", essence:"the environment — inherits the rules, expresses them differently", frontier:true},
+    life:       {color:"var(--life)",    essence:"species — adaptations to habitat, never decoration"},
+    experience: {color:"var(--experience)", essence:"the observer as an environmental force — breath, music, presence"}
+  };
+  if(!C){ document.getElementById("prime").textContent =
+    "The Canon failed to load — open the single-file Atlas build, not the multi-file source."; return; }
+
+  document.getElementById("prime").innerHTML =
+    "<b>Prime Law — Inevitability.</b> " + C.primeLaw.replace(/^Inevitability — /,"");
+  document.getElementById("tally").textContent =
+    C.count() + " LAWS · 4 PILLARS · PHYSICS → HABITAT → LIFE → EXPERIENCE";
+
+  var bands = document.getElementById("bands");
+  C.flow.forEach(function(p, i){
+    var m = meta[p], laws = C.byPillar(p);
+    var band = document.createElement("div");
+    band.className = "band";
+    band.style.color = m.color;
+    var frontier = m.frontier ? '<span class="frontier">the frontier · our thinnest pillar</span>' : '';
+    var nodes = laws.map(function(l){
+      return '<div class="node" style="color:'+m.color+'">'+
+        '<span class="since">'+l.since+'</span>'+
+        '<span class="dot" style="animation-delay:'+(Math.abs(hash(l.id))%34/10)+'s"></span>'+
+        '<span class="id">'+l.id+'</span>'+
+        '<div class="en">'+l.enables+'</div>'+
+        '<div class="proof">↳ '+l.proof+'</div>'+
+      '</div>';
+    }).join("");
+    band.innerHTML =
+      '<div class="head">'+
+        '<span class="name" style="color:'+m.color+'">'+p.toUpperCase()+'</span>'+
+        '<span class="essence">'+m.essence+'</span>'+
+        frontier+
+        '<span class="n">'+laws.length+' law'+(laws.length===1?'':'s')+'</span>'+
+      '</div>'+
+      '<div class="nodes">'+nodes+'</div>';
+    bands.appendChild(band);
+    if(i < C.flow.length-1){
+      var f = document.createElement("div"); f.className="flowdot"; f.textContent="↓"; bands.appendChild(f);
+    }
+  });
+  function hash(s){var h=0;for(var i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))|0}return h}
+
+  /* the cosmos behind — a slow drift of faint stars (deterministic) */
+  var cv=document.getElementById("stars"), cx=cv.getContext("2d"), W,H,S=[];
+  function rs(){W=cv.width=innerWidth;H=cv.height=innerHeight;S=[];
+    var seed=7; function r(){seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff}
+    for(var i=0;i<160;i++)S.push({x:r()*W,y:r()*H,z:.3+r()*.9,p:r()*6.28})}
+  rs(); addEventListener("resize", rs);
+  var t=0;
+  (function draw(){
+    t+=.006; cx.clearRect(0,0,W,H);
+    for(var i=0;i<S.length;i++){var s=S[i];
+      var a=(.18+.5*(.5+.5*Math.sin(t+s.p)))*s.z;
+      cx.fillStyle="rgba(150,170,220,"+a.toFixed(3)+")";
+      cx.fillRect((s.x + t*4*s.z)%W, s.y, s.z*1.6, s.z*1.6);
+    }
+    requestAnimationFrame(draw);
+  })();
+})();
+</script>
+</body>
+</html>

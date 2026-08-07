@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ZIGSCOPE — what the eyeZ hears</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #04060c; overflow: hidden;
+               font: 12px/1.5 "Cascadia Code", "SF Mono", Consolas, monospace; color: #9aa4b0; }
+  #wrap { display: grid; grid-template-columns: 1fr 330px; height: 100%; }
+  #main { position: relative; padding: 14px; overflow: hidden; }
+  #score { border-left: 1px solid #141a28; padding: 14px 16px; overflow-y: auto; background: #060911; }
+  h1 { font-size: 12px; letter-spacing: 0.2em; color: #d8d4c8; font-weight: 600; margin: 0 0 2px; }
+  h1 .z { color: #7fd4c0; }
+  .dim { color: #525a68; }
+  .pill { padding: 1px 8px; border-radius: 9px; font-size: 11px; }
+  .pill.ok  { background: #10240f; color: #8aff7a; border: 1px solid #2d5a28; }
+  .pill.bad { background: #2a0d0d; color: #ff8a7a; border: 1px solid #5a2828; }
+  canvas { display: block; background: #05070e; border: 1px solid #10141f; border-radius: 4px; }
+  #spec { margin-top: 10px; }
+  #wave { margin-top: 8px; }
+  .meters { margin-top: 10px; }
+  .mrow { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+  .mname { width: 52px; color: #8a94a2; }
+  .mbar { flex: 1; height: 13px; background: #0a0e18; border: 1px solid #161c2c; border-radius: 3px; position: relative; overflow: hidden; }
+  .mfill { position: absolute; inset: 0 auto 0 0; width: 0%; border-radius: 2px; }
+  .mpeak { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff8; }
+  .mval { width: 44px; text-align: right; color: #c8d0da; }
+  #body .mfill { background: linear-gradient(90deg, #2a6, #8fd48f); }
+  #shine .mfill { background: linear-gradient(90deg, #457, #9ab8e8); }
+  #bite .mfill { background: linear-gradient(90deg, #a52, #f0a860); }
+  .lr .mfill { background: linear-gradient(90deg, #556, #a8a8c0); }
+  #stats { margin-top: 10px; line-height: 1.7; }
+  #stats b { color: #d8d4c8; font-weight: 600; }
+  .clip { color: #ff8a7a; font-weight: 700; }
+  .btns { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+  button { background: #0e1524; color: #c8d0da; border: 1px solid #263049; border-radius: 5px;
+           padding: 5px 12px; font: inherit; cursor: pointer; }
+  button:hover { background: #16203a; }
+  button.hot { background: #1e2a14; border-color: #3d5a28; color: #b8e8a0; }
+  #strikes { margin-top: 8px; min-height: 34px; color: #f0a860; font-size: 11.5px; }
+  #score h2 { font-size: 11px; letter-spacing: 0.14em; color: #7fd4c0; text-transform: uppercase; margin: 18px 0 4px; }
+  #score p { margin: 4px 0; font-size: 11.5px; color: #7a8494; }
+  #score .step { margin: 8px 0; padding: 7px 9px; background: #0a0e18; border-left: 2px solid #263049; border-radius: 3px; }
+  #score .step b { color: #c8d0da; font-weight: 600; }
+  #score .watch { color: #9ab8e8; }
+</style>
+</head>
+<body>
+<div id="wrap">
+<div id="main">
+  <h1>ZIG<span class="z">SCOPE</span> <span class="dim">— what the eyeZ hears · the assessment instrument</span></h1>
+  <div style="margin-top:6px"><span id="probe" class="pill bad">EAR CLOSED</span> <span id="dev" class="dim">press A (or the button) to arm the M2 — chain: RC-600 → UltraLite → M2 → here</span></div>
+
+  <canvas id="spec" width="900" height="190"></canvas>
+  <canvas id="wave" width="900" height="80"></canvas>
+
+  <div class="meters">
+    <div class="mrow" id="body"><div class="mname">body</div><div class="mbar"><div class="mfill"></div><div class="mpeak"></div></div><div class="mval">0.00</div></div>
+    <div class="mrow" id="shine"><div class="mname">shine</div><div class="mbar"><div class="mfill"></div><div class="mpeak"></div></div><div class="mval">0.00</div></div>
+    <div class="mrow" id="bite"><div class="mname">bite</div><div class="mbar"><div class="mfill"></div><div class="mpeak"></div></div><div class="mval">0.00</div></div>
+    <div class="mrow lr" id="Lb" style="display:none"><div class="mname">L body</div><div class="mbar"><div class="mfill"></div><div class="mpeak"></div></div><div class="mval">0.00</div></div>
+    <div class="mrow lr" id="Rb" style="display:none"><div class="mname">R body</div><div class="mbar"><div class="mfill"></div><div class="mpeak"></div></div><div class="mval">0.00</div></div>
+  </div>
+
+  <div id="stats" class="dim">floor — · headroom — · sample rate —</div>
+  <div id="strikes" class="dim">strikes will log here (bite &gt; 0.55)</div>
+
+  <div class="btns">
+    <button id="bArm">A — arm the ear</button>
+    <button id="bSplit">2 — arm SPLIT (L/R = two voices)</button>
+    <button id="bCap">C — capture 60 s → JSON</button>
+    <button id="bReset">R — reset peaks</button>
+  </div>
+</div>
+
+<div id="score">
+  <h2>The Session Score</h2>
+  <p>Perform each movement while watching the meters. Press <b style="color:#c8d0da">C</b> during each one — every capture downloads a JSON; drag them all into the chat and Glyph calibrates the engine to YOUR rig.</p>
+  <div class="step"><b>1 · Silence.</b> Loops off, horn down, room quiet. <span class="watch">Watch: floor readout. It should sit near 0. If body idles above 0.05, the chain hums — tell Glyph.</span></div>
+  <div class="step"><b>2 · The tone ladder.</b> One SWAM voice at a time (bass clarinet, then tenor): long tones — low, middle, high register — each soft, medium, full. <span class="watch">Watch: body should ride your dynamics without pinning 1.00 (if it pins, lower the M2 gain a touch); shine should CLIMB with register.</span></div>
+  <div class="step"><b>3 · The bellows.</b> One long crescendo–decrescendo from nothing to everything and back. <span class="watch">Watch: body should be a smooth hill, no jumps, no clip flag.</span></div>
+  <div class="step"><b>4 · Ribbons vs tongues.</b> Your fast ribbon playing, then hard tongued attacks. <span class="watch">Watch: ribbons should barely move bite; tongues should SPIKE it. If ribbons fire strikes, the threshold needs your signature.</span></div>
+  <div class="step"><b>5 · Vibrato &amp; growl.</b> Held note with deep vibrato; then growl if the patch does it. <span class="watch">Watch: vibrato ≈ no bite. Growl should raise shine/body texture.</span></div>
+  <div class="step"><b>6 · The pedal.</b> Hold one note, sweep the Mission pedal full range, slowly. <span class="watch">Watch: whichever meters move — that's your pedal becoming a VISUAL dial. This is new territory: the pedal never existed in MIDI.</span></div>
+  <div class="step"><b>7 · History alone.</b> Start an RC-600 loop, hands off the horn. <span class="watch">Watch: this is what your PAST reads as. Then play over it — live + history superposed.</span></div>
+  <h2>The split (leverage)</h2>
+  <p>The M2 has two inputs. Feed <b style="color:#c8d0da">input 1 = the UltraLite mix (loops/history)</b> and <b style="color:#c8d0da">input 2 = your live line (presence)</b>, then arm SPLIT here: L and R become two independent voices. That's the routing that lets worlds tell your past from your present — no software needed, one cable move.</p>
+  <p class="dim" style="margin-top:14px">keys: A arm · 2 arm split · C capture 60 s · R reset peaks</p>
+</div>
+</div>
+
+<script src="engine/zigcore.js"></script>
+<script>
+"use strict";
+(function () {
+  if (!window.ZigCore || !window.ZigCore.Timbre) {
+    document.getElementById("dev").textContent =
+      "script load failed — ZigCore missing. You opened the multi-file source from Downloads; open ZigScope_v0.1.html (the single-file build) instead.";
+    document.getElementById("probe").textContent = "EAR CLOSED — wrong file";
+    return;
+  }
+  const ZC = window.ZigCore, T = ZC.Timbre;
+  const $ = (id) => document.getElementById(id);
+  const spec = $("spec").getContext("2d"), wave = $("wave").getContext("2d");
+  let peaks = { body: 0, shine: 0, bite: 0 }, clipHold = 0, floorEst = 0, floorN = 0;
+  let strikes = [], lastStrike = -9, t0 = performance.now();
+  let cap = null;   // { frames: [], until }
+
+  function fitCanvas() {
+    const w = $("main").clientWidth - 28;
+    for (const c of [$("spec"), $("wave")]) { c.width = Math.max(400, w); }
+  }
+  addEventListener("resize", fitCanvas); fitCanvas();
+
+  async function arm(split) {
+    if (T._ctx) { try { T._ctx.close(); } catch (e) {} T.live = false; }
+    $("dev").textContent = "asking the browser for the input…";
+    const ok = await T.arm(undefined, { split: !!split });
+    $("probe").className = "pill " + (ok ? "ok" : "bad");
+    $("probe").textContent = ok ? ("EAR OPEN" + (T.L ? " · SPLIT" : "")) : "EAR CLOSED";
+    $("dev").textContent = ok ? (T.device + " · " + T._ctx.sampleRate + " Hz" + (T.L ? " · L/R = two voices" : ""))
+                              : ("failed: " + T.err);
+    $("Lb").style.display = $("Rb").style.display = (ok && T.L) ? "flex" : "none";
+    floorEst = 0; floorN = 0;
+  }
+
+  function meter(id, v, peak) {
+    const row = $(id);
+    row.querySelector(".mfill").style.width = Math.min(100, v * 100) + "%";
+    row.querySelector(".mval").textContent = v.toFixed(2);
+    if (peak !== undefined) row.querySelector(".mpeak").style.left = Math.min(99.7, peak * 100) + "%";
+  }
+
+  function capture() {
+    if (!T.live) return;
+    cap = { meta: { device: T.device, sr: T._ctx.sampleRate, split: !!T.L, started: new Date().toISOString() },
+            frames: [], until: performance.now() + 60000 };
+    $("bCap").classList.add("hot");
+    $("bCap").textContent = "capturing… 60";
+  }
+  function endCapture() {
+    const out = Object.assign({}, cap.meta, { fps: 60, n: cap.frames.length, frames: cap.frames });
+    const blob = new Blob([JSON.stringify(out)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "zigscope_" + new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + ".json";
+    a.click();
+    cap = null;
+    $("bCap").classList.remove("hot");
+    $("bCap").textContent = "C — capture 60 s → JSON";
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min((now - last) / 1000, 0.05); last = now;
+    if (T.live) {
+      T.update(dt);
+      /* spectrum — with the ROOM FLOOR line the centroid actually uses */
+      const f = T._fNorm, W = $("spec").width, H = $("spec").height;
+      spec.fillStyle = "#05070e"; spec.fillRect(0, 0, W, H);
+      const n = Math.floor(f.length * 0.5);   // 0..12 kHz — where the horn lives
+      for (let i = 0; i < n; i++) {
+        const x = (i / n) * W, v = f[i];
+        spec.fillStyle = v > 0.45 ? "#7fd4c0" : "#2a3a55";
+        spec.fillRect(x, H - v * H, Math.max(1, W / n - 0.5), v * H);
+      }
+      spec.strokeStyle = "#f0a86066"; spec.beginPath();
+      spec.moveTo(0, H - 0.45 * H); spec.lineTo(W, H - 0.45 * H); spec.stroke();
+      spec.fillStyle = "#f0a860"; spec.font = "10px monospace";
+      spec.fillText("room floor 0.45 — only light above this line counts as a voice", 8, H - 0.45 * H - 5);
+      /* waveform + clip */
+      const tw = T._time, W2 = $("wave").width, H2 = $("wave").height;
+      wave.fillStyle = "#05070e"; wave.fillRect(0, 0, W2, H2);
+      wave.strokeStyle = "#8a94a2"; wave.beginPath();
+      let mx = 0;
+      for (let i = 0; i < tw.length; i += 2) {
+        const x = (i / tw.length) * W2, y = H2 / 2 - tw[i] * H2 * 0.48;
+        if (i === 0) wave.moveTo(x, y); else wave.lineTo(x, y);
+        mx = Math.max(mx, Math.abs(tw[i]));
+      }
+      wave.stroke();
+      if (mx > 0.985) clipHold = 2;
+      clipHold = Math.max(0, clipHold - dt);
+      /* meters + peaks */
+      peaks.body = Math.max(peaks.body, T.body); peaks.shine = Math.max(peaks.shine, T.brightness); peaks.bite = Math.max(peaks.bite, T.flux);
+      meter("body", T.body, peaks.body); meter("shine", T.brightness, peaks.shine); meter("bite", T.flux, peaks.bite);
+      if (T.L) { meter("Lb", T.L.body); meter("Rb", T.R.body); }
+      /* noise floor: learn while near-silent */
+      if (T.body < 0.02) { floorEst += (mx - floorEst) * 0.02; floorN++; }
+      $("stats").innerHTML = "floor <b>" + (floorN > 30 ? (floorEst * 100).toFixed(2) + "%" : "listening…") + "</b>" +
+        " · headroom <b>" + ((1 - mx) * 100).toFixed(0) + "%</b>" +
+        (clipHold > 0 ? " · <span class='clip'>CLIP — lower the M2 gain</span>" : "") +
+        " · peak body <b>" + peaks.body.toFixed(2) + "</b> shine <b>" + peaks.shine.toFixed(2) + "</b>";
+      /* strikes */
+      const ts = (now - t0) / 1000;
+      if (T.flux > 0.55 && ts - lastStrike > 0.25) {
+        lastStrike = ts;
+        strikes.unshift(ts.toFixed(1) + "s ✶" + T.flux.toFixed(2));
+        strikes = strikes.slice(0, 7);
+        $("strikes").textContent = "strikes: " + strikes.join("  ·  ");
+      }
+      /* capture */
+      if (cap) {
+        const fr = [T.body, T.brightness, T.flux];
+        if (T.L) fr.push(T.L.body, T.L.brightness, T.L.flux, T.R.body, T.R.brightness, T.R.flux);
+        cap.frames.push(fr.map((v) => Math.round(v * 1000) / 1000));
+        const left = Math.ceil((cap.until - now) / 1000);
+        $("bCap").textContent = "capturing… " + left;
+        if (now >= cap.until) endCapture();
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  $("bArm").onclick = () => arm(false);
+  $("bSplit").onclick = () => arm(true);
+  $("bCap").onclick = capture;
+  $("bReset").onclick = () => { peaks = { body: 0, shine: 0, bite: 0 }; strikes = []; $("strikes").textContent = "strikes: —"; };
+  addEventListener("keydown", (e) => {
+    if (e.code === "KeyA") arm(false);
+    if (e.code === "Digit2") arm(true);
+    if (e.code === "KeyC") capture();
+    if (e.code === "KeyR") $("bReset").onclick();
+  });
+})();
+</script>
+</body>
+</html>

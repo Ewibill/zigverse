@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ZIGGLOW 007 · THE MEMBRANE</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #010204; overflow: hidden;
+               font: 12px/1.5 "Cascadia Code", "SF Mono", Consolas, monospace; color: #a8a89a; }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; left: 14px; top: 12px; user-select: none; pointer-events: none;
+         text-shadow: 0 1px 3px #000; }
+  #hud .title { color: #ded8c8; letter-spacing: 0.18em; font-size: 11px; }
+  #hud .dim { color: #5f5f57; }
+  .pill { padding: 1px 8px; border-radius: 9px; font-size: 11px; letter-spacing: 0.08em; }
+  .pill.ok  { background: #10240f; color: #8aff7a; border: 1px solid #2d5a28; }
+  .pill.bad { background: #2a0d0d; color: #ff8a7a; border: 1px solid #5a2828; }
+  #hud div { margin-top: 3px; }
+  #hint { position: fixed; right: 14px; bottom: 10px; color: #3d3d38; user-select: none; text-align: right; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div id="hud">
+  <div class="title">ZIGGLOW 007 · THE MEMBRANE <span class="dim">— space itself becomes elastic</span></div>
+  <div id="probe"><span class="pill bad">PROBE …</span> <span class="dim">asking the GPU</span></div>
+  <div id="status" class="dim">booting…</div>
+  <div id="skin" class="dim"></div>
+  <div id="ecology" class="dim"></div>
+  <div id="engine" class="dim"></div>
+  <div id="audio" class="dim"></div>
+  <div id="midi" class="dim"></div>
+</div>
+<div id="hint">nobody is looking at a bubble — the universe has become impossibly elastic<br>
+hold B / play — breath softens the surface (weather, not steering) · click / Space — a disturbance enters, and TRAVELS<br>
+iridescence appears only under STRESS · a spend makes every organism agree · the surface remembers what you did to it</div>
+
+<script>
+  window.ZIG_LETTER = "sail";         // membrane letters for a membrane world — they bank, never tumble
+  window.ZIG_WARDROBE = "sail,bubble"; // a coherence spend BLOSSOMS sails into breathing bubbles (N = by hand)
+  window.ZIG_SKIN = 1;                // the invisible elastic sphere — the flock REVEALS it
+  window.ZIG_ECOLOGY = "moonstone";   // moonstone · pearl · bone — no saturated color at rest
+  window.ZIG_RESERVE = "coherence";   // spends buy AGREEMENT: for two seconds, every organism agrees
+  window.ZIG_MINT = 1;                // bubbles carry their own curvature — no mint needed
+  window.ZIG_MARK = 0;                // theater, not instrument
+  window.ZIG_CAM = 78;
+  window.ZIG_GENESIS = 0;             // the surface is breathing when you arrive
+</script>
+<script src="engine/zigcore.js"></script>
+<script src="engine/zigmesh.js"></script>
+<script src="engine/zigmidi.js"></script>
+<script src="engine/zigwebgpu.js"></script>
+<script src="species/sickleswarm.js"></script>
+<script>
+  const say = (t) => { const n = document.getElementById("status"); if (n) n.textContent = t; };
+  addEventListener("error", (e) => say("script error: " + e.message + " — " +
+    ((e.filename || "").split(/[\\/]/).pop() || "?") + ":" + e.lineno));
+  addEventListener("unhandledrejection", (e) => say("async error: " +
+    ((e.reason && e.reason.message) || e.reason)));
+
+  addEventListener("load", () => {
+    if (!window.SickleField || !window.ZigWebGPU || !window.ZigCore || !window.ZigMesh) {
+      say("script load failed — missing " + ["ZigCore","ZigMesh","ZigMidi","ZigWebGPU","SickleField"]
+        .filter((n) => !window[n]).join(", ") + ". Open the single-file build instead.");
+      return;
+    }
+    const canvas = document.getElementById("stage");
+    SickleField.boot(canvas, document.getElementById("hud"))
+      .catch((e) => { say("boot error: " + (e && e.message || e)); console.error("[zigglow007]", e); });
+    setTimeout(() => {
+      if (!SickleField.booted) {
+        const el = document.getElementById("engine");
+        if (el) el.textContent = "watchdog: boot stopped at “" + SickleField.stage +
+          "” — press F12 and send Glyph the Console";
+      }
+    }, 14000);
+  });
+</script>
+</body>
+</html>

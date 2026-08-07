@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Zigverse Atlas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --physics:#6ec6ff; --habitat:#7fd4a0; --life:#f0b860; --experience:#c89ad4;
+    --ink:#cdd3de; --dim:#5a6273; --panel:#0a0e18;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#04060c;color:var(--ink);
+    font:13px/1.55 "Cascadia Code","SF Mono",Consolas,monospace;overflow-x:hidden}
+  #stars{position:fixed;inset:0;z-index:0;display:block}
+  #atlas{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:34px 22px 70px}
+  header{text-align:center;margin-bottom:26px}
+  h1{font-weight:300;letter-spacing:.42em;font-size:24px;margin:0 0 12px;color:#e6e2d6}
+  h1 .z{color:var(--physics)}
+  .preamble{max-width:760px;margin:0 auto;color:#9aa4b4;font-size:12.5px}
+  .preamble b{color:#e6e2d6;font-weight:600;letter-spacing:.04em}
+  .tally{margin-top:12px;color:var(--dim);letter-spacing:.14em;font-size:11px}
+  .flowdot{color:var(--dim);text-align:center;font-size:15px;line-height:1;margin:2px 0}
+  .band{position:relative;border:1px solid #121626;border-radius:9px;margin:10px 0;
+    padding:14px 16px 16px;background:linear-gradient(180deg,#070b14 0%,#05070e 100%)}
+  .band .head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+  .band .name{font-size:17px;letter-spacing:.28em;font-weight:400}
+  .band .essence{color:var(--dim);font-size:11.5px;flex:1;min-width:180px}
+  .band .n{font-size:11px;letter-spacing:.1em;color:var(--dim)}
+  .frontier{color:#f0b860;border:1px solid #5a4420;border-radius:20px;padding:1px 9px;font-size:10.5px;letter-spacing:.06em}
+  .nodes{display:flex;flex-wrap:wrap;gap:10px}
+  .node{position:relative;width:214px;padding:10px 12px 11px;border-radius:7px;
+    background:#0a0e18;border:1px solid #161c2c;cursor:default;transition:.18s;overflow:hidden}
+  .node:hover{border-color:currentColor;background:#0e1424;transform:translateY(-1px)}
+  .node .dot{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block;
+    margin-right:7px;box-shadow:0 0 8px currentColor,0 0 16px currentColor;
+    animation:tw 3.4s ease-in-out infinite}
+  @keyframes tw{0%,100%{opacity:.55}50%{opacity:1}}
+  .node .id{font-size:12.5px;font-weight:600;letter-spacing:.03em;color:#e6e2d6;vertical-align:middle}
+  .node .en{color:#8a94a6;font-size:11px;margin-top:5px;line-height:1.42}
+  .node .since{position:absolute;top:9px;right:11px;font-size:10px;color:var(--dim);letter-spacing:.05em}
+  .node .proof{color:var(--dim);font-size:10px;margin-top:5px;letter-spacing:.02em}
+  footer{text-align:center;margin-top:26px;color:var(--dim);font-size:11.5px;line-height:1.7}
+  footer b{color:#9aa4b4;font-weight:500}
+</style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<div id="atlas">
+  <header>
+    <h1>THE ZIG<span class="z">VERSE</span> ATLAS</h1>
+    <p class="preamble" id="prime"></p>
+    <p class="tally" id="tally"></p>
+  </header>
+  <div id="bands"></div>
+  <footer>
+    the pillars flow downward — a law added above is inherited by everything below<br>
+    <b>the measure of progress is the richness of this universe, not the count of scenes</b>
+  </footer>
+</div>
+
+<script>
+/* ===== inlined: engine/zigcore.js ===== */
+/* ============================================================================
+   ZigCore — the Zigverse engine (rendering-agnostic logic core)
+   v0.2 · classic script · exposes a global `ZigCore`
+   Load BEFORE the renderer and the species:  <script src="zigcore.js"><\/script>
+   (classic script, not an ES module, so it works from file:// on venue nodes.)
+
+   This file is the shared BRAIN — zero DOM, zero WebGL. Renderers (ZigGL / a
+   future ZigCanvas) and species sit on top of it. Every organism inherits these
+   levers on frame one; you only ever author what is genuinely new.
+
+   Modules (extraction order):
+     [x] util        — clamp / lerp / smoothstep / hash
+     [x] rng         — deterministic seedable RNG (from Kelp/Jellyfish)
+     [x] Perf        — EWI / Web-MIDI breath  → the source of life
+     [x] Drive       — breath history + positional DELAY ("swell, not decay")  ← v0.2
+     [x] Climate     — slow never-looping metabolism (incommensurate drifts)   ← v0.2
+     [x] mode/clock  — 'live' | 'export' + Recorder (deterministic playback)  ← v0.2
+     [ ] Flow/Field  — wandering current + queryable field
+     [ ] Palette · Contagion · Gait · Agent · Depth · Director · Emerge · Probe
+   (v0.2 modules appended below the v0.1 IIFE — extracted during the
+    Murmuration build, 2026-07-16.)
+   ========================================================================= */
+(function (global) {
+  "use strict";
+  const ZigCore = global.ZigCore || (global.ZigCore = {});
+  ZigCore.VERSION = "0.1.0";
+
+  /* ---- util ------------------------------------------------------------- */
+  const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+  const lerp  = (a, b, t) => a + (b - a) * t;
+  const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a || 1e-6), 0, 1); return t * t * (3 - 2 * t); };
+  ZigCore.util = { clamp, lerp, smoothstep,
+    hash1: (n) => { const s = Math.sin(n * 127.1) * 43758.5453; return s - Math.floor(s); } };
+
+  /* ---- rng — deterministic mulberry32 (shared by Kelp & Jellyfish) ------ */
+  ZigCore.rng = function (seed) {
+    let s = (seed >>> 0) || 0x9e3779b9;
+    const next = () => { s |= 0; s = (s + 0x6D2B79F5) | 0;
+      let t = Math.imul(s ^ (s >>> 15), 1 | s);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    next.seed = (v) => { s = v >>> 0; };
+    return next;
+  };
+
+  /* ========================================================================
+     ZigCore.Perf — the SOURCE OF LIFE.
+     Human performance (EWI breath, via Web MIDI) becomes a normalized life-force
+     signal every organism reads. Unified from three organisms:
+       · Warm Butterfly : CC 2/7/11 → breath, pitch-bend, held notes, idle decay
+       · Kelp / Jellyfish: CC2 + channel-pressure, "any CC" diagnostic, sim/idle
+     Exposes:
+       Perf.breath   0..1  smoothed life-force (live · simulated · idle auto-breath)
+       Perf.breathRaw       pre-smoothing (feed the Drive integrator with this)
+       Perf.bend     -1..1  pitch-bend (tension / lean)
+       Perf.attack   0..1   decaying pulse on each note-on (intention)
+       Perf.held     Set    currently-held notes (sustain / commitment)
+       Perf.live     bool   a performer is connected & playing
+     Call Perf.init(opts) once, Perf.update(dt, t) every frame.
+     opts: { idle:true, breathCC:[2,7,11], anyCC:false, onStatus:fn }
+     ==================================================================== */
+  ZigCore.Perf = {
+    breath: 0, breathRaw: 0, bend: 0, attack: 0, live: false, held: new Set(),
+    heldT: new Map(), lastNote: -1, holdSec: 0,   // note start-times · most recent note-on · longest current hold (s)
+    // diagnostics (for a monitor readout)
+    inputs: "none", msgCount: 0, allMsg: 0, lastCC: "—", rawLog: [],
+    _sim: 0, _last: 0, _midi: null,
+    // gain/curve/smooth: the breath RESPONSE — how the instrument feels.
+    // gain scales input · curve is gamma (>1 = more headroom at the top,
+    // <1 = touchy) · smooth is the lag rate (higher = snappier)
+    _opts: { idle: true, breathCC: [2, 7, 11], anyCC: false, onStatus: null,
+             gain: 1, curve: 1, smooth: 7 },
+
+    init(opts) {
+      Object.assign(this._opts, opts || {});
+      if (!global.navigator || !navigator.requestMIDIAccess) {
+        this._status("Web MIDI unavailable (use Chrome)"); return Promise.resolve(false);
+      }
+      return navigator.requestMIDIAccess({ sysex: false }).then((acc) => {
+        this._midi = acc;
+        const bind = () => this._bindInputs();
+        acc.onstatechange = bind; bind();
+        return true;
+      }).catch((err) => { this._status("MIDI blocked: " + err); return false; });
+    },
+    _bindInputs() {
+      if (!this._midi) return;
+      const names = [];
+      this._midi.inputs.forEach((inp) => { inp.onmidimessage = (m) => this.onMsg(m); names.push(inp.name || "input"); });
+      this.inputs = names.length ? names.join(", ") : "none";
+      this._status(names.length ? ("EWI: " + this.inputs) : "EWI: awaiting device");
+    },
+    _status(s) { if (this._opts.onStatus) this._opts.onStatus(s); },
+
+    onMsg(e) {
+      const d = e && e.data; if (!d) return;
+      this.allMsg++;
+      // keep a small hex tail for diagnostics
+      const hex = Array.from(d).map((b) => b.toString(16).padStart(2, "0")).join(" ");
+      this.rawLog.unshift(hex); if (this.rawLog.length > 4) this.rawLog.pop();
+      if (d.length < 2) return;
+      const st = d[0] & 0xf0, o = this._opts, now = this._nowMs();
+      if (st === 0xB0) {                         // control-change
+        const cc = d[1], v = d[2] / 127;
+        if (o.breathCC.indexOf(cc) >= 0) { this.breathRaw = Math.max(this.breathRaw * 0.55, v); this._hit("CC" + cc + " (breath)", now); }
+        else if (o.anyCC) { this.breathRaw = v; this._hit("CC" + cc + " (mapped)", now); }
+      } else if (st === 0xD0) {                  // channel pressure (aftertouch) — some EWIs send breath here
+        this.breathRaw = d[1] / 127; this._hit("chan-pressure (breath)", now);
+      } else if (st === 0xE0) {                  // pitch bend → tension/lean
+        this.bend = (((d[2] << 7) | d[1]) - 8192) / 8192;
+      } else if (st === 0x90 && d[2] > 0) {      // note on → intention
+        this.held.add(d[1]); this.heldT.set(d[1], now); this.lastNote = d[1];
+        this.attack = Math.max(this.attack, d[2] / 127); this.live = true; this._last = now;
+      } else if (st === 0x80 || (st === 0x90 && d[2] === 0)) { // note off
+        this.held.delete(d[1]); this.heldT.delete(d[1]);
+      }
+    },
+    _hit(label, now) { this.lastCC = label; this.msgCount++; this.live = true; this._last = now; },
+    _nowMs() { return (global.performance && performance.now) ? performance.now() : 0; },
+
+    // hold-key / test breath (e.g. hold "B") — proves routing when the EWI is silent
+    sim(v) { this._sim = clamp(v || 0, 0, 1); },
+
+    update(dt, t) {
+      const now = this._nowMs();
+      // performer went quiet → let live breath fall away (Warm Butterfly's 1.6s window)
+      if (this.live && now - this._last > 1600) { this.live = false; }
+      if (this.live) { if (now - this._last > 120) this.breathRaw *= Math.max(0, 1 - dt * 1.2); }
+      else if (this._sim > 0) { this.breathRaw = this._sim; }
+      else if (this._opts.idle) {               // gentle auto-breath so the organism lives with no performer
+        this.breathRaw = 0.22 + 0.16 * Math.sin((t || 0) * 0.28) + 0.08 * Math.sin((t || 0) * 0.09 + 1.3);
+      } else { this.breathRaw *= Math.max(0, 1 - dt * 1.2); }
+      // holdSec: the longest-running current hold — sustain as COMMITMENT
+      let hs = 0; this.heldT.forEach((t0) => { const s = (now - t0) / 1000; if (s > hs) hs = s; });
+      this.holdSec = hs;
+      const o2 = this._opts;
+      const shaped = Math.pow(clamp(this.breathRaw * (o2.gain || 1), 0, 1), o2.curve || 1);
+      this.breath += (shaped - this.breath) * clamp(dt * (o2.smooth || 7), 0, 1);
+      this.attack *= Math.max(0, 1 - dt * 4);   // intention pulse decays
+      return this.breath;
+    }
+  };
+
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* =============================================================================
+   ZigCore v0.2 additions — Drive · Climate · Clock/Mode · Recorder
+   Engine work promoted during the Murmuration build (2026-07).
+     [x] Drive    — breath history + positional DELAY taps ("swell, not decay").
+                    Drive.taps(out, maxDelay) fills a Float32Array for GPU upload:
+                    each agent reads the swell at its OWN lag → the swell IS the wave.
+     [x] Climate  — slow never-looping metabolism (seeded incommensurate drifts).
+     [x] mode/clock — 'live' (wall clock) | 'export' (fixed dt, deterministic).
+     [x] Recorder — capture breath/bend/attack timeline → deterministic playback.
+   ========================================================================== */
+(function (global) {
+  "use strict";
+  const ZigCore = global.ZigCore;
+  if (!ZigCore) return;
+  ZigCore.VERSION = "0.2.1";
+  const clamp = ZigCore.util.clamp;
+
+  /* ---- Drive — breath history + positional delay --------------------------
+     Perf gives the NOW of the breath; Drive gives its PAST. An agent that reads
+     tap(delay) where delay = its distance from a disturbance / waveSpeed is
+     literally riding the performer's swell as a travelling wave.              */
+  ZigCore.Drive = {
+    depth: 8, hz: 60,                 // seconds of history · sample rate
+    buf: null, n: 0, head: 0, energy: 0, _acc: 0,
+    init(opts) {
+      Object.assign(this, opts || {});
+      this.n = Math.max(2, Math.ceil(this.depth * this.hz));
+      this.buf = new Float32Array(this.n); this.head = 0; this.energy = 0; this._acc = 0;
+    },
+    update(dt) {
+      if (!this.buf) this.init();
+      const P = ZigCore.Perf, step = 1 / this.hz;
+      this._acc += dt;
+      while (this._acc >= step) {
+        this._acc -= step;
+        this.head = (this.head + 1) % this.n;
+        this.buf[this.head] = P ? P.breath : 0;
+      }
+      // energy: slow integrator — the organism's accumulated vitality (swell, not decay)
+      const target = P ? P.breath : 0;
+      this.energy += (target - this.energy) * Math.min(1, dt * 0.5);
+      return this.energy;
+    },
+    tap(delay) {                       // breath value `delay` seconds ago
+      if (!this.buf) return 0;
+      const s = clamp(Math.round(delay * this.hz), 0, this.n - 1);
+      return this.buf[(this.head - s + this.n) % this.n];
+    },
+    taps(out, maxDelay) {              // evenly spaced taps 0..maxDelay → GPU uniform
+      const m = out.length;
+      for (let i = 0; i < m; i++) out[i] = this.tap(maxDelay * i / (m - 1 || 1));
+      return out;
+    }
+  };
+
+  /* ---- Climate — never-looping slow metabolism -----------------------------
+     N channels of drift, each a sum of three incommensurate sines with seeded
+     periods (minutes-scale). Never returns to its start; perfect for live.
+     (Export loops handle this per-piece — see Output Targets doc.)           */
+  ZigCore.Climate = {
+    t: 0, channels: 6, value: [], _seeds: null,
+    init(seed) {
+      const r = ZigCore.rng(seed || 7); this._seeds = []; this.value = [];
+      for (let i = 0; i < this.channels; i++) {
+        this._seeds.push({
+          f1: 1 / (45 + r() * 120), f2: 1 / (110 + r() * 300), f3: 1 / (23 + r() * 60),
+          p1: r() * 6.283, p2: r() * 6.283, p3: r() * 6.283
+        });
+        this.value.push(0.5);
+      }
+    },
+    update(dt) {
+      if (!this._seeds) this.init();
+      this.t += dt; const T = this.t * 6.283;
+      for (let i = 0; i < this.channels; i++) {
+        const s = this._seeds[i];
+        this.value[i] = clamp(0.5
+          + 0.25 * Math.sin(T * s.f1 + s.p1)
+          + 0.15 * Math.sin(T * s.f2 + s.p2)
+          + 0.10 * Math.sin(T * s.f3 + s.p3), 0, 1);
+      }
+    },
+    drift(i) { return this.value.length ? this.value[i % this.channels] : 0.5; }
+  };
+
+  /* ---- mode + clock ---------------------------------------------------------
+     'live'  : dt from the wall clock (clamped — a hitch never explodes physics)
+     'export': fixed dt, decoupled from real time → flawless offline capture   */
+  ZigCore.mode = "live";
+  ZigCore.clock = {
+    fixedDt: 1 / 60, frame: 0, _last: 0,
+    tick(nowMs) {
+      this.frame++;
+      if (ZigCore.mode === "export") return this.fixedDt;
+      if (!this._last) this._last = nowMs;
+      const dt = (nowMs - this._last) / 1000; this._last = nowMs;
+      return clamp(dt, 0, 0.05);
+    },
+    reset() { this._last = 0; this.frame = 0; }
+  };
+
+  /* ---- Recorder — a performance, captured -----------------------------------
+     Records Perf per frame; playback overrides Perf deterministically, so an
+     export render IS a captured performance, not a sim. Call update() BEFORE
+     Perf.update() in the frame loop.                                          */
+  ZigCore.Recorder = {
+    mode: "off", track: [], _i: 0,
+    start() { this.mode = "rec"; this.track = []; },
+    stop() { const m = this.mode; this.mode = "off"; return m === "rec" ? this.track : null; },
+    play(track) { if (track) this.track = track; this._i = 0; this.mode = "play"; },
+    update() {
+      const P = ZigCore.Perf; if (!P) return;
+      if (this.mode === "rec") {
+        this.track.push([P.breathRaw, P.bend, P.attack]);
+      } else if (this.mode === "play" && this.track.length) {
+        const f = this.track[this._i++ % this.track.length];
+        P.breathRaw = f[0]; P.bend = f[1]; P.attack = Math.max(P.attack, f[2]);
+        P.live = true; P._last = P._nowMs();   // hold the live window open
+      }
+    },
+    toJSON() { return JSON.stringify(this.track); },
+    fromJSON(s) { this.track = JSON.parse(s); }
+  };
+
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* =============================================================================
+   ZigCore v0.3 additions — Temperament · Turnover
+   The "make it breathe" layer (Scout review, Murmuration v1.7). Both are
+   ENGINE laws, not species tricks — any organism (fish school, bat exodus,
+   kelp, pollen cloud) inherits long-duration mood + gentle membership churn.
+     [x] Temperament — minute-scale latent MOOD that quietly biases behavior.
+                        Never announced. Deterministic (export-safe).
+     [x] Turnover    — anonymous individuals quietly depart & rejoin. The
+                        population stays constant; the membership drifts.
+                        Preserves leaderlessness: wanderers are never focal.
+   ========================================================================== */
+(function (global) {
+  "use strict";
+  const ZigCore = global.ZigCore; if (!ZigCore) return;
+  ZigCore.VERSION = "0.3.0";
+  const clamp = ZigCore.util.clamp;
+
+  /* ---- Temperament — "this flock feels different today" -------------------
+     A few latent axes, each a slow bounded drift (sum of incommensurate sines
+     on a MINUTES timescale). The organism maps these axes onto gentle biases
+     of its own levers — never onto anything the viewer can name. speed=0
+     freezes the mood (useful while judging). Deterministic from seed.        */
+  ZigCore.Temperament = {
+    axes: 3, speed: 1, t: 0, value: [0.5, 0.5, 0.5], _seeds: null,
+    // characteristic periods (seconds) — 2 to 12 minutes, so a 10-20 min
+    // session drifts through several unrepeating internal states
+    init(seed, opts) {
+      Object.assign(this, opts || {});
+      const r = ZigCore.rng((seed || 0) ^ 0x7EE9);
+      this._seeds = []; this.value = [];
+      for (let i = 0; i < this.axes; i++) {
+        this._seeds.push({
+          f1: 1 / (150 + r() * 250), f2: 1 / (280 + r() * 440), f3: 1 / (95 + r() * 130),
+          p1: r() * 6.283, p2: r() * 6.283, p3: r() * 6.283, bias: 0.4 + r() * 0.2
+        });
+        this.value.push(0.5);
+      }
+      return this;
+    },
+    update(dt) {
+      if (!this._seeds) this.init(1);
+      this.t += dt * this.speed; const T = this.t * 6.283;
+      for (let i = 0; i < this.axes; i++) {
+        const s = this._seeds[i];
+        this.value[i] = clamp(s.bias
+          + 0.30 * Math.sin(T * s.f1 + s.p1)
+          + 0.16 * Math.sin(T * s.f2 + s.p2)
+          + 0.09 * Math.sin(T * s.f3 + s.p3), 0, 1);
+      }
+    },
+    axis(i) { return this.value[i] || 0; },
+    set(i, v) { this.value[i] = clamp(v, 0, 1); }   // manual lock / testing
+  };
+
+  /* ---- Turnover — gentle membership churn ---------------------------------
+     Every so often one anonymous individual quietly leaves (steers to a far
+     target); a while later it drifts back from an unexpected edge and rejoins.
+     Population is EXACTLY constant (same index re-flocks — the viewer can't
+     tell, and there is nothing to follow). The kernel reads the wanderer
+     slots and applies a gentle steer override; the departing agent's
+     agitation is suppressed so it never becomes a focal event.
+     update(dt, count, center[3], radius) → fill via getWanderers().          */
+  ZigCore.Turnover = {
+    slots: 4, interval: 110, departSec: 22, returnSec: 16, reach: 3.6,
+    _t: 0, _timer: 0, _rng: null, _list: null,
+    init(seed, opts) {
+      Object.assign(this, opts || {});
+      this._rng = ZigCore.rng((seed || 0) ^ 0x2A17);
+      this._list = [];
+      for (let i = 0; i < this.slots; i++) this._list.push({ active: false, idx: -1, phase: "", age: 0, tar: [0, 0, 0], str: 0 });
+      this._timer = this.interval * 0.4;   // first departure comes fairly soon
+      return this;
+    },
+    update(dt, count, center, radius) {
+      if (!this._list) this.init(1);
+      this._t += dt; this._timer -= dt;
+      const r = this._rng;
+      // schedule a new departure into a free slot
+      if (this._timer <= 0 && count > 50) {
+        const slot = this._list.find(s => !s.active);
+        if (slot) {
+          const th = r() * 6.283, ph = (r() - 0.5) * 1.6;
+          slot.active = true; slot.phase = "leaving"; slot.age = 0; slot.str = 0.85;
+          slot.idx = Math.floor(r() * count);
+          slot.tar = [center[0] + Math.cos(th) * Math.cos(ph) * radius * this.reach,
+                      center[1] + Math.sin(ph) * radius * (this.reach * 0.5) + radius * 0.6,
+                      center[2] + Math.sin(th) * Math.cos(ph) * radius * this.reach];
+        }
+        this._timer = this.interval * (0.6 + r() * 0.9);
+      }
+      // advance each active slot
+      for (const s of this._list) {
+        if (!s.active) continue;
+        s.age += dt;
+        if (s.phase === "leaving" && s.age > this.departSec) {
+          // turn for home from an unexpected edge
+          const th = r() * 6.283, ph = (r() - 0.5) * 1.2;
+          s.phase = "returning"; s.age = 0; s.str = 0.7;
+          s.tar = [center[0] + Math.cos(th) * Math.cos(ph) * radius * 1.15,
+                   center[1] + Math.sin(ph) * radius * 0.6 + radius * 0.3,
+                   center[2] + Math.sin(th) * Math.cos(ph) * radius * 1.15];
+        } else if (s.phase === "returning" && s.age > this.returnSec) {
+          s.active = false; s.idx = -1; s.str = 0;   // release → normal cohesion re-flocks it
+        }
+      }
+    },
+    getWanderers(idxTar, meta) {   // idxTar,meta : Float32Array(slots*4)
+      for (let i = 0; i < this.slots; i++) {
+        const s = this._list[i], o = i * 4;
+        if (s && s.active) {
+          idxTar[o] = s.idx; idxTar[o + 1] = s.tar[0]; idxTar[o + 2] = s.tar[1]; idxTar[o + 3] = s.tar[2];
+          meta[o] = s.str; meta[o + 1] = 0; meta[o + 2] = 0; meta[o + 3] = 0;
+        } else { idxTar[o] = -1; meta[o] = 0; }
+      }
+    },
+    activeCount() { return this._list ? this._list.filter(s => s.active).length : 0; }
+  };
+
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* =============================================================================
+   ZigCore v0.4 addition — Pacemaker (the performer's clock)
+   Promoted during the Fireflies/Pulse build, 2026-07.
+
+   The anti-"generative art meh" law: the performer does not COMMAND the
+   field's rhythm — they become one more oscillator in it, and the field must
+   be PERSUADED. Pacemaker maintains a live phase/period estimate of the
+   performer's rhythm from note-on times (a phase-locked loop, not a BPM
+   detector), plus a CONFIDENCE that rises with steady playing and decays
+   with silence or sloppiness. Confidence gates the coupling: play committed
+   and the field locks to you; rush or drift and it slips back to its own
+   pulse. Losing the field is possible — which is what makes winning it mean
+   something.
+
+   Usage: Pacemaker.init() once · Pacemaker.update(dt) every frame AFTER
+   Perf.update (it watches Perf for onsets). Read:
+     .phase 0..2π (your beat: 0 = the flash-point) · .period s · .bpm
+     .confidence 0..1 · .pull (= confidence, gate for coupling) · .beat
+   (Export note: Recorder tracks carry breath/bend/attack, not note times —
+    pacemaker playback fidelity for export mode is a v2 item.)
+   ========================================================================== */
+(function (global) {
+  "use strict";
+  const ZigCore = global.ZigCore; if (!ZigCore) return;
+  ZigCore.VERSION = "0.4.0";
+  const clamp = ZigCore.util.clamp, lerp = ZigCore.util.lerp;
+
+  ZigCore.Pacemaker = {
+    phase: 0, period: 0.75, confidence: 0, pull: 0, beat: false, bpm: 80, omega: 8.38,
+    flow: 0,                     // 0..1 streaming intensity — notes INSIDE a ribbon feed this
+    _lastOnsetMs: -1, _lastT: -1, _prevT: -1, _pa: 0,
+    /* RIBBON LISTENING (from Bill's own telemetry, 2026-07-19): his style is
+       "play fast to go slow" — ~10 notes/s bundled into ribbons whose STARTS
+       pulse at ~3.4s (18 bpm at phrase level), with deliberate sparse taps
+       (~0.75s) as a second vocabulary. So: a note is a BEAT-TAP only when it
+       follows silence (> ribbonGap). Notes inside a ribbon feed `flow`.
+       The pulse lives in the gaps, not the notes. */
+    _opts: { ribbonGap: 0.35, minPeriod: 0.3, maxPeriod: 4.5 },
+    init(opts) {
+      Object.assign(this._opts, opts || {});
+      this.phase = 0; this.confidence = 0; this.flow = 0;
+      this._lastOnsetMs = -1; this._lastT = -1; this._prevT = -1; this._pa = 0;
+      return this;
+    },
+    /* every note-on lands here; only gap-preceded ones reach the PLL */
+    noteOn(tSec) {
+      const gap = this._prevT < 0 ? 1e9 : tSec - this._prevT;
+      this._prevT = tSec;
+      this.flow = Math.min(1, this.flow + 0.12);
+      if (gap > this._opts.ribbonGap) this._onset(tSec);
+    },
+    _now() { return (global.performance && performance.now) ? performance.now() : 0; },
+
+    _onset(tSec) {
+      if (this._lastT >= 0) {
+        const ioi = tSec - this._lastT;
+        if (ioi > 0.12 && ioi < 20.0) {
+          /* harmonic snap: a double/quadruple-length phrase is still YOUR
+             pulse (a 16.7s mega-ribbon ≈ 5 × the 3.4s phrase beat) */
+          const ratio = ioi / this.period;
+          const mult = Math.round(ratio);
+          let cand = (mult >= 1 && mult <= 6 && Math.abs(ratio - mult) < 0.25 * mult) ? ioi / mult : ioi;
+          cand = clamp(cand, this._opts.minPeriod, this._opts.maxPeriod);
+          this.period = lerp(this.period, cand, this.confidence > 0.4 ? 0.22 : 0.45);
+          /* phase error at the onset — you tapped: how far were we from 0? */
+          let e = this.phase % 6.28318; if (e > 3.14159) e -= 6.28318;
+          this.phase -= e * 0.55;                       // snap toward your beat
+          /* accuracy → confidence, ASYMMETRIC: only taps that land where the
+             field predicted (>70% accurate) build trust; surprises spend it
+             faster than accuracy earns it. Random tapping averages ~50% —
+             the field cannot be fooled. */
+          const acc = 1 - Math.min(Math.abs(e) / 3.14159, 1);
+          this.confidence = clamp(this.confidence +
+            (acc > 0.7 ? (acc - 0.7) * 0.55 : -(0.7 - acc) * 0.4), 0, 1);
+        }
+      }
+      this._lastT = tSec;
+    },
+
+    update(dt) {
+      const P = ZigCore.Perf;
+      /* onset detection: newest note-on start from Perf's own ledger */
+      if (P) {
+        let newest = -1;
+        P.heldT.forEach((t0) => { if (t0 > newest) newest = t0; });
+        if (newest > this._lastOnsetMs + 40) { this._lastOnsetMs = newest; this.noteOn(newest / 1000); }
+        else if (P.attack > this._pa + 0.22) {          // fallback: attack rising edge
+          const now = this._now();
+          if (now > this._lastOnsetMs + 60) { this._lastOnsetMs = now; this.noteOn(now / 1000); }
+        }
+        this._pa = P.attack;
+      }
+      this.flow *= Math.exp(-dt / 0.8);                 // streaming intensity fades in ~1s of quiet
+      /* advance your clock; silence loosens the grip */
+      const prev = this.phase;
+      this.phase += (6.28318 / Math.max(this.period, 0.05)) * dt;
+      this.beat = this.phase >= 6.28318;
+      if (this.beat) this.phase -= 6.28318;
+      const idleFor = this._lastT < 0 ? 1e9 : (this._now() / 1000 - this._lastT);
+      /* a streaming ribbon is not silence — don't punish the mega-phrase */
+      if (idleFor > this.period * 2 && this.flow < 0.12) this.confidence *= Math.exp(-dt / 2.5);
+      this.pull = this.confidence;
+      this.bpm = 60 / Math.max(this.period, 0.05);
+      this.omega = 6.28318 / Math.max(this.period, 0.05);   // your beat as rad/s —
+      // species use it for FREQUENCY ADAPTATION (real fireflies shift their
+      // intrinsic rate toward a driver; phase pull then does fine alignment)
+      return this.phase;
+    }
+  };
+
+  /* ==========================================================================
+     ZIGTIMBRE (v0.5 · 2026-07-20) — the horn's ACTUAL VOICE as telemetry.
+     MIDI hears the valves; Timbre hears the AIR. A WebAudio analyser on the
+     interface input (MOTU M2) distills the sound into three life-force
+     channels, all 0..1, smoothed with the crisp-AND-smooth dual-envelope
+     idiom:
+       body       — RMS loudness: how much horn is in the room
+       brightness — spectral centroid, log-mapped 200 Hz → 8 kHz: growl vs shine
+       flux       — positive spectral change: articulation, flutter, attack
+                    of the SOUND itself (fires even between MIDI notes)
+     The pure math lives in _analyze() — testable in Node with synthesized
+     frames; the browser plumbing lives in arm(). Species call update(dt)
+     once per REAL-time frame, exactly like Perf.
+     ======================================================================= */
+  ZigCore.Timbre = {
+    live: false, device: "", err: "",
+    body: 0, brightness: 0, flux: 0,
+    _ctx: null, _an: null, _freq: null, _fNorm: null, _time: null, _prev: null, _hasPrev: false,
+
+    /* PURE analysis — freq: Float32Array linear magnitudes 0..1 per bin ·
+       time: Float32Array samples −1..1 · prev: previous freq frame or null */
+    _analyze(freq, time, sampleRate, prev) {
+      let sum2 = 0;
+      for (let i = 0; i < time.length; i++) sum2 += time[i] * time[i];
+      const body = Math.min(1, Math.sqrt(sum2 / time.length) * 3.2);
+      /* brightness centroid weights only bins ABOVE the room floor (0.45).
+         Calibrated against Jimmy's live-gig recording (2026-07-21): without
+         the floor, a real room — crowd, band, reverb — fills every bin and
+         pins the centroid high; with it, brightness tracks the VOICES, not
+         the wash (expressive spread ×3.4 on the fixture). */
+      let mSum = 0, fSum = 0;
+      const hzPerBin = sampleRate / 2 / freq.length;
+      for (let i = 1; i < freq.length; i++) {
+        const w = freq[i] - 0.45;
+        if (w > 0) { mSum += w; fSum += w * i * hzPerBin; }
+      }
+      let brightness = 0;
+      if (mSum > 1e-4) {
+        const centroid = fSum / mSum;
+        brightness = Math.min(1, Math.max(0, Math.log2(Math.max(centroid, 200) / 200) / Math.log2(8000 / 200)));
+      }
+      /* flux is RELATIVE — positive spectral change over the energy that was
+         already there. Scale-invariant: the M2's gain knob changes nothing.
+         Per-bin floor 0.04 keeps line noise from ever reading as a strike. */
+      let flux = 0;
+      if (prev) {
+        let rise = 0, eSum = 0;
+        for (let i = 1; i < freq.length; i++) {
+          const d = freq[i] - prev[i];
+          if (d > 0.04) rise += d;
+          eSum += prev[i];
+        }
+        flux = Math.min(1, rise / (eSum + 2.0));
+      }
+      return { body, brightness, flux };
+    },
+
+    /* SPLIT VOICES (v0.5.1): a stereo cable is TWO instruments. When armed
+       with {split:true}, the left and right channels get their own analysers
+       and their own body/brightness/flux — so a DAW can pan stem A hard left
+       and stem B hard right, and one world hears two performers distinctly.
+       Timbre.L / Timbre.R carry the split voices; the top-level fields stay
+       the mono mix (every existing mapping keeps working untouched). */
+    L: null, R: null,
+    _mkVoice() {
+      return { body: 0, brightness: 0, flux: 0,
+        _an: null, _freq: null, _fNorm: null, _time: null, _prev: null, _hasPrev: false };
+    },
+
+    /* browser side — ask for the interface input (prefers a device whose
+       label matches hint — a RegExp or string, default /M2|MOTU/i), with no
+       browser DSP in the way */
+    async arm(hint, opts) {
+      const md = (typeof navigator !== "undefined") && navigator.mediaDevices;
+      if (!md) { this.err = "no mediaDevices in this venue"; return false; }
+      const want = typeof hint === "string" ? new RegExp(hint, "i") : (hint || /M2|MOTU/i);
+      const gUM = (id) => md.getUserMedia({ audio: {
+        deviceId: id ? { exact: id } : undefined,
+        echoCancellation: false, noiseSuppression: false, autoGainControl: false
+      } });
+      try {
+        let stream = await gUM();                       // permission first — labels unlock after
+        try {
+          const devs = await md.enumerateDevices();
+          const hit = devs.find((d) => d.kind === "audioinput" && want.test(d.label || ""));
+          const cur = (stream.getAudioTracks()[0] || {}).label || "";
+          if (hit && !want.test(cur)) {                 // default wasn't the M2 — switch to it
+            stream.getTracks().forEach((t) => t.stop());
+            stream = await gUM(hit.deviceId);
+          }
+        } catch (e) { /* keep the default input */ }
+        const AC = global.AudioContext || global.webkitAudioContext;
+        this._ctx = new AC();
+        const src = this._ctx.createMediaStreamSource(stream);
+        const rig = (v) => {
+          v._an = this._ctx.createAnalyser();
+          v._an.fftSize = 2048; v._an.smoothingTimeConstant = 0;   // our envelopes, not theirs
+          v._freq = new Uint8Array(v._an.frequencyBinCount);
+          v._fNorm = new Float32Array(v._an.frequencyBinCount);
+          v._prev = new Float32Array(v._an.frequencyBinCount);
+          v._time = new Float32Array(v._an.fftSize);
+          v._hasPrev = false;
+        };
+        rig(this);
+        src.connect(this._an);                       // mono mix — the compatible voice
+        if (opts && opts.split) {
+          const sp = this._ctx.createChannelSplitter(2);
+          src.connect(sp);
+          this.L = this._mkVoice(); this.R = this._mkVoice();
+          rig(this.L); rig(this.R);
+          sp.connect(this.L._an, 0); sp.connect(this.R._an, 1);
+        } else { this.L = null; this.R = null; }
+        this.device = (stream.getAudioTracks()[0] || {}).label || "audio input";
+        if (this._ctx.state === "suspended") this._ctx.resume();
+        this.live = true; this.err = "";
+        return true;
+      } catch (e) { this.err = String((e && e.message) || e); this.live = false; return false; }
+    },
+
+    _tick(v, dt) {
+      v._an.getByteFrequencyData(v._freq);
+      v._an.getFloatTimeDomainData(v._time);
+      for (let i = 0; i < v._freq.length; i++) v._fNorm[i] = v._freq[i] / 255;
+      const raw = this._analyze(v._fNorm, v._time, this._ctx.sampleRate, v._hasPrev ? v._prev : null);
+      v._prev.set(v._fNorm); v._hasPrev = true;
+      const dtc = dt || 1 / 60;
+      v.body += (raw.body - v.body) * Math.min(1, dtc * (raw.body > v.body ? 22 : 6));   // crisp rise, smooth fall
+      v.brightness += (raw.brightness - v.brightness) * Math.min(1, dtc * 9);
+      v.flux = Math.max(raw.flux, v.flux * Math.exp(-dtc / 0.35));                       // spikes, then drains
+    },
+
+    update(dt) {
+      if (!this.live || !this._an) return;
+      this._tick(this, dt);
+      if (this.L) { this._tick(this.L, dt); this._tick(this.R, dt); }
+    }
+  };
+  /* ==========================================================================
+     THE COLOR ECOLOGY (v0.6 · Scout's physiology, 2026-07-21)
+     "Living systems don't have colors. They occupy color over time."
+     Four layers: MATERIAL (what it's made of — near-constant) · STRUCTURAL
+     (the geometric iridescence — always present, varying in willingness) ·
+     EMOTIONAL (Mood: what the organism feels) · EVENT (Reserve: the rarest
+     color — the audience earns it). All CPU-side laws feeding the existing
+     view uniforms: zero shader risk, every world can inherit.
+     ======================================================================= */
+
+  /* LAYER 1 — MATERIALS. Not hue: substance. dark = the dome that swallows
+     light · light = the hollow that holds it · moon = how moonlight lands ·
+     iriBase = how willing the rainbow is at rest · iriBurst = how far a
+     Reserve spend can take it (the hummingbird ceiling). */
+  /* THE MATERIAL LAW (v0.6.1 · Bill, 2026-07-23): "The organism isn't
+     painted. It is COMPOSED." Every material carries a composition profile —
+     tex: [grain, gscale, gdepth, specPow, specGain, fiber, sss, weather]
+       grain    0 none · 1 facets (crystal/mineral/glass) · 2 fibers
+                (wood/nacre/silk — run ALONG the letter) · 3 pores
+                (coral/volcanic/tissue — sit IN the skin)
+       gscale   how fine the microstructure is (cells per letter-length)
+       gdepth   how far it bends the light (0 = polished film)
+       specPow  highlight sharpness: 6 velvet → 140 glass
+       specGain highlight strength
+       fiber    grain visibility in the body tone (brushed/striped look)
+       sss      subsurface — light passing THROUGH: bone, nacre, tissue glow
+                on their shadow side
+       weather  age: mottle and history on the surface (crystal has none)
+     All in the letterform's OWN coordinates — texture anchored to flesh,
+     never to screen. */
+  ZigCore.Materials = {
+    /* the original cabinet, now composed */
+    pearl:     { dark: [0.100, 0.104, 0.118], light: [0.880, 0.868, 0.836], moon: [0.50, 0.55, 0.70], iriBase: 0.10, iriBurst: 2.6, tex: [2, 16, 0.08, 34, 0.50, 0.10, 0.50, 0.00] },
+    bone:      { dark: [0.110, 0.104, 0.092], light: [0.820, 0.790, 0.700], moon: [0.52, 0.53, 0.60], iriBase: 0.06, iriBurst: 1.6, tex: [3, 20, 0.12, 12, 0.20, 0.00, 0.40, 0.15] },
+    obsidian:  { dark: [0.016, 0.016, 0.022], light: [0.280, 0.265, 0.300], moon: [0.42, 0.44, 0.58], iriBase: 0.04, iriBurst: 2.9, tex: [1, 5, 0.22, 120, 1.30, 0.00, 0.05, 0.05] },
+    ice:       { dark: [0.055, 0.085, 0.115], light: [0.800, 0.880, 0.950], moon: [0.55, 0.62, 0.78], iriBase: 0.14, iriBurst: 2.2, tex: [1, 9, 0.28, 70, 0.90, 0.00, 0.55, 0.00] },
+    copper:    { dark: [0.085, 0.048, 0.028], light: [0.850, 0.560, 0.310], moon: [0.62, 0.50, 0.38], iriBase: 0.08, iriBurst: 2.0, tex: [2, 40, 0.20, 50, 1.00, 0.45, 0.00, 0.25] },   // burnished — Scout's companion metal
+    moonstone: { dark: [0.070, 0.075, 0.105], light: [0.760, 0.780, 0.860], moon: [0.48, 0.54, 0.74], iriBase: 0.18, iriBurst: 2.4, tex: [2, 12, 0.08, 30, 0.45, 0.05, 0.70, 0.00] },
+    moss:      { dark: [0.085, 0.105, 0.060], light: [0.820, 0.790, 0.700], moon: [0.46, 0.53, 0.72], iriBase: 0.35, iriBurst: 1.8, tex: [3, 18, 0.25, 14, 0.25, 0.00, 0.20, 0.30] },   // the classic register
+    smoke:     { dark: [0.060, 0.060, 0.065], light: [0.480, 0.470, 0.475], moon: [0.40, 0.42, 0.50], iriBase: 0.05, iriBurst: 1.4, tex: [0, 0, 0.00, 5, 0.08, 0.00, 0.30, 0.20] },
+    /* the new families (Bill's list, 2026-07-23) */
+    volcanic:  { dark: [0.050, 0.034, 0.028], light: [0.360, 0.225, 0.180], moon: [0.55, 0.42, 0.34], iriBase: 0.04, iriBurst: 1.8, tex: [3, 26, 0.50, 8, 0.15, 0.00, 0.30, 0.55] },   // porous, aged; the ember is INSIDE
+    crystal:   { dark: [0.060, 0.080, 0.100], light: [0.750, 0.820, 0.920], moon: [0.55, 0.60, 0.78], iriBase: 0.30, iriBurst: 2.8, tex: [1, 7, 0.55, 90, 1.20, 0.00, 0.18, 0.00] },   // facets flash one face at a time
+    nacre:     { dark: [0.120, 0.115, 0.130], light: [0.920, 0.900, 0.880], moon: [0.55, 0.58, 0.72], iriBase: 0.55, iriBurst: 2.9, tex: [2, 18, 0.16, 26, 0.50, 0.15, 0.65, 0.00] },   // mother-of-pearl: wave-grain + deep glow
+    wood:      { dark: [0.110, 0.070, 0.040], light: [0.620, 0.450, 0.280], moon: [0.58, 0.48, 0.36], iriBase: 0.02, iriBurst: 0.8, tex: [2, 30, 0.30, 6, 0.12, 0.65, 0.05, 0.35] },   // fibers run the length; matte, warm, old
+    coral:     { dark: [0.140, 0.060, 0.058], light: [0.880, 0.550, 0.500], moon: [0.60, 0.48, 0.46], iriBase: 0.08, iriBurst: 1.6, tex: [3, 34, 0.45, 10, 0.20, 0.00, 0.30, 0.25] },   // built by lives, pore by pore
+    ceramic:   { dark: [0.100, 0.100, 0.110], light: [0.860, 0.830, 0.780], moon: [0.54, 0.55, 0.62], iriBase: 0.05, iriBurst: 1.2, tex: [0, 0, 0.00, 60, 0.80, 0.00, 0.08, 0.06] },   // deep body color, quiet, warm
+    chitin:    { dark: [0.050, 0.060, 0.040], light: [0.450, 0.520, 0.300], moon: [0.48, 0.55, 0.44], iriBase: 0.32, iriBurst: 2.2, tex: [2, 10, 0.10, 45, 0.90, 0.10, 0.20, 0.15] },   // beetle-shell wax, oiled sheen
+    glass:     { dark: [0.040, 0.050, 0.060], light: [0.550, 0.620, 0.660], moon: [0.58, 0.64, 0.74], iriBase: 0.45, iriBurst: 2.6, tex: [1, 3, 0.12, 140, 1.50, 0.00, 0.50, 0.00] },   // razor highlight, cold clarity
+    tissue:    { dark: [0.160, 0.080, 0.090], light: [0.850, 0.620, 0.600], moon: [0.62, 0.50, 0.50], iriBase: 0.10, iriBurst: 1.6, tex: [3, 14, 0.15, 18, 0.35, 0.00, 0.85, 0.10] },   // living: the light gets IN
+    botanical: { dark: [0.060, 0.100, 0.050], light: [0.550, 0.720, 0.350], moon: [0.48, 0.58, 0.42], iriBase: 0.10, iriBurst: 1.8, tex: [2, 22, 0.25, 22, 0.40, 0.35, 0.45, 0.20] },   // leaf veins, chlorophyll glow
+    mineral:   { dark: [0.080, 0.075, 0.070], light: [0.580, 0.550, 0.500], moon: [0.52, 0.51, 0.50], iriBase: 0.12, iriBurst: 1.8, tex: [1, 12, 0.35, 30, 0.50, 0.00, 0.00, 0.40] }    // stone: faceted, opaque, patient
+  };
+
+  /* LAYER 3 — MOOD: the emotional metabolism. Reads the same telemetry the
+     body reads (breath, energy, flow) and distills five slow states.
+     calm — deep slate stillness · curious — gentle activity from quiet ·
+     excited — sustained intensity · fear — intensity that COLLAPSES ·
+     wonder — the afterglow of a Reserve spend (set by the spend itself). */
+  ZigCore.Mood = {
+    calm: 1, curious: 0, excited: 0, fear: 0, wonder: 0,
+    _pi: 0,
+    update(dt) {
+      const P = ZigCore.Perf, D = ZigCore.Drive, PM = ZigCore.Pacemaker;
+      const intensity = Math.min(1, 0.6 * (P.breath || 0) + 0.5 * Math.min((D && D.energy) || 0, 1) + 0.5 * ((PM && PM.flow) || 0));
+      const exT = intensity > 0.55 ? (intensity - 0.55) / 0.45 : 0;
+      this.excited += (exT - this.excited) * Math.min(1, dt / 2.5);
+      /* fear = the cliff: what was intense is suddenly gone */
+      const drop = this._pi - intensity;
+      if (drop > 0.35 && this._pi > 0.55) this.fear = Math.min(1, this.fear + drop * 1.6);
+      this.fear *= Math.exp(-dt / 3.5);
+      this._pi += (intensity - this._pi) * Math.min(1, dt / 1.2);
+      /* curiosity = touch without force: breath present, intensity low */
+      const gentle = ((P.breath || 0) > 0.06 && intensity < 0.45) ? Math.min(1, P.breath * 2) : 0;
+      this.curious += (gentle - this.curious) * Math.min(1, dt / 4);
+      this.wonder *= Math.exp(-dt / 6);
+      this.calm = Math.max(0, 1 - Math.max(this.excited, this.fear, this.curious * 0.7, this.wonder * 0.6));
+    }
+  };
+
+  /* LAYER 4 — RESERVE: the color treasury. Like dynamic range in music —
+     if every moment is fortissimo, nothing is. Events SPEND from a finite
+     budget (≈30% each, cooldown so bursts can't machine-gun); quiet slowly
+     restores it. burst (0..1) is the visible flash envelope — a few seconds
+     of impossible color, then back to silver. Spends also feed Mood.wonder:
+     the organism remembers revealing something private. */
+  ZigCore.Reserve = {
+    level: 1, burst: 0, _cool: 0,
+    event(kind, strength) {
+      if (this._cool > 0 || this.level < 0.16) return 0;       // an organism never spends its last color
+      const s = Math.max(0.2, Math.min(1, strength === undefined ? 0.7 : strength));
+      const spend = Math.min(this.level - 0.06, 0.30 * s);
+      this.level -= spend;
+      this.burst = Math.min(1, this.burst + spend / 0.30);
+      this._cool = 2.2;
+      ZigCore.Mood.wonder = Math.min(1, ZigCore.Mood.wonder + spend * 2.2);
+      return spend;
+    },
+    update(dt, quiet) {
+      this.burst *= Math.exp(-dt / 1.1);                       // ~3 s of visible flash, then silver again
+      this._cool = Math.max(0, this._cool - dt);
+      this.level = Math.min(1, this.level + (quiet ? 0.012 : 0.002) * dt);   // silence restores the treasury
+    }
+  };
+
+  /* ==========================================================================
+     THE ZIGVERSE CANON (v0.7 · adopted 2026-07-23 · Scout's Four Pillars)
+     Zigverse no longer accumulates SCENES — it accumulates LAWS. Every
+     capability is declared here as data, sorted into the pillar it serves,
+     so the engine can state the universe it currently contains. The measure
+     of progress is the richness of this list, not the count of ZigGlows.
+
+     PRIME LAW — INEVITABILITY: nothing exists because it looked good;
+     everything is a consequence of the world it inhabits. Form, motion, and
+     color are downstream — physics → habitat → life → experience — never a
+     decision made for its own sake.
+
+     The pillars flow DOWNWARD. Each law names what it makes possible and the
+     proof that guards it. A project that only makes a beautiful result ends
+     with itself; a project that adds a law here, every future organism
+     inherits.
+     ======================================================================= */
+  ZigCore.Canon = {
+    primeLaw: "Inevitability — nothing exists merely because it looks good; everything is a consequence of the world it inhabits.",
+    flow: ["physics", "habitat", "life", "experience"],
+    laws: [
+      /* PHYSICS — the immutable rules; never artistic, they simply exist */
+      { id: "flocking",     pillar: "physics", since: "0.1",    enables: "topological 7-NN cohesion/separation/alignment — the collective body", proof: "resonator_shell_check" },
+      { id: "zigphase",     pillar: "physics", since: "0.3",    enables: "Kuramoto synchronization — chaos falls into one rhythm at coupling K", proof: "fireflies_sync_ref" },
+      { id: "surface",      pillar: "physics", since: "0.5",    enables: "membrane/fluid skins — a level that carries waves", proof: "resonator_shell_check" },
+      { id: "zigflow",      pillar: "physics", since: "0.8",    enables: "divergence-free current field — currents swirl, never drain or pile up", proof: "zigflow_ref" },
+      { id: "membrane",     pillar: "physics", since: "0.10",   enables: "elastic space + topological memory — the surface remembers what it lived", proof: "membrane_ref" },
+      { id: "load",         pillar: "physics", since: "0.16",   enables: "proximity to criticality — the sweet spot of organization where a mass is most alive; too little is slack, too much is dead (Bill, 2026-07-23)", proof: "(felt — only a performer holds it)" },
+      /* HABITAT — the environment; inherits physics, expresses it. OUR THINNEST PILLAR — the frontier. */
+      { id: "medium",       pillar: "habitat", since: "0.5",    enables: "air vs water — gravity vs neutral buoyancy, chosen per world", proof: "resonator_shell_check" },
+      { id: "sky",          pillar: "habitat", since: "0.14",   enables: "atmospheres — moonlit, spectral, dusk; the register a world is lit by", proof: "(visual)" },
+      { id: "echo-space",   pillar: "habitat", since: "0.5",    enables: "finite space — walls that reflect wavefronts (the lake's echo pool)", proof: "(visual)" },
+      /* LIFE — species; adaptations to habitat, never decoration */
+      { id: "zigmesh",      pillar: "life",    since: "0.2",    enables: "parametric letterforms — 3 generators, 14 roles; form as DNA", proof: "zigmesh_ref" },
+      { id: "material",     pillar: "life",    since: "0.6.1",  enables: "composition profiles — grain/spec/subsurface/weather; composed, not painted", proof: "zigcolor_ref" },
+      { id: "wardrobe",     pillar: "life",    since: "0.9",    enables: "live letter-swap + per-agent metamorphosis — one body, changing form", proof: "resonator_shell_check" },
+      { id: "microbreath",  pillar: "life",    since: "0.10.1", enables: "vertex-level pulse — a letter alive in its own skin (the bubble)", proof: "zigmesh_ref" },
+      { id: "turnover",     pillar: "life",    since: "0.2.1",  enables: "wanderers — organisms depart and return; the field is never static", proof: "(runtime)" },
+      /* EXPERIENCE — the observer as an environmental force. Where Zigverse is unique. */
+      { id: "perf",         pillar: "experience", since: "0.1", enables: "breath as the source of life — the EWI drives the world", proof: "(runtime)" },
+      { id: "pacemaker",    pillar: "experience", since: "0.4", enables: "the performer's clock earns entrainment (Trust) — ribbon-aware", proof: "pacemaker_ref, ribbon_ref" },
+      { id: "timbre",       pillar: "experience", since: "0.5", enables: "the horn's actual voice — body/brightness/flux from real audio", proof: "timbre_ref" },
+      { id: "avatar",       pillar: "experience", since: "0.4", enables: "the performer embodied as one organism; influence spreads by law (Embodiment)", proof: "resonator_shell_check" },
+      { id: "reserve",      pillar: "experience", since: "0.6", enables: "the audience earns rare events — color/coherence as dynamic range", proof: "zigcolor_ref" },
+      { id: "mood",         pillar: "experience", since: "0.6", enables: "emotional metabolism — calm/curious/excited/fear/wonder tint the world", proof: "zigcolor_ref" },
+      { id: "memory-glass", pillar: "experience", since: "0.7", enables: "the light remembers — gated afterimage; flashes ghost, bodies stay crisp", proof: "resonator_shell_check" },
+      { id: "camera",       pillar: "experience", since: "0.1", enables: "camera language — chase/overhead/side/cockpit; how the world is witnessed", proof: "(visual)" }
+    ],
+    byPillar(p) { return this.laws.filter((l) => l.pillar === p); },
+    count() { return this.laws.length; }
+  };
+
+  ZigCore.VERSION = "0.7.0";   // 0.6.1: MATERIAL LAW · 0.7: THE CANON (the Four Pillars — Zigverse accumulates laws, not scenes)
+
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>
+(function(){
+  var C = (window.ZigCore && ZigCore.Canon) || null;
+  var meta = {
+    physics:    {color:"var(--physics)", essence:"the immutable rules — never artistic, they simply exist"},
+    habitat:    {color:"var(--habitat)", essence:"the environment — inherits the rules, expresses them differently", frontier:true},
+    life:       {color:"var(--life)",    essence:"species — adaptations to habitat, never decoration"},
+    experience: {color:"var(--experience)", essence:"the observer as an environmental force — breath, music, presence"}
+  };
+  if(!C){ document.getElementById("prime").textContent =
+    "The Canon failed to load — open the single-file Atlas build, not the multi-file source."; return; }
+
+  document.getElementById("prime").innerHTML =
+    "<b>Prime Law — Inevitability.</b> " + C.primeLaw.replace(/^Inevitability — /,"");
+  document.getElementById("tally").textContent =
+    C.count() + " LAWS · 4 PILLARS · PHYSICS → HABITAT → LIFE → EXPERIENCE";
+
+  var bands = document.getElementById("bands");
+  C.flow.forEach(function(p, i){
+    var m = meta[p], laws = C.byPillar(p);
+    var band = document.createElement("div");
+    band.className = "band";
+    band.style.color = m.color;
+    var frontier = m.frontier ? '<span class="frontier">the frontier · our thinnest pillar</span>' : '';
+    var nodes = laws.map(function(l){
+      return '<div class="node" style="color:'+m.color+'">'+
+        '<span class="since">'+l.since+'</span>'+
+        '<span class="dot" style="animation-delay:'+(Math.abs(hash(l.id))%34/10)+'s"></span>'+
+        '<span class="id">'+l.id+'</span>'+
+        '<div class="en">'+l.enables+'</div>'+
+        '<div class="proof">↳ '+l.proof+'</div>'+
+      '</div>';
+    }).join("");
+    band.innerHTML =
+      '<div class="head">'+
+        '<span class="name" style="color:'+m.color+'">'+p.toUpperCase()+'</span>'+
+        '<span class="essence">'+m.essence+'</span>'+
+        frontier+
+        '<span class="n">'+laws.length+' law'+(laws.length===1?'':'s')+'</span>'+
+      '</div>'+
+      '<div class="nodes">'+nodes+'</div>';
+    bands.appendChild(band);
+    if(i < C.flow.length-1){
+      var f = document.createElement("div"); f.className="flowdot"; f.textContent="↓"; bands.appendChild(f);
+    }
+  });
+  function hash(s){var h=0;for(var i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))|0}return h}
+
+  /* the cosmos behind — a slow drift of faint stars (deterministic) */
+  var cv=document.getElementById("stars"), cx=cv.getContext("2d"), W,H,S=[];
+  function rs(){W=cv.width=innerWidth;H=cv.height=innerHeight;S=[];
+    var seed=7; function r(){seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff}
+    for(var i=0;i<160;i++)S.push({x:r()*W,y:r()*H,z:.3+r()*.9,p:r()*6.28})}
+  rs(); addEventListener("resize", rs);
+  var t=0;
+  (function draw(){
+    t+=.006; cx.clearRect(0,0,W,H);
+    for(var i=0;i<S.length;i++){var s=S[i];
+      var a=(.18+.5*(.5+.5*Math.sin(t+s.p)))*s.z;
+      cx.fillStyle="rgba(150,170,220,"+a.toFixed(3)+")";
+      cx.fillRect((s.x + t*4*s.z)%W, s.y, s.z*1.6, s.z*1.6);
+    }
+    requestAnimationFrame(draw);
+  })();
+})();
+</script>
+</body>
+</html>

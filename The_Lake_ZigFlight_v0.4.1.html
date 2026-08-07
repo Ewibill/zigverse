@@ -1,0 +1,3398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ZIGFLIGHT · THE LAKE — v0.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #010204; overflow: hidden;
+               font: 12px/1.5 "Cascadia Code", "SF Mono", Consolas, monospace; color: #8fa4a0; }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; left: 14px; top: 12px; user-select: none; pointer-events: none;
+         text-shadow: 0 1px 3px #000; }
+  #hud .title { color: #c2d8d0; letter-spacing: 0.18em; font-size: 11px; }
+  #hud .dim { color: #55635f; }
+  .pill { padding: 1px 8px; border-radius: 9px; font-size: 11px; letter-spacing: 0.08em; }
+  .pill.ok  { background: #0f2420; color: #7affd8; border: 1px solid #285a4c; }
+  .pill.bad { background: #2a0d0d; color: #ff8a7a; border: 1px solid #5a2828; }
+  #hud div { margin-top: 3px; }
+  #hint { position: fixed; right: 14px; bottom: 10px; color: #3a4441; text-align: right; user-select: none; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div id="hud">
+  <div class="title">ZIGFLIGHT · THE LAKE <span class="dim">v0.1 — stones, rings, and one frog</span></div>
+  <div id="probe"><span class="pill bad">PROBE …</span> <span class="dim">asking the GPU</span></div>
+  <div id="status" class="dim">booting…</div>
+  <div id="engine" class="dim"></div>
+  <div id="midi" class="dim"></div>
+</div>
+<div id="hint">
+  DELIBERATE notes throw stones (after silence · pitch aims them) · ribbon notes feed the shimmer<br>rings BOUNCE off the pool walls — echoes come home · click / Space also throw<br>
+  F — become the frog (attack leaps · bend steers · breath = leap distance)<br>
+  X — camera: chase / overhead / side skin / cockpit · P spectral · R genesis<br>
+  ,/. world tempo · I/K ink · O/L moon · drag a .mid — the duet · T pause
+</div>
+
+<script>
+/* ===== inlined: engine/zigcore.js ===== */
+/* ============================================================================
+   ZigCore — the Zigverse engine (rendering-agnostic logic core)
+   v0.2 · classic script · exposes a global `ZigCore`
+   Load BEFORE the renderer and the species:  <script src="zigcore.js"><\/script>
+   (classic script, not an ES module, so it works from file:// on venue nodes.)
+
+   This file is the shared BRAIN — zero DOM, zero WebGL. Renderers (ZigGL / a
+   future ZigCanvas) and species sit on top of it. Every organism inherits these
+   levers on frame one; you only ever author what is genuinely new.
+
+   Modules (extraction order):
+     [x] util        — clamp / lerp / smoothstep / hash
+     [x] rng         — deterministic seedable RNG (from Kelp/Jellyfish)
+     [x] Perf        — EWI / Web-MIDI breath  → the source of life
+     [x] Drive       — breath history + positional DELAY ("swell, not decay")  ← v0.2
+     [x] Climate     — slow never-looping metabolism (incommensurate drifts)   ← v0.2
+     [x] mode/clock  — 'live' | 'export' + Recorder (deterministic playback)  ← v0.2
+     [ ] Flow/Field  — wandering current + queryable field
+     [ ] Palette · Contagion · Gait · Agent · Depth · Director · Emerge · Probe
+   (v0.2 modules appended below the v0.1 IIFE — extracted during the
+    Murmuration build, 2026-07-16.)
+   ========================================================================= */
+(function (global) {
+  "use strict";
+  const ZigCore = global.ZigCore || (global.ZigCore = {});
+  ZigCore.VERSION = "0.1.0";
+
+  /* ---- util ------------------------------------------------------------- */
+  const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+  const lerp  = (a, b, t) => a + (b - a) * t;
+  const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a || 1e-6), 0, 1); return t * t * (3 - 2 * t); };
+  ZigCore.util = { clamp, lerp, smoothstep,
+    hash1: (n) => { const s = Math.sin(n * 127.1) * 43758.5453; return s - Math.floor(s); } };
+
+  /* ---- rng — deterministic mulberry32 (shared by Kelp & Jellyfish) ------ */
+  ZigCore.rng = function (seed) {
+    let s = (seed >>> 0) || 0x9e3779b9;
+    const next = () => { s |= 0; s = (s + 0x6D2B79F5) | 0;
+      let t = Math.imul(s ^ (s >>> 15), 1 | s);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    next.seed = (v) => { s = v >>> 0; };
+    return next;
+  };
+
+  /* ========================================================================
+     ZigCore.Perf — the SOURCE OF LIFE.
+     Human performance (EWI breath, via Web MIDI) becomes a normalized life-force
+     signal every organism reads. Unified from three organisms:
+       · Warm Butterfly : CC 2/7/11 → breath, pitch-bend, held notes, idle decay
+       · Kelp / Jellyfish: CC2 + channel-pressure, "any CC" diagnostic, sim/idle
+     Exposes:
+       Perf.breath   0..1  smoothed life-force (live · simulated · idle auto-breath)
+       Perf.breathRaw       pre-smoothing (feed the Drive integrator with this)
+       Perf.bend     -1..1  pitch-bend (tension / lean)
+       Perf.attack   0..1   decaying pulse on each note-on (intention)
+       Perf.held     Set    currently-held notes (sustain / commitment)
+       Perf.live     bool   a performer is connected & playing
+     Call Perf.init(opts) once, Perf.update(dt, t) every frame.
+     opts: { idle:true, breathCC:[2,7,11], anyCC:false, onStatus:fn }
+     ==================================================================== */
+  ZigCore.Perf = {
+    breath: 0, breathRaw: 0, bend: 0, attack: 0, live: false, held: new Set(),
+    heldT: new Map(), lastNote: -1, holdSec: 0,   // note start-times · most recent note-on · longest current hold (s)
+    // diagnostics (for a monitor readout)
+    inputs: "none", msgCount: 0, allMsg: 0, lastCC: "—", rawLog: [],
+    _sim: 0, _last: 0, _midi: null,
+    // gain/curve/smooth: the breath RESPONSE — how the instrument feels.
+    // gain scales input · curve is gamma (>1 = more headroom at the top,
+    // <1 = touchy) · smooth is the lag rate (higher = snappier)
+    _opts: { idle: true, breathCC: [2, 7, 11], anyCC: false, onStatus: null,
+             gain: 1, curve: 1, smooth: 7 },
+
+    init(opts) {
+      Object.assign(this._opts, opts || {});
+      if (!global.navigator || !navigator.requestMIDIAccess) {
+        this._status("Web MIDI unavailable (use Chrome)"); return Promise.resolve(false);
+      }
+      return navigator.requestMIDIAccess({ sysex: false }).then((acc) => {
+        this._midi = acc;
+        const bind = () => this._bindInputs();
+        acc.onstatechange = bind; bind();
+        return true;
+      }).catch((err) => { this._status("MIDI blocked: " + err); return false; });
+    },
+    _bindInputs() {
+      if (!this._midi) return;
+      const names = [];
+      this._midi.inputs.forEach((inp) => { inp.onmidimessage = (m) => this.onMsg(m); names.push(inp.name || "input"); });
+      this.inputs = names.length ? names.join(", ") : "none";
+      this._status(names.length ? ("EWI: " + this.inputs) : "EWI: awaiting device");
+    },
+    _status(s) { if (this._opts.onStatus) this._opts.onStatus(s); },
+
+    onMsg(e) {
+      const d = e && e.data; if (!d) return;
+      this.allMsg++;
+      // keep a small hex tail for diagnostics
+      const hex = Array.from(d).map((b) => b.toString(16).padStart(2, "0")).join(" ");
+      this.rawLog.unshift(hex); if (this.rawLog.length > 4) this.rawLog.pop();
+      if (d.length < 2) return;
+      const st = d[0] & 0xf0, o = this._opts, now = this._nowMs();
+      if (st === 0xB0) {                         // control-change
+        const cc = d[1], v = d[2] / 127;
+        if (o.breathCC.indexOf(cc) >= 0) { this.breathRaw = Math.max(this.breathRaw * 0.55, v); this._hit("CC" + cc + " (breath)", now); }
+        else if (o.anyCC) { this.breathRaw = v; this._hit("CC" + cc + " (mapped)", now); }
+      } else if (st === 0xD0) {                  // channel pressure (aftertouch) — some EWIs send breath here
+        this.breathRaw = d[1] / 127; this._hit("chan-pressure (breath)", now);
+      } else if (st === 0xE0) {                  // pitch bend → tension/lean
+        this.bend = (((d[2] << 7) | d[1]) - 8192) / 8192;
+      } else if (st === 0x90 && d[2] > 0) {      // note on → intention
+        this.held.add(d[1]); this.heldT.set(d[1], now); this.lastNote = d[1];
+        this.attack = Math.max(this.attack, d[2] / 127); this.live = true; this._last = now;
+      } else if (st === 0x80 || (st === 0x90 && d[2] === 0)) { // note off
+        this.held.delete(d[1]); this.heldT.delete(d[1]);
+      }
+    },
+    _hit(label, now) { this.lastCC = label; this.msgCount++; this.live = true; this._last = now; },
+    _nowMs() { return (global.performance && performance.now) ? performance.now() : 0; },
+
+    // hold-key / test breath (e.g. hold "B") — proves routing when the EWI is silent
+    sim(v) { this._sim = clamp(v || 0, 0, 1); },
+
+    update(dt, t) {
+      const now = this._nowMs();
+      // performer went quiet → let live breath fall away (Warm Butterfly's 1.6s window)
+      if (this.live && now - this._last > 1600) { this.live = false; }
+      if (this.live) { if (now - this._last > 120) this.breathRaw *= Math.max(0, 1 - dt * 1.2); }
+      else if (this._sim > 0) { this.breathRaw = this._sim; }
+      else if (this._opts.idle) {               // gentle auto-breath so the organism lives with no performer
+        this.breathRaw = 0.22 + 0.16 * Math.sin((t || 0) * 0.28) + 0.08 * Math.sin((t || 0) * 0.09 + 1.3);
+      } else { this.breathRaw *= Math.max(0, 1 - dt * 1.2); }
+      // holdSec: the longest-running current hold — sustain as COMMITMENT
+      let hs = 0; this.heldT.forEach((t0) => { const s = (now - t0) / 1000; if (s > hs) hs = s; });
+      this.holdSec = hs;
+      const o2 = this._opts;
+      const shaped = Math.pow(clamp(this.breathRaw * (o2.gain || 1), 0, 1), o2.curve || 1);
+      this.breath += (shaped - this.breath) * clamp(dt * (o2.smooth || 7), 0, 1);
+      this.attack *= Math.max(0, 1 - dt * 4);   // intention pulse decays
+      return this.breath;
+    }
+  };
+
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* =============================================================================
+   ZigCore v0.2 additions — Drive · Climate · Clock/Mode · Recorder
+   Engine work promoted during the Murmuration build (2026-07).
+     [x] Drive    — breath history + positional DELAY taps ("swell, not decay").
+                    Drive.taps(out, maxDelay) fills a Float32Array for GPU upload:
+                    each agent reads the swell at its OWN lag → the swell IS the wave.
+     [x] Climate  — slow never-looping metabolism (seeded incommensurate drifts).
+     [x] mode/clock — 'live' (wall clock) | 'export' (fixed dt, deterministic).
+     [x] Recorder — capture breath/bend/attack timeline → deterministic playback.
+   ========================================================================== */
+(function (global) {
+  "use strict";
+  const ZigCore = global.ZigCore;
+  if (!ZigCore) return;
+  ZigCore.VERSION = "0.2.1";
+  const clamp = ZigCore.util.clamp;
+
+  /* ---- Drive — breath history + positional delay --------------------------
+     Perf gives the NOW of the breath; Drive gives its PAST. An agent that reads
+     tap(delay) where delay = its distance from a disturbance / waveSpeed is
+     literally riding the performer's swell as a travelling wave.              */
+  ZigCore.Drive = {
+    depth: 8, hz: 60,                 // seconds of history · sample rate
+    buf: null, n: 0, head: 0, energy: 0, _acc: 0,
+    init(opts) {
+      Object.assign(this, opts || {});
+      this.n = Math.max(2, Math.ceil(this.depth * this.hz));
+      this.buf = new Float32Array(this.n); this.head = 0; this.energy = 0; this._acc = 0;
+    },
+    update(dt) {
+      if (!this.buf) this.init();
+      const P = ZigCore.Perf, step = 1 / this.hz;
+      this._acc += dt;
+      while (this._acc >= step) {
+        this._acc -= step;
+        this.head = (this.head + 1) % this.n;
+        this.buf[this.head] = P ? P.breath : 0;
+      }
+      // energy: slow integrator — the organism's accumulated vitality (swell, not decay)
+      const target = P ? P.breath : 0;
+      this.energy += (target - this.energy) * Math.min(1, dt * 0.5);
+      return this.energy;
+    },
+    tap(delay) {                       // breath value `delay` seconds ago
+      if (!this.buf) return 0;
+      const s = clamp(Math.round(delay * this.hz), 0, this.n - 1);
+      return this.buf[(this.head - s + this.n) % this.n];
+    },
+    taps(out, maxDelay) {              // evenly spaced taps 0..maxDelay → GPU uniform
+      const m = out.length;
+      for (let i = 0; i < m; i++) out[i] = this.tap(maxDelay * i / (m - 1 || 1));
+      return out;
+    }
+  };
+
+  /* ---- Climate — never-looping slow metabolism -----------------------------
+     N channels of drift, each a sum of three incommensurate sines with seeded
+     periods (minutes-scale). Never returns to its start; perfect for live.
+     (Export loops handle this per-piece — see Output Targets doc.)           */
+  ZigCore.Climate = {
+    t: 0, channels: 6, value: [], _seeds: null,
+    init(seed) {
+      const r = ZigCore.rng(seed || 7); this._seeds = []; this.value = [];
+      for (let i = 0; i < this.channels; i++) {
+        this._seeds.push({
+          f1: 1 / (45 + r() * 120), f2: 1 / (110 + r() * 300), f3: 1 / (23 + r() * 60),
+          p1: r() * 6.283, p2: r() * 6.283, p3: r() * 6.283
+        });
+        this.value.push(0.5);
+      }
+    },
+    update(dt) {
+      if (!this._seeds) this.init();
+      this.t += dt; const T = this.t * 6.283;
+      for (let i = 0; i < this.channels; i++) {
+        const s = this._seeds[i];
+        this.value[i] = clamp(0.5
+          + 0.25 * Math.sin(T * s.f1 + s.p1)
+          + 0.15 * Math.sin(T * s.f2 + s.p2)
+          + 0.10 * Math.sin(T * s.f3 + s.p3), 0, 1);
+      }
+    },
+    drift(i) { return this.value.length ? this.value[i % this.channels] : 0.5; }
+  };
+
+  /* ---- mode + clock ---------------------------------------------------------
+     'live'  : dt from the wall clock (clamped — a hitch never explodes physics)
+     'export': fixed dt, decoupled from real time → flawless offline capture   */
+  ZigCore.mode = "live";
+  ZigCore.clock = {
+    fixedDt: 1 / 60, frame: 0, _last: 0,
+    tick(nowMs) {
+      this.frame++;
+      if (ZigCore.mode === "export") return this.fixedDt;
+      if (!this._last) this._last = nowMs;
+      const dt = (nowMs - this._last) / 1000; this._last = nowMs;
+      return clamp(dt, 0, 0.05);
+    },
+    reset() { this._last = 0; this.frame = 0; }
+  };
+
+  /* ---- Recorder — a performance, captured -----------------------------------
+     Records Perf per frame; playback overrides Perf deterministically, so an
+     export render IS a captured performance, not a sim. Call update() BEFORE
+     Perf.update() in the frame loop.                                          */
+  ZigCore.Recorder = {
+    mode: "off", track: [], _i: 0,
+    start() { this.mode = "rec"; this.track = []; },
+    stop() { const m = this.mode; this.mode = "off"; return m === "rec" ? this.track : null; },
+    play(track) { if (track) this.track = track; this._i = 0; this.mode = "play"; },
+    update() {
+      const P = ZigCore.Perf; if (!P) return;
+      if (this.mode === "rec") {
+        this.track.push([P.breathRaw, P.bend, P.attack]);
+      } else if (this.mode === "play" && this.track.length) {
+        const f = this.track[this._i++ % this.track.length];
+        P.breathRaw = f[0]; P.bend = f[1]; P.attack = Math.max(P.attack, f[2]);
+        P.live = true; P._last = P._nowMs();   // hold the live window open
+      }
+    },
+    toJSON() { return JSON.stringify(this.track); },
+    fromJSON(s) { this.track = JSON.parse(s); }
+  };
+
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* =============================================================================
+   ZigCore v0.3 additions — Temperament · Turnover
+   The "make it breathe" layer (Scout review, Murmuration v1.7). Both are
+   ENGINE laws, not species tricks — any organism (fish school, bat exodus,
+   kelp, pollen cloud) inherits long-duration mood + gentle membership churn.
+     [x] Temperament — minute-scale latent MOOD that quietly biases behavior.
+                        Never announced. Deterministic (export-safe).
+     [x] Turnover    — anonymous individuals quietly depart & rejoin. The
+                        population stays constant; the membership drifts.
+                        Preserves leaderlessness: wanderers are never focal.
+   ========================================================================== */
+(function (global) {
+  "use strict";
+  const ZigCore = global.ZigCore; if (!ZigCore) return;
+  ZigCore.VERSION = "0.3.0";
+  const clamp = ZigCore.util.clamp;
+
+  /* ---- Temperament — "this flock feels different today" -------------------
+     A few latent axes, each a slow bounded drift (sum of incommensurate sines
+     on a MINUTES timescale). The organism maps these axes onto gentle biases
+     of its own levers — never onto anything the viewer can name. speed=0
+     freezes the mood (useful while judging). Deterministic from seed.        */
+  ZigCore.Temperament = {
+    axes: 3, speed: 1, t: 0, value: [0.5, 0.5, 0.5], _seeds: null,
+    // characteristic periods (seconds) — 2 to 12 minutes, so a 10-20 min
+    // session drifts through several unrepeating internal states
+    init(seed, opts) {
+      Object.assign(this, opts || {});
+      const r = ZigCore.rng((seed || 0) ^ 0x7EE9);
+      this._seeds = []; this.value = [];
+      for (let i = 0; i < this.axes; i++) {
+        this._seeds.push({
+          f1: 1 / (150 + r() * 250), f2: 1 / (280 + r() * 440), f3: 1 / (95 + r() * 130),
+          p1: r() * 6.283, p2: r() * 6.283, p3: r() * 6.283, bias: 0.4 + r() * 0.2
+        });
+        this.value.push(0.5);
+      }
+      return this;
+    },
+    update(dt) {
+      if (!this._seeds) this.init(1);
+      this.t += dt * this.speed; const T = this.t * 6.283;
+      for (let i = 0; i < this.axes; i++) {
+        const s = this._seeds[i];
+        this.value[i] = clamp(s.bias
+          + 0.30 * Math.sin(T * s.f1 + s.p1)
+          + 0.16 * Math.sin(T * s.f2 + s.p2)
+          + 0.09 * Math.sin(T * s.f3 + s.p3), 0, 1);
+      }
+    },
+    axis(i) { return this.value[i] || 0; },
+    set(i, v) { this.value[i] = clamp(v, 0, 1); }   // manual lock / testing
+  };
+
+  /* ---- Turnover — gentle membership churn ---------------------------------
+     Every so often one anonymous individual quietly leaves (steers to a far
+     target); a while later it drifts back from an unexpected edge and rejoins.
+     Population is EXACTLY constant (same index re-flocks — the viewer can't
+     tell, and there is nothing to follow). The kernel reads the wanderer
+     slots and applies a gentle steer override; the departing agent's
+     agitation is suppressed so it never becomes a focal event.
+     update(dt, count, center[3], radius) → fill via getWanderers().          */
+  ZigCore.Turnover = {
+    slots: 4, interval: 110, departSec: 22, returnSec: 16, reach: 3.6,
+    _t: 0, _timer: 0, _rng: null, _list: null,
+    init(seed, opts) {
+      Object.assign(this, opts || {});
+      this._rng = ZigCore.rng((seed || 0) ^ 0x2A17);
+      this._list = [];
+      for (let i = 0; i < this.slots; i++) this._list.push({ active: false, idx: -1, phase: "", age: 0, tar: [0, 0, 0], str: 0 });
+      this._timer = this.interval * 0.4;   // first departure comes fairly soon
+      return this;
+    },
+    update(dt, count, center, radius) {
+      if (!this._list) this.init(1);
+      this._t += dt; this._timer -= dt;
+      const r = this._rng;
+      // schedule a new departure into a free slot
+      if (this._timer <= 0 && count > 50) {
+        const slot = this._list.find(s => !s.active);
+        if (slot) {
+          const th = r() * 6.283, ph = (r() - 0.5) * 1.6;
+          slot.active = true; slot.phase = "leaving"; slot.age = 0; slot.str = 0.85;
+          slot.idx = Math.floor(r() * count);
+          slot.tar = [center[0] + Math.cos(th) * Math.cos(ph) * radius * this.reach,
+                      center[1] + Math.sin(ph) * radius * (this.reach * 0.5) + radius * 0.6,
+                      center[2] + Math.sin(th) * Math.cos(ph) * radius * this.reach];
+        }
+        this._timer = this.interval * (0.6 + r() * 0.9);
+      }
+      // advance each active slot
+      for (const s of this._list) {
+        if (!s.active) continue;
+        s.age += dt;
+        if (s.phase === "leaving" && s.age > this.departSec) {
+          // turn for home from an unexpected edge
+          const th = r() * 6.283, ph = (r() - 0.5) * 1.2;
+          s.phase = "returning"; s.age = 0; s.str = 0.7;
+          s.tar = [center[0] + Math.cos(th) * Math.cos(ph) * radius * 1.15,
+                   center[1] + Math.sin(ph) * radius * 0.6 + radius * 0.3,
+                   center[2] + Math.sin(th) * Math.cos(ph) * radius * 1.15];
+        } else if (s.phase === "returning" && s.age > this.returnSec) {
+          s.active = false; s.idx = -1; s.str = 0;   // release → normal cohesion re-flocks it
+        }
+      }
+    },
+    getWanderers(idxTar, meta) {   // idxTar,meta : Float32Array(slots*4)
+      for (let i = 0; i < this.slots; i++) {
+        const s = this._list[i], o = i * 4;
+        if (s && s.active) {
+          idxTar[o] = s.idx; idxTar[o + 1] = s.tar[0]; idxTar[o + 2] = s.tar[1]; idxTar[o + 3] = s.tar[2];
+          meta[o] = s.str; meta[o + 1] = 0; meta[o + 2] = 0; meta[o + 3] = 0;
+        } else { idxTar[o] = -1; meta[o] = 0; }
+      }
+    },
+    activeCount() { return this._list ? this._list.filter(s => s.active).length : 0; }
+  };
+
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* =============================================================================
+   ZigCore v0.4 addition — Pacemaker (the performer's clock)
+   Promoted during the Fireflies/Pulse build, 2026-07.
+
+   The anti-"generative art meh" law: the performer does not COMMAND the
+   field's rhythm — they become one more oscillator in it, and the field must
+   be PERSUADED. Pacemaker maintains a live phase/period estimate of the
+   performer's rhythm from note-on times (a phase-locked loop, not a BPM
+   detector), plus a CONFIDENCE that rises with steady playing and decays
+   with silence or sloppiness. Confidence gates the coupling: play committed
+   and the field locks to you; rush or drift and it slips back to its own
+   pulse. Losing the field is possible — which is what makes winning it mean
+   something.
+
+   Usage: Pacemaker.init() once · Pacemaker.update(dt) every frame AFTER
+   Perf.update (it watches Perf for onsets). Read:
+     .phase 0..2π (your beat: 0 = the flash-point) · .period s · .bpm
+     .confidence 0..1 · .pull (= confidence, gate for coupling) · .beat
+   (Export note: Recorder tracks carry breath/bend/attack, not note times —
+    pacemaker playback fidelity for export mode is a v2 item.)
+   ========================================================================== */
+(function (global) {
+  "use strict";
+  const ZigCore = global.ZigCore; if (!ZigCore) return;
+  ZigCore.VERSION = "0.4.0";
+  const clamp = ZigCore.util.clamp, lerp = ZigCore.util.lerp;
+
+  ZigCore.Pacemaker = {
+    phase: 0, period: 0.75, confidence: 0, pull: 0, beat: false, bpm: 80, omega: 8.38,
+    flow: 0,                     // 0..1 streaming intensity — notes INSIDE a ribbon feed this
+    _lastOnsetMs: -1, _lastT: -1, _prevT: -1, _pa: 0,
+    /* RIBBON LISTENING (from Bill's own telemetry, 2026-07-19): his style is
+       "play fast to go slow" — ~10 notes/s bundled into ribbons whose STARTS
+       pulse at ~3.4s (18 bpm at phrase level), with deliberate sparse taps
+       (~0.75s) as a second vocabulary. So: a note is a BEAT-TAP only when it
+       follows silence (> ribbonGap). Notes inside a ribbon feed `flow`.
+       The pulse lives in the gaps, not the notes. */
+    _opts: { ribbonGap: 0.35, minPeriod: 0.3, maxPeriod: 4.5 },
+    init(opts) {
+      Object.assign(this._opts, opts || {});
+      this.phase = 0; this.confidence = 0; this.flow = 0;
+      this._lastOnsetMs = -1; this._lastT = -1; this._prevT = -1; this._pa = 0;
+      return this;
+    },
+    /* every note-on lands here; only gap-preceded ones reach the PLL */
+    noteOn(tSec) {
+      const gap = this._prevT < 0 ? 1e9 : tSec - this._prevT;
+      this._prevT = tSec;
+      this.flow = Math.min(1, this.flow + 0.12);
+      if (gap > this._opts.ribbonGap) this._onset(tSec);
+    },
+    _now() { return (global.performance && performance.now) ? performance.now() : 0; },
+
+    _onset(tSec) {
+      if (this._lastT >= 0) {
+        const ioi = tSec - this._lastT;
+        if (ioi > 0.12 && ioi < 20.0) {
+          /* harmonic snap: a double/quadruple-length phrase is still YOUR
+             pulse (a 16.7s mega-ribbon ≈ 5 × the 3.4s phrase beat) */
+          const ratio = ioi / this.period;
+          const mult = Math.round(ratio);
+          let cand = (mult >= 1 && mult <= 6 && Math.abs(ratio - mult) < 0.25 * mult) ? ioi / mult : ioi;
+          cand = clamp(cand, this._opts.minPeriod, this._opts.maxPeriod);
+          this.period = lerp(this.period, cand, this.confidence > 0.4 ? 0.22 : 0.45);
+          /* phase error at the onset — you tapped: how far were we from 0? */
+          let e = this.phase % 6.28318; if (e > 3.14159) e -= 6.28318;
+          this.phase -= e * 0.55;                       // snap toward your beat
+          /* accuracy → confidence, ASYMMETRIC: only taps that land where the
+             field predicted (>70% accurate) build trust; surprises spend it
+             faster than accuracy earns it. Random tapping averages ~50% —
+             the field cannot be fooled. */
+          const acc = 1 - Math.min(Math.abs(e) / 3.14159, 1);
+          this.confidence = clamp(this.confidence +
+            (acc > 0.7 ? (acc - 0.7) * 0.55 : -(0.7 - acc) * 0.4), 0, 1);
+        }
+      }
+      this._lastT = tSec;
+    },
+
+    update(dt) {
+      const P = ZigCore.Perf;
+      /* onset detection: newest note-on start from Perf's own ledger */
+      if (P) {
+        let newest = -1;
+        P.heldT.forEach((t0) => { if (t0 > newest) newest = t0; });
+        if (newest > this._lastOnsetMs + 40) { this._lastOnsetMs = newest; this.noteOn(newest / 1000); }
+        else if (P.attack > this._pa + 0.22) {          // fallback: attack rising edge
+          const now = this._now();
+          if (now > this._lastOnsetMs + 60) { this._lastOnsetMs = now; this.noteOn(now / 1000); }
+        }
+        this._pa = P.attack;
+      }
+      this.flow *= Math.exp(-dt / 0.8);                 // streaming intensity fades in ~1s of quiet
+      /* advance your clock; silence loosens the grip */
+      const prev = this.phase;
+      this.phase += (6.28318 / Math.max(this.period, 0.05)) * dt;
+      this.beat = this.phase >= 6.28318;
+      if (this.beat) this.phase -= 6.28318;
+      const idleFor = this._lastT < 0 ? 1e9 : (this._now() / 1000 - this._lastT);
+      /* a streaming ribbon is not silence — don't punish the mega-phrase */
+      if (idleFor > this.period * 2 && this.flow < 0.12) this.confidence *= Math.exp(-dt / 2.5);
+      this.pull = this.confidence;
+      this.bpm = 60 / Math.max(this.period, 0.05);
+      this.omega = 6.28318 / Math.max(this.period, 0.05);   // your beat as rad/s —
+      // species use it for FREQUENCY ADAPTATION (real fireflies shift their
+      // intrinsic rate toward a driver; phase pull then does fine alignment)
+      return this.phase;
+    }
+  };
+
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>
+/* ===== inlined: engine/zigmesh.js ===== */
+/* =============================================================================
+   ZigMesh — parametric agent geometry (ENGINE module, additive)
+   v0.1 · classic script · exposes a global `ZigMesh`
+   Load anywhere after zigcore.js; zero DOM, zero GPU — pure arrays.
+
+   THE IDEA (Fireflies build, 2026-07): stop hand-carving agent meshes.
+   Bird and fish were hardcoded WGSL arrays; every new silhouette meant new
+   engineering. ZigMesh makes agent SHAPE a set of numbers, so species pick a
+   point in shape-space and the pareidolia becomes tunable:
+     · length/width — the stroke's proportions
+     · curve        — crescent bow of the spine (sickle-ness)
+     · twist        — total roll along the length; sweeps highlights as it turns
+     · taper        — tip asymmetry: 0 = blunt/blunt … 1 = blunt/drawn-out
+     · camber       — cross-section cup: dome one side, hollow the other
+   One generator → sickle-petal, ribbon, ember-ish blob, moth wing, and the
+   old bird/fish registers are all presets, not projects.
+
+   Output is renderer-ready, non-indexed triangles:
+     ZigMesh.shard(opts) → { pos: Float32Array(v*3), nrm: Float32Array(v*3),
+                             side: Float32Array(v),  u: Float32Array(v),
+                             verts: v }
+     side ∈ [-1..1] across the width (edge shading) · u ∈ [0..1] along length.
+   Winding: counter-clockwise seen from the dome (+normal) side, so
+   front_facing in a shader = the dorsal face.
+   ========================================================================== */
+(function (global) {
+  "use strict";
+  const ZigMesh = global.ZigMesh || (global.ZigMesh = {});
+  ZigMesh.VERSION = "0.1.0";
+
+  const V3 = {
+    sub: (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]],
+    add: (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]],
+    scl: (a, s) => [a[0] * s, a[1] * s, a[2] * s],
+    cross: (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]],
+    norm: (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1e-9; return [a[0] / l, a[1] / l, a[2] / l]; }
+  };
+
+  ZigMesh.shard = function (opts) {
+    const o = Object.assign({
+      segs: 14, length: 1.8, width: 0.42,
+      curve: 0.34, twist: 1.35, taper: 0.72, camber: 0.30
+    }, opts || {});
+    const S = Math.max(3, o.segs | 0);
+
+    /* width profile — a beta-ish lobe. taper skews it: one tip blunt, the
+       other drawn long (asymmetry is what makes every orientation legible). */
+    const ta = 0.38 + 0.34 * (1 - o.taper);        // start-tip fullness
+    const tb = 0.85 + 1.75 * o.taper;              // end-tip draw
+    const wRaw = (u) => Math.pow(Math.max(u, 0), ta) * Math.pow(Math.max(1 - u, 0), tb);
+    let wMax = 1e-9;
+    for (let i = 0; i <= 64; i++) wMax = Math.max(wMax, wRaw(i / 64));
+    const halfW = (u) => o.width * wRaw(u) / wMax;
+
+    /* spine — bowed in z (the sickle), param along x */
+    const spine = (u) => [(u - 0.5) * o.length, 0, o.curve * Math.sin(Math.PI * u)];
+
+    /* stations: local frame + three rows (edge+ · cambered center · edge−) */
+    const P = [], N = [], SD = [], UU = [];
+    const rows = [];                                // rows[s] = {p:[3][3], n:[3][3]}
+    for (let s = 0; s <= S; s++) {
+      const u = s / S;
+      const eps = 0.5 / S;
+      const T = V3.norm(V3.sub(spine(Math.min(u + eps, 1)), spine(Math.max(u - eps, 0))));
+      let lat0 = V3.norm(V3.cross([0, 1, 0], T));   // lateral, ⊥ spine, ~z-ish
+      const th = o.twist * (u - 0.5);
+      /* Rodrigues about T (lat0 ⊥ T): lat = lat0·cosθ + (T×lat0)·sinθ */
+      const lat = V3.norm(V3.add(V3.scl(lat0, Math.cos(th)), V3.scl(V3.cross(T, lat0), Math.sin(th))));
+      const n0 = V3.norm(V3.cross(T, lat));         // face normal (dome side)
+      const h = halfW(u), c = spine(u);
+      const tilt = 1.25 * o.camber;                 // edge normals lean outward on the dome
+      rows.push({
+        p: [V3.add(c, V3.scl(lat, h)),                                  // edge +
+            V3.add(c, V3.scl(n0, o.camber * h)),                        // cambered center
+            V3.sub(c, V3.scl(lat, h))],                                 // edge −
+        n: [V3.norm(V3.add(n0, V3.scl(lat, tilt))),
+            n0,
+            V3.norm(V3.sub(n0, V3.scl(lat, tilt)))],
+        u
+      });
+    }
+
+    /* two strips of quads → 4·S triangles, CCW from the dome side */
+    const emit = (r0, r1, a, b) => {   // quad between row r0/r1, columns a→b
+      const q = [[r0, a], [r0, b], [r1, b], [r0, a], [r1, b], [r1, a]];
+      for (const [r, ccol] of q) {
+        const R = rows[r];
+        P.push(...R.p[ccol]); N.push(...R.n[ccol]);
+        SD.push(ccol === 0 ? 1 : (ccol === 1 ? 0 : -1)); UU.push(R.u);
+      }
+    };
+    for (let s = 0; s < S; s++) { emit(s, s + 1, 0, 1); emit(s, s + 1, 1, 2); }
+
+    return {
+      pos: new Float32Array(P), nrm: new Float32Array(N),
+      side: new Float32Array(SD), u: new Float32Array(UU),
+      verts: SD.length, params: o
+    };
+  };
+
+  /* ---- toWGSL — bake a mesh into shader-source private arrays -------------
+     The flock kernel splices this in when a species supplies opts.mesh:
+       <NAME>_POS array<vec3f,N> · <NAME>_NRM array<vec3f,N> ·
+       <NAME>_AUX array<vec2f,N>  (x = side −1..1 · y = u along length)      */
+  ZigMesh.toWGSL = function (m, name) {
+    const nm = name || "SHARD";
+    const f = (x) => {
+      const s = (Math.round(x * 10000) / 10000).toString();
+      return s.indexOf(".") < 0 && s.indexOf("e") < 0 ? s + ".0" : s;
+    };
+    let pos = "", nrm = "", aux = "";
+    for (let i = 0; i < m.verts; i++) {
+      pos += "vec3f(" + f(m.pos[i*3]) + "," + f(m.pos[i*3+1]) + "," + f(m.pos[i*3+2]) + "),";
+      nrm += "vec3f(" + f(m.nrm[i*3]) + "," + f(m.nrm[i*3+1]) + "," + f(m.nrm[i*3+2]) + "),";
+      aux += "vec2f(" + f(m.side[i]) + "," + f(m.u[i]) + "),";
+    }
+    const N = m.verts;
+    return "var<private> " + nm + "_POS: array<vec3f, " + N + "> = array<vec3f, " + N + ">(" + pos.slice(0, -1) + ");\n" +
+           "var<private> " + nm + "_NRM: array<vec3f, " + N + "> = array<vec3f, " + N + ">(" + nrm.slice(0, -1) + ");\n" +
+           "var<private> " + nm + "_AUX: array<vec2f, " + N + "> = array<vec2f, " + N + ">(" + aux.slice(0, -1) + ");\n";
+  };
+
+  /* ---- presets — points in shape-space, named ---------------------------- */
+  ZigMesh.presets = {
+    /* the letterform: crescent blade, quarter-ish twist, long drawn tip,
+       cupped cross-section. Edge-on a calligraphic line, broadside a lobe,
+       and the twist sweeps a highlight as it turns. */
+    sicklePetal: { segs: 14, length: 1.8, width: 0.42, curve: 0.34, twist: 1.35, taper: 0.72, camber: 0.30 },
+    /* long thin twisted strip — the swarm becomes flowing script */
+    ribbon:      { segs: 18, length: 2.6, width: 0.16, curve: 0.10, twist: 2.6,  taper: 0.5,  camber: 0.10 },
+    /* soft blunt lobe — nearly tonal-only, the gentlest register */
+    ember:       { segs: 10, length: 1.1, width: 0.55, curve: 0.08, twist: 0.25, taper: 0.35, camber: 0.55 },
+    /* WOOD BLOCK (Bill, 2026-07-20): mass, not calligraphy — short, wide,
+       deep-cupped, barely twisted. Reads as solid matter; tumbles heavy. */
+    woodblock:   { segs: 8,  length: 1.0, width: 0.60, curve: 0.12, twist: 0.35, taper: 0.45, camber: 0.60 }
+  };
+
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>
+/* ===== inlined: engine/zigmidi.js ===== */
+/* =============================================================================
+   ZigMidi — recorded performance as a live input (ENGINE module, additive)
+   v0.1 · classic script · exposes a global `ZigMidi`
+
+   THE IDEA (Sickle Field build, 2026-07): a Standard MIDI File of a
+   performance IS the performance — breath CCs, notes, bends, all of it.
+   ZigMidi parses the file and streams its events into ZigCore.Perf.onMsg
+   byte-identical to the live instrument, so the engine cannot tell the
+   recording from the horn. Consequences:
+     · any organism can dance to a captured take, audio synced later
+     · export renders become deterministic performances, not sims
+     · the LIVE instrument keeps flowing into the same Perf — the performer
+       can duet with their own history
+   ========================================================================== */
+(function (global) {
+  "use strict";
+  const ZigMidi = global.ZigMidi || (global.ZigMidi = {});
+  ZigMidi.VERSION = "0.1.0";
+
+  /* ---- parse — SMF type 0/1, tempo-mapped to seconds -------------------- */
+  ZigMidi.parse = function (buf) {
+    const u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    let p = 0;
+    const str4 = () => { const s = String.fromCharCode(u8[p], u8[p+1], u8[p+2], u8[p+3]); p += 4; return s; };
+    const u32 = () => { const v = dv.getUint32(p); p += 4; return v; };
+    const u16 = () => { const v = dv.getUint16(p); p += 2; return v; };
+
+    if (str4() !== "MThd") throw new Error("not a Standard MIDI File");
+    const hlen = u32(); u16(); const ntrk = u16(); const div = u16();
+    p += hlen - 6;
+    if (div & 0x8000) throw new Error("SMPTE division not supported");
+
+    const raw = [];
+    for (let tr = 0; tr < ntrk; tr++) {
+      if (str4() !== "MTrk") throw new Error("bad track chunk");
+      const len = u32(), end = p + len;
+      let tick = 0, run = 0, b;
+      while (p < end) {
+        let d = 0;
+        do { b = u8[p++]; d = (d << 7) | (b & 0x7f); } while (b & 0x80);
+        tick += d;
+        let st = u8[p];
+        if (st & 0x80) { p++; if (st < 0xF0) run = st; } else { st = run; }
+        if (st === 0xFF) {
+          const type = u8[p++]; let ln = 0;
+          do { b = u8[p++]; ln = (ln << 7) | (b & 0x7f); } while (b & 0x80);
+          if (type === 0x51) raw.push({ tick, tempo: (u8[p] << 16) | (u8[p+1] << 8) | u8[p+2] });
+          p += ln;
+        } else if (st === 0xF0 || st === 0xF7) {
+          let ln = 0;
+          do { b = u8[p++]; ln = (ln << 7) | (b & 0x7f); } while (b & 0x80);
+          p += ln;
+        } else {
+          const hi = st & 0xF0;
+          const n1 = u8[p++];
+          const two = !(hi === 0xC0 || hi === 0xD0);
+          raw.push({ tick, data: two ? [st, n1, u8[p++]] : [st, n1] });
+        }
+      }
+    }
+
+    raw.sort((a, b2) => a.tick - b2.tick);
+    let tempo = 500000, lastTick = 0, lastSec = 0;
+    const events = [];
+    for (const e of raw) {
+      const sec = lastSec + (e.tick - lastTick) * (tempo / 1e6) / div;
+      lastSec = sec; lastTick = e.tick;
+      if (e.tempo) tempo = e.tempo;
+      else events.push({ t: sec, data: new Uint8Array(e.data) });
+    }
+    let notes = 0, breathCC = 0;
+    for (const e of events) {
+      const s = e.data[0] & 0xF0;
+      if (s === 0x90 && e.data[2] > 0) notes++;
+      if (s === 0xB0 && e.data[1] === 2) breathCC++;
+    }
+    return { events, duration: lastSec, notes, breathCC };
+  };
+
+  /* ---- player — streams into Perf.onMsg on the frame clock -------------- */
+  ZigMidi.createPlayer = function (parsed, opts) {
+    const o = Object.assign({ loop: true, into: null }, opts || {});
+    return {
+      t: 0, i: 0, playing: false, duration: parsed.duration,
+      notes: parsed.notes, loop: o.loop,
+      toggle() { this.playing = !this.playing; return this.playing; },
+      stop() { this.playing = false; this.t = 0; this.i = 0; },
+      update(dt) {
+        if (!this.playing) return;
+        this.t += dt;
+        const P = o.into || (global.ZigCore && global.ZigCore.Perf);
+        while (this.i < parsed.events.length && parsed.events[this.i].t <= this.t) {
+          if (P) P.onMsg({ data: parsed.events[this.i].data });
+          this.i++;
+        }
+        if (this.i >= parsed.events.length) {
+          if (this.loop) {
+            this.t = 0; this.i = 0;
+            if (P) { P.held.clear(); P.heldT.clear(); }   // clean rejoin at the top
+          } else { this.playing = false; }
+        }
+      }
+    };
+  };
+
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>
+/* ===== inlined: engine/zigwebgpu.js ===== */
+/* =============================================================================
+   ZigWebGPU — the Zigverse GPU vault (WebGPU compute + render backend)
+   v0.1 · classic script · exposes a global `ZigWebGPU`
+   Load AFTER zigcore.js, BEFORE the species:
+     <script src="zigcore.js"><\/script>
+     <script src="zigwebgpu.js"><\/script>
+     <script src="species/murmuration.js"><\/script>
+
+   What lives here is ENGINE, not species — every emergent swarm inherits it:
+     · probe()        — the WebGPU render-probe gate (venue readiness)
+     · init(canvas)   — device / context / depth / MSAA plumbing + resize
+     · mat            — minimal mat4 (perspective · lookAt · multiply)
+     · Watchdog       — rolling-fps → quality-tier stepper (LIVE mode only)
+     · createFlock()  — THE FLOCK KERNEL:
+         - spatial hash grid (fixed-capacity cells, atomic insert)
+         - TOPOLOGICAL 7-nearest-neighbor boids (rank, not radius — the law
+           that lets a murmuration morph without tearing)
+         - impulse-wave propagation (a strike at a point → a wavefront kick)
+         - neighbor agitation contagion (the social wave — spreads one
+           neighbor-hop per step, far faster than any bird flies)
+         - per-agent Drive-swell delay taps (the breath, read at each agent's
+           own lag → the performer's swell travels the cloud as a wave)
+         - banking → broadside/edge-on shimmer (the dark band, emergent)
+         - double-buffered state → deterministic under export mode
+   Species supply: meanings (what breath/attack/bend DO), palette, Director.
+   ========================================================================== */
+(function (global) {
+  "use strict";
+  const ZigWebGPU = global.ZigWebGPU || (global.ZigWebGPU = {});
+  ZigWebGPU.VERSION = "0.5.0";   // 0.2: ZigMesh · 0.3: ZigPhase · 0.3.1: Pacemaker · 0.4: Avatar · 0.5: SURFACE (the lake law)
+
+  /* ---- probe — the gate. Green or it doesn't ship. ---------------------- */
+  ZigWebGPU.probe = async function () {
+    if (!global.navigator || !navigator.gpu)
+      return { ok: false, reason: "WebGPU unavailable — use Chrome/Edge 113+ (or enable chrome://flags/#enable-unsafe-webgpu)" };
+    let adapter = null;
+    try { adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" }); }
+    catch (e) { return { ok: false, reason: "requestAdapter failed: " + e }; }
+    if (!adapter) return { ok: false, reason: "No WebGPU adapter (GPU drivers / headless?)" };
+    const info = adapter.info || {};
+    const desc = [info.vendor, info.architecture, info.device].filter(Boolean).join(" · ") || "adapter";
+    return { ok: true, adapter, desc };
+  };
+
+  /* ---- minimal mat4 (column-major, WebGPU clip space z 0..1) ------------- */
+  ZigWebGPU.mat = {
+    persp(fovY, aspect, near, far) {
+      const f = 1 / Math.tan(fovY / 2), o = new Float32Array(16);
+      o[0] = f / aspect; o[5] = f;
+      o[10] = far / (near - far); o[11] = -1;
+      o[14] = (near * far) / (near - far);
+      return o;
+    },
+    lookAt(eye, c, up) {
+      const zx = eye[0] - c[0], zy = eye[1] - c[1], zz = eye[2] - c[2];
+      let zl = Math.hypot(zx, zy, zz) || 1; const Z = [zx / zl, zy / zl, zz / zl];
+      const X0 = up[1] * Z[2] - up[2] * Z[1], X1 = up[2] * Z[0] - up[0] * Z[2], X2 = up[0] * Z[1] - up[1] * Z[0];
+      let xl = Math.hypot(X0, X1, X2) || 1; const X = [X0 / xl, X1 / xl, X2 / xl];
+      const Y = [Z[1] * X[2] - Z[2] * X[1], Z[2] * X[0] - Z[0] * X[2], Z[0] * X[1] - Z[1] * X[0]];
+      const o = new Float32Array(16);
+      o[0] = X[0]; o[1] = Y[0]; o[2] = Z[0];
+      o[4] = X[1]; o[5] = Y[1]; o[6] = Z[1];
+      o[8] = X[2]; o[9] = Y[2]; o[10] = Z[2];
+      o[12] = -(X[0] * eye[0] + X[1] * eye[1] + X[2] * eye[2]);
+      o[13] = -(Y[0] * eye[0] + Y[1] * eye[1] + Y[2] * eye[2]);
+      o[14] = -(Z[0] * eye[0] + Z[1] * eye[1] + Z[2] * eye[2]);
+      o[15] = 1;
+      return o;
+    },
+    mul(a, b) {           // a * b
+      const o = new Float32Array(16);
+      for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) {
+        o[c * 4 + r] = a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] + a[8 + r] * b[c * 4 + 2] + a[12 + r] * b[c * 4 + 3];
+      }
+      return o;
+    }
+  };
+
+  /* ---- Watchdog — fps → quality tier (live mode ONLY; export pins max) --- */
+  ZigWebGPU.Watchdog = function (tiers, onTier) {
+    let tier = 0, acc = 0, n = 0, low = 0, high = 0;
+    return {
+      get tier() { return tier; },
+      update(dt) {
+        if (global.ZigCore && global.ZigCore.mode === "export") return;   // exactly wrong in export
+        acc += dt; n++;
+        if (acc >= 0.5) {
+          const fps = n / acc; acc = 0; n = 0;
+          if (fps < 48) { low += 0.5; high = 0; } else if (fps > 57) { high += 0.5; low = 0; } else { low = 0; high = 0; }
+          if (low >= 2 && tier < tiers.length - 1) { tier++; low = 0; onTier(tier, tiers[tier], fps); }
+          else if (high >= 8 && tier > 0) { tier--; high = 0; onTier(tier, tiers[tier], fps); }
+        }
+      }
+    };
+  };
+
+  /* ---- init — device, context, depth+MSAA, resize ------------------------ */
+  ZigWebGPU.init = async function (canvas, opts) {
+    opts = opts || {};
+    const probe = await ZigWebGPU.probe();
+    if (!probe.ok) throw new Error(probe.reason);
+    const device = await probe.adapter.requestDevice();
+    // node telemetry: surface every GPU validation error — a silent black screen
+    // at a venue is the enemy (Venue Node Spec §3)
+    device.addEventListener("uncapturederror", (e) => console.error("[ZigWebGPU]", e.error && e.error.message));
+    device.lost.then((info) => console.error("[ZigWebGPU] device lost:", info.reason, info.message));
+    const context = canvas.getContext("webgpu");
+    const format = navigator.gpu.getPreferredCanvasFormat();
+    // COPY_SRC: the frame is readable — the seed of the export-capture pipeline
+    // (Output Targets doc: capture frames → ffmpeg → 4K file) and of verification.
+    context.configure({ device, format, alphaMode: "opaque", usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
+    const gpu = {
+      device, context, format, canvas, probe,
+      sampleCount: opts.msaa === false ? 1 : 4,
+      depthTex: null, msaaTex: null, w: 0, h: 0,
+      ensureTargets() {
+        const dpr = Math.min(global.devicePixelRatio || 1, 2);
+        const w = Math.max(8, Math.floor(canvas.clientWidth * dpr) || canvas.width);
+        const h = Math.max(8, Math.floor(canvas.clientHeight * dpr) || canvas.height);
+        if (w === this.w && h === this.h && this.depthTex) return;
+        canvas.width = w; canvas.height = h; this.w = w; this.h = h;
+        if (this.depthTex) this.depthTex.destroy();
+        if (this.msaaTex) this.msaaTex.destroy();
+        this.depthTex = device.createTexture({
+          size: [w, h], sampleCount: this.sampleCount,
+          format: "depth24plus", usage: GPUTextureUsage.RENDER_ATTACHMENT
+        });
+        this.msaaTex = this.sampleCount > 1 ? device.createTexture({
+          size: [w, h], sampleCount: this.sampleCount,
+          format, usage: GPUTextureUsage.RENDER_ATTACHMENT
+        }) : null;
+      }
+    };
+    gpu.ensureTargets();
+    return gpu;
+  };
+
+  /* ========================================================================
+     SCENE — a shared world many species draw into.
+     Owns the camera (view uniform), the sky, and the shared depth/MSAA pass.
+     Species call computeInto(encoder) then recordInto(pass); the scene
+     sequences them so a fish school, a kelp forest and a murmuration can
+     inhabit ONE tank with correct depth, one camera, one light. This is the
+     engine's "installation" primitive — every layered piece inherits it.
+     NB: the View struct here MIRRORS the one in the flock kernel; keep in sync.
+     ===================================================================== */
+  const SCENE_SKY_WGSL = `
+struct View {
+  viewProj: mat4x4f, camPos: vec4f, camRight: vec4f, camUp: vec4f, camFwd: vec4f,
+  sunDir: vec4f, skyTop: vec4f, skyMid: vec4f, horizon: vec4f, ground: vec4f,
+  sunCol: vec4f, birdDark: vec4f, birdLight: vec4f, render: vec4f, render2: vec4f, render3: vec4f,
+};
+@group(0) @binding(0) var<uniform> V: View;
+struct SkyOut { @builtin(position) cp: vec4f, @location(0) uv: vec2f };
+@vertex fn skyVs(@builtin(vertex_index) vi: u32) -> SkyOut {
+  var o: SkyOut; let xy = vec2f(f32((vi << 1u) & 2u), f32(vi & 2u)) * 2.0 - 1.0;
+  o.cp = vec4f(xy, 0.9999, 1.0); o.uv = xy; return o;
+}
+fn skyColor(dir: vec3f) -> vec3f {
+  let y = dir.y;
+  var col = mix(V.horizon.rgb, V.skyMid.rgb, smoothstep(-0.02, 0.28, y));
+  col = mix(col, V.skyTop.rgb, smoothstep(0.22, 0.85, y));
+  let s = max(dot(dir, normalize(V.sunDir.xyz)), 0.0);
+  col += V.sunCol.rgb * (pow(s, 350.0) * 1.4 + pow(s, 24.0) * 0.35) * V.sunDir.w;
+  if (y < 0.0) { col = mix(col, V.ground.rgb, smoothstep(0.0, -0.06, y)); }
+  return col;
+}
+fn marineSnow(dir: vec3f) -> vec3f {
+  let sp = dir.xy * 70.0 + vec2f(0.0, V.camPos.w * 0.5);
+  let cell = floor(sp); let hh = fract(sin(dot(cell, vec2f(19.73, 83.11))) * 3571.31);
+  let d = fract(sp) - 0.5; let mote = smoothstep(0.13, 0.0, length(d)) * step(0.86, hh);
+  return vec3f(0.55, 0.62, 0.60) * mote * (0.35 + 0.65 * max(dir.y, 0.0));
+}
+fn waterColor(dir: vec3f) -> vec3f {
+  let y = dir.y; let deep = V.skyTop.rgb; let mid = V.skyMid.rgb; let surf = V.horizon.rgb;
+  var col = mix(mid, deep, smoothstep(0.0, -0.75, y));
+  col = mix(col, surf, smoothstep(0.05, 0.85, y));
+  let sd = normalize(V.sunDir.xyz); let s = max(dot(dir, sd), 0.0);
+  col = mix(col, surf * 1.5 + V.sunCol.rgb * 0.35, smoothstep(0.82, 0.995, y));
+  col += V.sunCol.rgb * pow(s, 90.0) * 0.6 * V.sunDir.w;
+  let ang = atan2(dir.x, dir.z);
+  let ripple = 0.55 + 0.45 * sin(ang * 16.0 + V.camPos.w * 0.35) * sin(ang * 6.3 - V.camPos.w * 0.21);
+  col += V.sunCol.rgb * pow(max(y, 0.0), 1.4) * pow(s, 2.5) * ripple * V.render2.y;
+  col += marineSnow(dir) * V.ground.w;
+  return col;
+}
+@fragment fn skyFs(inp: SkyOut) -> @location(0) vec4f {
+  let aspect = V.camRight.w; let tf = V.camUp.w;
+  let dir = normalize(V.camFwd.xyz + V.camRight.xyz * inp.uv.x * tf * aspect + V.camUp.xyz * inp.uv.y * tf);
+  if (V.render.x > 0.5) { return vec4f(waterColor(dir), 1.0); }   // fish/underwater scene
+  return vec4f(skyColor(dir), 1.0);                                // air scene
+}`;
+
+  ZigWebGPU.createScene = function (gpu, opts) {
+    opts = opts || {};
+    const device = gpu.device;
+    const viewBuf = device.createBuffer({ size: 76 * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    const drawSky = opts.sky !== false;
+    let skyPipe = null, skyBG = null;
+    if (drawSky) {
+      const mod = device.createShaderModule({ code: SCENE_SKY_WGSL });
+      skyPipe = device.createRenderPipeline({
+        layout: "auto",
+        vertex: { module: mod, entryPoint: "skyVs" },
+        fragment: { module: mod, entryPoint: "skyFs", targets: [{ format: gpu.format }] },
+        primitive: { topology: "triangle-list" },
+        depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" },
+        multisample: { count: gpu.sampleCount }
+      });
+      skyBG = device.createBindGroup({ layout: skyPipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: viewBuf } }] });
+    }
+    return {
+      gpu, viewBuf, species: [], _viewArr: null,
+      add(sp) { sp.attachScene(this); this.species.push(sp); return sp; },
+      /* one world-frame: every species' compute, then sky, then every species' draw */
+      frame(viewArr, states) {
+        this._viewArr = viewArr;                      // forest reads eye/time from here
+        device.queue.writeBuffer(viewBuf, 0, viewArr);
+        gpu.ensureTargets();
+        const enc = device.createCommandEncoder();
+        for (let i = 0; i < this.species.length; i++) this.species[i].computeInto(enc, states[i]);
+        const swapView = gpu.context.getCurrentTexture().createView();
+        const rp = enc.beginRenderPass({
+          colorAttachments: [{
+            view: gpu.sampleCount > 1 ? gpu.msaaTex.createView() : swapView,
+            resolveTarget: gpu.sampleCount > 1 ? swapView : undefined,
+            clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: "clear", storeOp: gpu.sampleCount > 1 ? "discard" : "store"
+          }],
+          depthStencilAttachment: { view: gpu.depthTex.createView(), depthClearValue: 1, depthLoadOp: "clear", depthStoreOp: "discard" }
+        });
+        if (drawSky) { rp.setPipeline(skyPipe); rp.setBindGroup(0, skyBG); rp.draw(3); }
+        for (let i = 0; i < this.species.length; i++) this.species[i].recordInto(rp);   // shared depth → correct compositing
+        rp.end();
+        device.queue.submit([enc.finish()]);
+      }
+    };
+  };
+
+  /* ========================================================================
+     THE FLOCK KERNEL
+     ===================================================================== */
+  ZigWebGPU.createFlock = function (gpu, opts) {
+    opts = opts || {};
+    const MAX = opts.max || 150000;
+    const SEED = opts.seed || 0x516;
+    // world: x,z in [-EXT, EXT], y in [0, EXTY]
+    const EXT = opts.extent || 240, EXTY = opts.extentY || 240;
+    const CELL = opts.cell || 12;
+    const GX = Math.ceil((EXT * 2) / CELL), GY = Math.ceil(EXTY / CELL), GZ = GX;
+    const CELLS = GX * GY * GZ, CAP = 24, K = 7;
+    const device = gpu.device;
+    const MESH = opts.mesh || null;   // ZigMesh output → shard agents (render mode 2)
+    const PHASE = opts.phase || null; // ZigPhase law → per-agent blink oscillators (Fireflies build)
+
+    /* ---- WGSL ---------------------------------------------------------- */
+    const COMMON = `
+struct Sim {
+  dt: f32, time: f32, breath: f32, bend: f32,
+  attack: f32, waveSpeed: f32, waveWidth: f32, energy: f32,
+  count: u32, agit_amb: f32, coh_w: f32, sep_w: f32,
+  anchor: vec4f,                // xyz roost anchor · w lift height
+  refpt: vec4f,                 // xyz delay reference (last strike) · w maxDelay
+  wind: vec4f,                  // xyz wind · w ali_w
+  knobsA: vec4f,                // x contagion · y sepRadius · z vmin · w vmaxBase
+  knobsB: vec4f,                // x vmaxAgit · y waveKick · z bankGain · w churn
+  impulses: array<vec4f, 8>,    // xyz origin · w start time (<0 inactive)
+  imp_meta: array<vec4f, 8>,    // x strength
+  taps: array<vec4f, 16>,       // 64 Drive taps, 0..maxDelay
+  wanderers: array<vec4f, 4>,   // x birdIndex · yzw steer target (turnover)
+  wmeta: array<vec4f, 4>,       // x steer strength (<=0 inactive)
+  modes: vec4f,                 // x medium (0=air/gravity · 1=water/neutral) · y K · z tempo · w ignite (ZigPhase)
+  pace: vec4f,                  // x performer phase · y pull (Pacemaker entrainment) · zw free
+  avatarA: vec4f,               // AVATAR law: x agent index (<0 = off) · yzw steer target
+  avatarB: vec4f,               // x steer strength · y flash-now (note-on frame) · z agit burn · w charisma
+};
+const EXT: f32 = ${EXT}.0;
+const EXTY: f32 = ${EXTY}.0;
+const CELL: f32 = ${CELL}.0;
+const GX: i32 = ${GX}; const GY: i32 = ${GY}; const GZ: i32 = ${GZ};
+const CELLS: u32 = ${CELLS}u; const CAP: u32 = ${CAP}u;
+fn cellCoord(p: vec3f) -> vec3i {
+  return vec3i(
+    clamp(i32((p.x + EXT) / CELL), 0, GX - 1),
+    clamp(i32(p.y / CELL), 0, GY - 1),
+    clamp(i32((p.z + EXT) / CELL), 0, GZ - 1));
+}
+fn cellIndex(c: vec3i) -> u32 {
+  return u32(c.x) + u32(c.y) * u32(GX) + u32(c.z) * u32(GX * GY);
+}`;
+
+    const GRID_WGSL = COMMON + `
+@group(0) @binding(0) var<uniform> U: Sim;
+@group(0) @binding(1) var<storage, read> posIn: array<vec4f>;
+@group(0) @binding(2) var<storage, read_write> gridCount: array<atomic<u32>>;
+@group(0) @binding(3) var<storage, read_write> gridIdx: array<u32>;
+
+@compute @workgroup_size(64)
+fn clearGrid(@builtin(global_invocation_id) gid: vec3<u32>) {
+  if (gid.x < CELLS) { atomicStore(&gridCount[gid.x], 0u); }
+}
+@compute @workgroup_size(64)
+fn build(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let i = gid.x; if (i >= U.count) { return; }
+  let ci = cellIndex(cellCoord(posIn[i].xyz));
+  let slot = atomicAdd(&gridCount[ci], 1u);
+  if (slot < CAP) { gridIdx[ci * CAP + slot] = i; }
+}`;
+
+    const STEP_WGSL = COMMON + `
+@group(0) @binding(0) var<uniform> U: Sim;
+@group(0) @binding(1) var<storage, read> posIn: array<vec4f>;
+@group(0) @binding(2) var<storage, read> velIn: array<vec4f>;
+@group(0) @binding(3) var<storage, read> gridCount: array<u32>;
+@group(0) @binding(4) var<storage, read> gridIdx: array<u32>;
+@group(0) @binding(5) var<storage, read_write> posOut: array<vec4f>;
+@group(0) @binding(6) var<storage, read_write> velOut: array<vec4f>;
+
+const K: u32 = ${K}u;
+
+fn tapAt(idx: u32) -> f32 {
+  let i = min(idx, 63u);
+  return U.taps[i >> 2u][i & 3u];
+}
+
+@compute @workgroup_size(64)
+fn step(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let i = gid.x; if (i >= U.count) { return; }
+  var p = posIn[i].xyz;
+  var agit = posIn[i].w;
+  var v = velIn[i].xyz;
+  var bank = velIn[i].w;
+
+  /* ---- topological K-nearest (rank, not radius — THE LAW) ---- */
+  var nd: array<f32, K>;
+  var ni: array<u32, K>;
+  for (var k = 0u; k < K; k++) { nd[k] = 1e12; ni[k] = 0xffffffffu; }
+  let c = cellCoord(p);
+  for (var dz = -1; dz <= 1; dz++) {
+  for (var dy = -1; dy <= 1; dy++) {
+  for (var dx = -1; dx <= 1; dx++) {
+    let cc = c + vec3i(dx, dy, dz);
+    if (cc.x < 0 || cc.y < 0 || cc.z < 0 || cc.x >= GX || cc.y >= GY || cc.z >= GZ) { continue; }
+    let ci = cellIndex(cc);
+    let n = min(gridCount[ci], CAP);
+    for (var s = 0u; s < n; s++) {
+      let j = gridIdx[ci * CAP + s];
+      if (j == i) { continue; }
+      let q = posIn[j].xyz;
+      let d2 = dot(q - p, q - p);
+      if (d2 < nd[K - 1u]) {                 // insertion sort into top-K
+        var k = K - 1u;
+        loop {
+          if (k > 0u && nd[k - 1u] > d2) { nd[k] = nd[k - 1u]; ni[k] = ni[k - 1u]; k--; }
+          else { break; }
+        }
+        nd[k] = d2; ni[k] = j;
+      }
+    }
+  }}}
+
+  /* ---- the breath, read at THIS bird's own lag = the swell as a wave ---- */
+  let maxDelay = max(U.refpt.w, 0.1);
+  let lag = clamp(distance(p, U.refpt.xyz) / max(U.waveSpeed, 1.0), 0.0, maxDelay);
+  let localBreath = tapAt(u32(lag / maxDelay * 63.0));
+
+  /* ---- flock forces over the K neighbors ---- */
+  var sep = vec3f(0.0); var ali = vec3f(0.0); var coh = vec3f(0.0);
+  var nAgit = 0.0; var cnt = 0.0;
+  let sepR = U.knobsA.y;
+  for (var k = 0u; k < K; k++) {
+    if (ni[k] == 0xffffffffu) { continue; }
+    let j = ni[k];
+    let q = posIn[j].xyz;
+    let d = max(sqrt(nd[k]), 0.001);
+    if (d < sepR) { sep += (p - q) / d * (sepR - d) / sepR; }
+    ali += velIn[j].xyz;
+    coh += q;
+    nAgit = max(nAgit, posIn[j].w);
+    cnt += 1.0;
+  }
+  var accel = vec3f(0.0);
+  if (cnt > 0.0) {
+    ali = ali / cnt - v;
+    coh = coh / cnt - p;
+    // breath binds the cloud: cohesion swells with the LOCAL (lagged) breath
+    accel += coh * U.coh_w * (0.35 + 1.9 * localBreath);
+    accel += ali * U.wind.w * (1.0 + 1.5 * agit);
+    accel += sep * U.sep_w;
+  }
+
+  /* ---- contagion: agitation spreads one neighbor-hop per step ----
+     (this IS the social wave — it outruns any bird)                  */
+  agit = max(agit * exp(-1.6 * U.dt), nAgit * U.knobsA.x);
+
+  /* ---- impulse wavefronts (the falcon strike · the thrown stone) ----
+     WLIFE: species-set wave lifetime (pace.z). Default reproduces the golden
+     3.5s / 0.7 decay EXACTLY (2.45/3.5 = 0.7) — water remembers longer. */
+  let WLIFE = select(3.5, U.pace.z, U.pace.z > 0.1);
+  let surface = select(0.0, 1.0, U.modes.x > 1.5);
+  for (var m = 0u; m < 8u; m++) {
+    let im = U.impulses[m];
+    if (im.w < 0.0) { continue; }
+    let age = U.time - im.w;
+    if (age < 0.0 || age > WLIFE) { continue; }
+    let r = distance(p, im.xyz);
+    let front = U.waveSpeed * age;
+    let x = abs(r - front);
+    let w = max(U.waveWidth, 1.0);
+    let f = exp(-x * x / (2.0 * w * w)) * U.imp_meta[m].x * exp(-age * (2.45 / WLIFE));
+    if (f > 0.003) {
+      if (surface > 0.5) {
+        /* SURFACE: the front is a CREST — it lifts the skin as it passes,
+           with only a whisper of outward slosh. Rings, not shoves. */
+        accel.y += f * U.knobsB.y * 0.85;
+        let aw = normalize(vec2f(p.x - im.x, p.z - im.z) + vec2f(0.001, 0.0));
+        accel.x += aw.x * f * U.knobsB.y * 0.12;
+        accel.z += aw.y * f * U.knobsB.y * 0.12;
+      } else {
+        let away = normalize(p - im.xyz + vec3f(0.0, 0.001, 0.0));
+        accel += away * f * U.knobsB.y;
+        // AIR: the band dives as it banks (collapse). WATER: pure radial vortex — the
+        // bait-ball opens around the lunge and closes behind it, no downward bias.
+        accel.y -= f * U.knobsB.y * 0.33 * (1.0 - min(U.modes.x, 1.0));
+      }
+      agit = max(agit, f);
+    }
+  }
+
+  /* ---- global shepherding (anchor · altitude · wind · lean) ---- */
+  let anchor = U.anchor.xyz;
+  var toA = anchor - p; toA.y = 0.0;
+  let dA = length(toA);
+  /* SURFACE: a lake is WIDE — the homeward pull drops to a whisper so the
+     skin stays spread instead of contracting into a puddle */
+  if (dA > 1.0) { accel += toA / dA * min(dA * 0.02, 1.0) * 3.0 * mix(1.0, 0.15, surface); }
+  let targetY = anchor.y + U.breath * U.anchor.w;
+  let dy = targetY - p.y;
+  let water = min(U.modes.x, 1.0);
+  /* SURFACE (medium 2): the SKIN — spring to the lake level with damping,
+     so crests bob and settle like water, not foam */
+  if (surface > 0.5) {
+    accel.y += (U.anchor.y - p.y) * 3.2 - v.y * 2.0;
+  }
+  // AIR: asymmetric fall (the pour to roost) + silence stills the vertical.
+  // WATER: neutral buoyancy — symmetric gentle centering, no roost, no pour.
+  let climb = select(0.045, 0.095, dy < 0.0);
+  accel.y += dy * mix(climb, 0.05, water);
+  accel.y -= v.y * (1.0 - U.breath) * 0.35 * (1.0 - water);   // air only
+  accel += U.wind.xyz;
+  accel.x += U.bend * 14.0;             // pitch-bend: the whole cloud LEANS
+  // gentle churn so the cloud never crystallizes
+  accel += vec3f(
+    sin(p.z * 0.021 + U.time * 0.31), sin(p.x * 0.017 - U.time * 0.23) * 0.6,
+    sin(p.y * 0.025 + U.time * 0.27)) * (0.5 + 2.5 * U.agit_amb) * U.knobsB.w;
+
+  /* ---- turnover: a few anonymous birds quietly leave & rejoin ----
+     A wandering bird steers to a far target with its agitation suppressed,
+     so it peels away calmly (never a focal event — leaderless preserved).
+     On release the slot goes inactive and normal cohesion re-flocks it.   */
+  for (var wi = 0u; wi < 4u; wi++) {
+    if (U.wmeta[wi].x > 0.0 && u32(U.wanderers[wi].x) == i) {
+      let toW = U.wanderers[wi].yzw - p;
+      let steer = normalize(toW + vec3f(0.0, 0.001, 0.0)) * 20.0;
+      accel = mix(accel, steer, U.wmeta[wi].x);
+      agit = min(agit, 0.04);
+    }
+  }
+
+  /* ---- AVATAR: the performer embodied (idx < 0 = law dormant) ----
+     Steered like a wanderer but NEVER calmed — the avatar BURNS, and its
+     agitation spreads outward through ordinary contagion, one neighbor-hop
+     per step. Influence travels at the speed of relationship. */
+  if (U.avatarA.x >= 0.0 && i32(U.avatarA.x) == i32(i)) {
+    let toV = U.avatarA.yzw - p;
+    let dV = length(toV);
+    if (dV > 0.5) {
+      let steerV = toV / dV * (12.0 + 30.0 * U.breath);   // breath drives the body
+      accel = mix(accel, steerV, U.avatarB.x);
+    }
+    agit = max(agit, U.avatarB.z);
+  }
+
+  /* ---- integrate with speed band ---- */
+  v += accel * U.dt;
+  v *= (1.0 - U.dt * 0.9 * min(U.modes.x, 1.0));   // WATER/SURFACE: viscous drag (glide to rest)
+  let sp = length(v);
+  let vmin = U.knobsA.z; let vmax = U.knobsA.w + U.knobsB.x * agit + 6.0 * localBreath;
+  if (sp > 0.0001) { v = v / sp * clamp(sp, vmin, vmax); }
+
+  /* ---- soft world bounds ---- */
+  if (p.x >  EXT - 25.0) { v.x -= (p.x - (EXT - 25.0)) * 0.12; }
+  if (p.x < -EXT + 25.0) { v.x -= (p.x + (EXT - 25.0)) * 0.12; }
+  if (p.z >  EXT - 25.0) { v.z -= (p.z - (EXT - 25.0)) * 0.12; }
+  if (p.z < -EXT + 25.0) { v.z -= (p.z + (EXT - 25.0)) * 0.12; }
+  if (p.y >  EXTY - 15.0) { v.y -= (p.y - (EXTY - 15.0)) * 0.2; }
+  if (p.y < 3.0)          { v.y += (3.0 - p.y) * 0.6; }
+
+  p += v * U.dt;
+
+  /* ---- banking → the shimmer. Lateral accel rolls the bird; a rolled
+         bird shows its BROADSIDE → the dark band, purely emergent. ---- */
+  let fwd = v / max(length(v), 0.001);
+  let side = normalize(cross(fwd, vec3f(0.0, 1.0, 0.0)) + vec3f(0.0, 0.0001, 0.0));
+  let latA = dot(accel, side);
+  let targetBank = clamp(latA * U.knobsB.z, -1.25, 1.25);
+  bank += (targetBank - bank) * min(1.0, U.dt * 5.0);
+
+  posOut[i] = vec4f(p, min(agit, 1.5));
+  velOut[i] = vec4f(v, bank);
+}`;
+
+    const RENDER_WGSL = `
+struct View {
+  viewProj: mat4x4f,
+  camPos: vec4f,      // w = time
+  camRight: vec4f,    // w = aspect
+  camUp: vec4f,       // w = tan(fov/2)
+  camFwd: vec4f,
+  sunDir: vec4f,      // w = sun intensity
+  skyTop: vec4f,
+  skyMid: vec4f,
+  horizon: vec4f,
+  ground: vec4f,
+  sunCol: vec4f,
+  birdDark: vec4f,    // w = agent size
+  birdLight: vec4f,   // w = fog density
+  render: vec4f,      // x renderMode(0=bird,1=fish) · y swimHz · z swimAmp · w swimWave
+  render2: vec4f,     // x flashGain · y godRays · z caustics · w waterDepthShift
+  render3: vec4f,     // x surfaceY · y depthRange · (zw free)  — underwater light
+};
+@group(0) @binding(0) var<uniform> V: View;
+@group(0) @binding(1) var<storage, read> pos: array<vec4f>;
+@group(0) @binding(2) var<storage, read> vel: array<vec4f>;
+
+/* ---------------- sky ---------------- */
+struct SkyOut { @builtin(position) cp: vec4f, @location(0) uv: vec2f };
+@vertex
+fn skyVs(@builtin(vertex_index) vi: u32) -> SkyOut {
+  var o: SkyOut;
+  let xy = vec2f(f32((vi << 1u) & 2u), f32(vi & 2u)) * 2.0 - 1.0;
+  o.cp = vec4f(xy, 0.9999, 1.0);
+  o.uv = xy;
+  return o;
+}
+fn skyColor(dir: vec3f) -> vec3f {
+  let y = dir.y;
+  var col = mix(V.horizon.rgb, V.skyMid.rgb, smoothstep(-0.02, 0.28, y));
+  col = mix(col, V.skyTop.rgb, smoothstep(0.22, 0.85, y));
+  let s = max(dot(dir, normalize(V.sunDir.xyz)), 0.0);
+  col += V.sunCol.rgb * (pow(s, 350.0) * 1.4 + pow(s, 24.0) * 0.35) * V.sunDir.w;
+  if (y < 0.0) { col = mix(col, V.ground.rgb, smoothstep(0.0, -0.06, y)); }
+  return col;
+}
+/* MARINE SNOW — faint particulate sinking through the column; the "we're
+   underwater" cue (stolen from Kelp WebGL 036). Drifts DOWN over time. */
+fn marineSnow(dir: vec3f) -> vec3f {
+  let sp = dir.xy * 70.0 + vec2f(0.0, V.camPos.w * 0.5);
+  let cell = floor(sp);
+  let hh = fract(sin(dot(cell, vec2f(19.73, 83.11))) * 3571.31);
+  let d = fract(sp) - 0.5;
+  let mote = smoothstep(0.13, 0.0, length(d)) * step(0.86, hh);
+  return vec3f(0.55, 0.62, 0.60) * mote * (0.35 + 0.65 * max(dir.y, 0.0));
+}
+/* ---- underwater: depth-graded column, Snell's window, sun, god rays ---- */
+fn waterColor(dir: vec3f) -> vec3f {
+  let y = dir.y;                       // +1 = straight up toward surface
+  let deep = V.skyTop.rgb;             // darkest (down / far)
+  let mid  = V.skyMid.rgb;
+  let surf = V.horizon.rgb;            // brightest (surface)
+  var col = mix(mid, deep, smoothstep(0.0, -0.75, y));   // looking down → the deep
+  col = mix(col, surf, smoothstep(0.05, 0.85, y));       // looking up → the surface
+  let sd = normalize(V.sunDir.xyz);
+  let s = max(dot(dir, sd), 0.0);
+  // Snell's window — the bright disc of the world compressed straight overhead
+  let snell = smoothstep(0.82, 0.995, y);
+  col = mix(col, surf * 1.5 + V.sunCol.rgb * 0.35, snell);
+  col += V.sunCol.rgb * pow(s, 90.0) * 0.6 * V.sunDir.w;
+  // GOD RAYS — shafts raking down from the surface, broken by an angular ripple
+  let ang = atan2(dir.x, dir.z);
+  let ripple = 0.55 + 0.45 * sin(ang * 16.0 + V.camPos.w * 0.35) * sin(ang * 6.3 - V.camPos.w * 0.21);
+  let shaft = pow(max(y, 0.0), 1.4) * pow(s, 2.5);
+  col += V.sunCol.rgb * shaft * ripple * V.render2.y;
+  // PLANKTON (night / Act III): a faint sea of drifting cold-blue stars
+  if (V.render3.w > 0.01) {
+    let cell = floor(dir.xy * 190.0);
+    let hh = fract(sin(dot(cell, vec2f(12.99, 78.23))) * 43758.5453);
+    let tw = smoothstep(0.9975, 1.0, fract(hh + V.camPos.w * 0.03)) * (0.4 + 0.6 * hh);
+    col += vec3f(0.18, 0.62, 0.95) * tw * V.render3.w * 0.7;
+  }
+  col += marineSnow(dir) * V.ground.w;    // drifting particulate (stolen from WebGL 036)
+  return col;
+}
+@fragment
+fn skyFs(inp: SkyOut) -> @location(0) vec4f {
+  let aspect = V.camRight.w; let tf = V.camUp.w;
+  let dir = normalize(V.camFwd.xyz + V.camRight.xyz * inp.uv.x * tf * aspect + V.camUp.xyz * inp.uv.y * tf);
+  if (V.render.x > 0.5) { return vec4f(waterColor(dir), 1.0); }
+  return vec4f(skyColor(dir), 1.0);
+}
+/* ---- caustics — the dancing net of light (surface ripples as lenses) ---- */
+fn caustic(p: vec2f, t: f32) -> f32 {
+  let q = p * 0.14;
+  var v = sin(q.x * 1.3 + t * 0.6) * sin(q.y * 1.1 - t * 0.5);
+  v += 0.5 * sin(q.x * 2.7 - t * 0.42 + 1.3) * sin(q.y * 2.3 + t * 0.7);
+  v += 0.25 * sin((q.x + q.y) * 3.9 + t * 0.9);
+  return pow(clamp(v * 0.5 + 0.5, 0.0, 1.0), 3.0);
+}
+
+/* ---------------- starlings ----------------
+   A starling, not a delta-wing: pointed head · chunky torso · short fan
+   tail · swept POINTED wings that hinge at the shoulder. 7 triangles.   */
+var<private> STARLING: array<vec3f, 21> = array<vec3f, 21>(
+  // head (beak tip → shoulders)
+  vec3f( 0.85, 0.0,  0.00), vec3f( 0.24, 0.0,  0.18), vec3f( 0.24, 0.0, -0.18),
+  // torso (shoulders → hips)
+  vec3f( 0.24, 0.0,  0.18), vec3f(-0.55, 0.0,  0.12), vec3f( 0.24, 0.0, -0.18),
+  vec3f(-0.55, 0.0,  0.12), vec3f(-0.55, 0.0, -0.12), vec3f( 0.24, 0.0, -0.18),
+  // tail (short fan)
+  vec3f(-0.55, 0.0,  0.12), vec3f(-1.05, 0.0,  0.22), vec3f(-0.55, 0.0, -0.12),
+  vec3f(-1.05, 0.0,  0.22), vec3f(-1.05, 0.0, -0.22), vec3f(-0.55, 0.0, -0.12),
+  // wings — swept, pointed, rooted at the shoulder
+  vec3f( 0.20, 0.0,  0.15), vec3f(-0.45, 0.0,  1.35), vec3f(-0.42, 0.0,  0.18),
+  vec3f( 0.20, 0.0, -0.15), vec3f(-0.45, 0.0, -1.35), vec3f(-0.42, 0.0, -0.18));
+
+/* ---------------- fish (3D body) ----------------
+   A real fusiform body: diamond cross-section spindle (volume, not a card),
+   forked caudal fin, dorsal + anal fins. 25 triangles (75 verts). Positions
+   in object space fwd(x)/up(y)/lateral(z); FISH_NRM carries per-face normals
+   so the mirror flash and iridescence play correctly over the curved flanks. */
+var<private> FISH_POS: array<vec3f, 249> = array<vec3f, 249>(
+  vec3f(1.090,0.000,0.000), vec3f(1.050,0.020,0.000), vec3f(1.050,0.010,-0.013),
+  vec3f(1.090,0.000,0.000), vec3f(1.050,0.010,-0.013), vec3f(1.050,-0.010,-0.013),
+  vec3f(1.090,0.000,0.000), vec3f(1.050,-0.010,-0.013), vec3f(1.050,-0.020,-0.000),
+  vec3f(1.090,0.000,0.000), vec3f(1.050,-0.020,-0.000), vec3f(1.050,-0.010,0.013),
+  vec3f(1.090,0.000,0.000), vec3f(1.050,-0.010,0.013), vec3f(1.050,0.010,0.013),
+  vec3f(1.090,0.000,0.000), vec3f(1.050,0.010,0.013), vec3f(1.050,0.020,0.000),
+  vec3f(1.050,0.020,0.000), vec3f(0.600,0.190,0.000), vec3f(0.600,0.095,-0.074),
+  vec3f(1.050,0.020,0.000), vec3f(0.600,0.095,-0.074), vec3f(1.050,0.010,-0.013),
+  vec3f(1.050,0.010,-0.013), vec3f(0.600,0.095,-0.074), vec3f(0.600,-0.095,-0.074),
+  vec3f(1.050,0.010,-0.013), vec3f(0.600,-0.095,-0.074), vec3f(1.050,-0.010,-0.013),
+  vec3f(1.050,-0.010,-0.013), vec3f(0.600,-0.095,-0.074), vec3f(0.600,-0.190,-0.000),
+  vec3f(1.050,-0.010,-0.013), vec3f(0.600,-0.190,-0.000), vec3f(1.050,-0.020,-0.000),
+  vec3f(1.050,-0.020,-0.000), vec3f(0.600,-0.190,-0.000), vec3f(0.600,-0.095,0.074),
+  vec3f(1.050,-0.020,-0.000), vec3f(0.600,-0.095,0.074), vec3f(1.050,-0.010,0.013),
+  vec3f(1.050,-0.010,0.013), vec3f(0.600,-0.095,0.074), vec3f(0.600,0.095,0.074),
+  vec3f(1.050,-0.010,0.013), vec3f(0.600,0.095,0.074), vec3f(1.050,0.010,0.013),
+  vec3f(1.050,0.010,0.013), vec3f(0.600,0.095,0.074), vec3f(0.600,0.190,0.000),
+  vec3f(1.050,0.010,0.013), vec3f(0.600,0.190,0.000), vec3f(1.050,0.020,0.000),
+  vec3f(0.600,0.190,0.000), vec3f(0.220,0.270,0.000), vec3f(0.220,0.135,-0.087),
+  vec3f(0.600,0.190,0.000), vec3f(0.220,0.135,-0.087), vec3f(0.600,0.095,-0.074),
+  vec3f(0.600,0.095,-0.074), vec3f(0.220,0.135,-0.087), vec3f(0.220,-0.135,-0.087),
+  vec3f(0.600,0.095,-0.074), vec3f(0.220,-0.135,-0.087), vec3f(0.600,-0.095,-0.074),
+  vec3f(0.600,-0.095,-0.074), vec3f(0.220,-0.135,-0.087), vec3f(0.220,-0.270,-0.000),
+  vec3f(0.600,-0.095,-0.074), vec3f(0.220,-0.270,-0.000), vec3f(0.600,-0.190,-0.000),
+  vec3f(0.600,-0.190,-0.000), vec3f(0.220,-0.270,-0.000), vec3f(0.220,-0.135,0.087),
+  vec3f(0.600,-0.190,-0.000), vec3f(0.220,-0.135,0.087), vec3f(0.600,-0.095,0.074),
+  vec3f(0.600,-0.095,0.074), vec3f(0.220,-0.135,0.087), vec3f(0.220,0.135,0.087),
+  vec3f(0.600,-0.095,0.074), vec3f(0.220,0.135,0.087), vec3f(0.600,0.095,0.074),
+  vec3f(0.600,0.095,0.074), vec3f(0.220,0.135,0.087), vec3f(0.220,0.270,0.000),
+  vec3f(0.600,0.095,0.074), vec3f(0.220,0.270,0.000), vec3f(0.600,0.190,0.000),
+  vec3f(0.220,0.270,0.000), vec3f(-0.100,0.270,0.000), vec3f(-0.100,0.135,-0.082),
+  vec3f(0.220,0.270,0.000), vec3f(-0.100,0.135,-0.082), vec3f(0.220,0.135,-0.087),
+  vec3f(0.220,0.135,-0.087), vec3f(-0.100,0.135,-0.082), vec3f(-0.100,-0.135,-0.082),
+  vec3f(0.220,0.135,-0.087), vec3f(-0.100,-0.135,-0.082), vec3f(0.220,-0.135,-0.087),
+  vec3f(0.220,-0.135,-0.087), vec3f(-0.100,-0.135,-0.082), vec3f(-0.100,-0.270,-0.000),
+  vec3f(0.220,-0.135,-0.087), vec3f(-0.100,-0.270,-0.000), vec3f(0.220,-0.270,-0.000),
+  vec3f(0.220,-0.270,-0.000), vec3f(-0.100,-0.270,-0.000), vec3f(-0.100,-0.135,0.082),
+  vec3f(0.220,-0.270,-0.000), vec3f(-0.100,-0.135,0.082), vec3f(0.220,-0.135,0.087),
+  vec3f(0.220,-0.135,0.087), vec3f(-0.100,-0.135,0.082), vec3f(-0.100,0.135,0.082),
+  vec3f(0.220,-0.135,0.087), vec3f(-0.100,0.135,0.082), vec3f(0.220,0.135,0.087),
+  vec3f(0.220,0.135,0.087), vec3f(-0.100,0.135,0.082), vec3f(-0.100,0.270,0.000),
+  vec3f(0.220,0.135,0.087), vec3f(-0.100,0.270,0.000), vec3f(0.220,0.270,0.000),
+  vec3f(-0.100,0.270,0.000), vec3f(-0.400,0.210,0.000), vec3f(-0.400,0.105,-0.061),
+  vec3f(-0.100,0.270,0.000), vec3f(-0.400,0.105,-0.061), vec3f(-0.100,0.135,-0.082),
+  vec3f(-0.100,0.135,-0.082), vec3f(-0.400,0.105,-0.061), vec3f(-0.400,-0.105,-0.061),
+  vec3f(-0.100,0.135,-0.082), vec3f(-0.400,-0.105,-0.061), vec3f(-0.100,-0.135,-0.082),
+  vec3f(-0.100,-0.135,-0.082), vec3f(-0.400,-0.105,-0.061), vec3f(-0.400,-0.210,-0.000),
+  vec3f(-0.100,-0.135,-0.082), vec3f(-0.400,-0.210,-0.000), vec3f(-0.100,-0.270,-0.000),
+  vec3f(-0.100,-0.270,-0.000), vec3f(-0.400,-0.210,-0.000), vec3f(-0.400,-0.105,0.061),
+  vec3f(-0.100,-0.270,-0.000), vec3f(-0.400,-0.105,0.061), vec3f(-0.100,-0.135,0.082),
+  vec3f(-0.100,-0.135,0.082), vec3f(-0.400,-0.105,0.061), vec3f(-0.400,0.105,0.061),
+  vec3f(-0.100,-0.135,0.082), vec3f(-0.400,0.105,0.061), vec3f(-0.100,0.135,0.082),
+  vec3f(-0.100,0.135,0.082), vec3f(-0.400,0.105,0.061), vec3f(-0.400,0.210,0.000),
+  vec3f(-0.100,0.135,0.082), vec3f(-0.400,0.210,0.000), vec3f(-0.100,0.270,0.000),
+  vec3f(-0.400,0.210,0.000), vec3f(-0.640,0.120,0.000), vec3f(-0.640,0.060,-0.035),
+  vec3f(-0.400,0.210,0.000), vec3f(-0.640,0.060,-0.035), vec3f(-0.400,0.105,-0.061),
+  vec3f(-0.400,0.105,-0.061), vec3f(-0.640,0.060,-0.035), vec3f(-0.640,-0.060,-0.035),
+  vec3f(-0.400,0.105,-0.061), vec3f(-0.640,-0.060,-0.035), vec3f(-0.400,-0.105,-0.061),
+  vec3f(-0.400,-0.105,-0.061), vec3f(-0.640,-0.060,-0.035), vec3f(-0.640,-0.120,-0.000),
+  vec3f(-0.400,-0.105,-0.061), vec3f(-0.640,-0.120,-0.000), vec3f(-0.400,-0.210,-0.000),
+  vec3f(-0.400,-0.210,-0.000), vec3f(-0.640,-0.120,-0.000), vec3f(-0.640,-0.060,0.035),
+  vec3f(-0.400,-0.210,-0.000), vec3f(-0.640,-0.060,0.035), vec3f(-0.400,-0.105,0.061),
+  vec3f(-0.400,-0.105,0.061), vec3f(-0.640,-0.060,0.035), vec3f(-0.640,0.060,0.035),
+  vec3f(-0.400,-0.105,0.061), vec3f(-0.640,0.060,0.035), vec3f(-0.400,0.105,0.061),
+  vec3f(-0.400,0.105,0.061), vec3f(-0.640,0.060,0.035), vec3f(-0.640,0.120,0.000),
+  vec3f(-0.400,0.105,0.061), vec3f(-0.640,0.120,0.000), vec3f(-0.400,0.210,0.000),
+  vec3f(-0.640,0.120,0.000), vec3f(-0.850,0.050,0.000), vec3f(-0.850,0.025,-0.017),
+  vec3f(-0.640,0.120,0.000), vec3f(-0.850,0.025,-0.017), vec3f(-0.640,0.060,-0.035),
+  vec3f(-0.640,0.060,-0.035), vec3f(-0.850,0.025,-0.017), vec3f(-0.850,-0.025,-0.017),
+  vec3f(-0.640,0.060,-0.035), vec3f(-0.850,-0.025,-0.017), vec3f(-0.640,-0.060,-0.035),
+  vec3f(-0.640,-0.060,-0.035), vec3f(-0.850,-0.025,-0.017), vec3f(-0.850,-0.050,-0.000),
+  vec3f(-0.640,-0.060,-0.035), vec3f(-0.850,-0.050,-0.000), vec3f(-0.640,-0.120,-0.000),
+  vec3f(-0.640,-0.120,-0.000), vec3f(-0.850,-0.050,-0.000), vec3f(-0.850,-0.025,0.017),
+  vec3f(-0.640,-0.120,-0.000), vec3f(-0.850,-0.025,0.017), vec3f(-0.640,-0.060,0.035),
+  vec3f(-0.640,-0.060,0.035), vec3f(-0.850,-0.025,0.017), vec3f(-0.850,0.025,0.017),
+  vec3f(-0.640,-0.060,0.035), vec3f(-0.850,0.025,0.017), vec3f(-0.640,0.060,0.035),
+  vec3f(-0.640,0.060,0.035), vec3f(-0.850,0.025,0.017), vec3f(-0.850,0.050,0.000),
+  vec3f(-0.640,0.060,0.035), vec3f(-0.850,0.050,0.000), vec3f(-0.640,0.120,0.000),
+  vec3f(-0.850,0.090,0.000), vec3f(-1.280,0.420,0.000), vec3f(-1.050,0.000,0.000),
+  vec3f(-0.850,0.090,0.000), vec3f(-1.050,0.000,0.000), vec3f(-0.850,-0.090,0.000),
+  vec3f(-0.850,-0.090,0.000), vec3f(-1.050,0.000,0.000), vec3f(-1.280,-0.420,0.000),
+  vec3f(0.020,0.270,0.000), vec3f(-0.240,0.560,0.000), vec3f(-0.400,0.190,0.000),
+  vec3f(-0.400,-0.190,0.000), vec3f(-0.620,-0.400,0.000), vec3f(-0.640,-0.180,0.000));
+
+var<private> FISH_NRM: array<vec3f, 249> = array<vec3f, 249>(
+  vec3f(-1.000,0.000,0.000), vec3f(-0.372,-0.907,0.197), vec3f(-0.259,-0.334,0.906),
+  vec3f(-1.000,0.000,0.000), vec3f(-0.259,-0.334,0.906), vec3f(-0.286,0.456,0.842),
+  vec3f(-1.000,0.000,0.000), vec3f(-0.286,0.456,0.842), vec3f(-0.372,0.907,-0.197),
+  vec3f(-1.000,0.000,0.000), vec3f(-0.372,0.907,-0.197), vec3f(-0.259,0.334,-0.906),
+  vec3f(-1.000,0.000,0.000), vec3f(-0.259,0.334,-0.906), vec3f(-0.286,-0.456,-0.842),
+  vec3f(-1.000,0.000,0.000), vec3f(-0.286,-0.456,-0.842), vec3f(-0.372,-0.907,0.197),
+  vec3f(-0.372,-0.907,0.197), vec3f(-0.275,-0.959,0.066), vec3f(-0.134,-0.356,0.925),
+  vec3f(-0.372,-0.907,0.197), vec3f(-0.134,-0.356,0.925), vec3f(-0.259,-0.334,0.906),
+  vec3f(-0.259,-0.334,0.906), vec3f(-0.134,-0.356,0.925), vec3f(-0.128,0.306,0.943),
+  vec3f(-0.259,-0.334,0.906), vec3f(-0.128,0.306,0.943), vec3f(-0.286,0.456,0.842),
+  vec3f(-0.286,0.456,0.842), vec3f(-0.128,0.306,0.943), vec3f(-0.275,0.959,-0.066),
+  vec3f(-0.286,0.456,0.842), vec3f(-0.275,0.959,-0.066), vec3f(-0.372,0.907,-0.197),
+  vec3f(-0.372,0.907,-0.197), vec3f(-0.275,0.959,-0.066), vec3f(-0.134,0.356,-0.925),
+  vec3f(-0.372,0.907,-0.197), vec3f(-0.134,0.356,-0.925), vec3f(-0.259,0.334,-0.906),
+  vec3f(-0.259,0.334,-0.906), vec3f(-0.134,0.356,-0.925), vec3f(-0.128,-0.306,-0.943),
+  vec3f(-0.259,0.334,-0.906), vec3f(-0.128,-0.306,-0.943), vec3f(-0.286,-0.456,-0.842),
+  vec3f(-0.286,-0.456,-0.842), vec3f(-0.128,-0.306,-0.943), vec3f(-0.275,-0.959,0.066),
+  vec3f(-0.286,-0.456,-0.842), vec3f(-0.275,-0.959,0.066), vec3f(-0.372,-0.907,0.197),
+  vec3f(-0.275,-0.959,0.066), vec3f(-0.095,-0.995,0.020), vec3f(-0.035,-0.295,0.955),
+  vec3f(-0.275,-0.959,0.066), vec3f(-0.035,-0.295,0.955), vec3f(-0.134,-0.356,0.925),
+  vec3f(-0.134,-0.356,0.925), vec3f(-0.035,-0.295,0.955), vec3f(-0.022,0.277,0.960),
+  vec3f(-0.134,-0.356,0.925), vec3f(-0.022,0.277,0.960), vec3f(-0.128,0.306,0.943),
+  vec3f(-0.128,0.306,0.943), vec3f(-0.022,0.277,0.960), vec3f(-0.095,0.995,-0.020),
+  vec3f(-0.128,0.306,0.943), vec3f(-0.095,0.995,-0.020), vec3f(-0.275,0.959,-0.066),
+  vec3f(-0.275,0.959,-0.066), vec3f(-0.095,0.995,-0.020), vec3f(-0.035,0.295,-0.955),
+  vec3f(-0.275,0.959,-0.066), vec3f(-0.035,0.295,-0.955), vec3f(-0.134,0.356,-0.925),
+  vec3f(-0.134,0.356,-0.925), vec3f(-0.035,0.295,-0.955), vec3f(-0.022,-0.277,-0.960),
+  vec3f(-0.134,0.356,-0.925), vec3f(-0.022,-0.277,-0.960), vec3f(-0.128,-0.306,-0.943),
+  vec3f(-0.128,-0.306,-0.943), vec3f(-0.022,-0.277,-0.960), vec3f(-0.095,-0.995,0.020),
+  vec3f(-0.128,-0.306,-0.943), vec3f(-0.095,-0.995,0.020), vec3f(-0.275,-0.959,0.066),
+  vec3f(-0.095,-0.995,0.020), vec3f(0.105,-0.994,0.006), vec3f(0.049,-0.274,0.961),
+  vec3f(-0.095,-0.995,0.020), vec3f(0.049,-0.274,0.961), vec3f(-0.035,-0.295,0.955),
+  vec3f(-0.035,-0.295,0.955), vec3f(0.049,-0.274,0.961), vec3f(0.056,0.266,0.962),
+  vec3f(-0.035,-0.295,0.955), vec3f(0.056,0.266,0.962), vec3f(-0.022,0.277,0.960),
+  vec3f(-0.022,0.277,0.960), vec3f(0.056,0.266,0.962), vec3f(0.105,0.994,-0.006),
+  vec3f(-0.022,0.277,0.960), vec3f(0.105,0.994,-0.006), vec3f(-0.095,0.995,-0.020),
+  vec3f(-0.095,0.995,-0.020), vec3f(0.105,0.994,-0.006), vec3f(0.049,0.274,-0.961),
+  vec3f(-0.095,0.995,-0.020), vec3f(0.049,0.274,-0.961), vec3f(-0.035,0.295,-0.955),
+  vec3f(-0.035,0.295,-0.955), vec3f(0.049,0.274,-0.961), vec3f(0.056,-0.266,-0.962),
+  vec3f(-0.035,0.295,-0.955), vec3f(0.056,-0.266,-0.962), vec3f(-0.022,-0.277,-0.960),
+  vec3f(-0.022,-0.277,-0.960), vec3f(0.056,-0.266,-0.962), vec3f(0.105,-0.994,0.006),
+  vec3f(-0.022,-0.277,-0.960), vec3f(0.105,-0.994,0.006), vec3f(-0.095,-0.995,0.020),
+  vec3f(0.105,-0.994,0.006), vec3f(0.279,-0.960,0.001), vec3f(0.118,-0.260,0.958),
+  vec3f(0.105,-0.994,0.006), vec3f(0.118,-0.260,0.958), vec3f(0.049,-0.274,0.961),
+  vec3f(0.049,-0.274,0.961), vec3f(0.118,-0.260,0.958), vec3f(0.126,0.255,0.959),
+  vec3f(0.049,-0.274,0.961), vec3f(0.126,0.255,0.959), vec3f(0.056,0.266,0.962),
+  vec3f(0.056,0.266,0.962), vec3f(0.126,0.255,0.959), vec3f(0.279,0.960,-0.001),
+  vec3f(0.056,0.266,0.962), vec3f(0.279,0.960,-0.001), vec3f(0.105,0.994,-0.006),
+  vec3f(0.105,0.994,-0.006), vec3f(0.279,0.960,-0.001), vec3f(0.118,0.260,-0.958),
+  vec3f(0.105,0.994,-0.006), vec3f(0.118,0.260,-0.958), vec3f(0.049,0.274,-0.961),
+  vec3f(0.049,0.274,-0.961), vec3f(0.118,0.260,-0.958), vec3f(0.126,-0.255,-0.959),
+  vec3f(0.049,0.274,-0.961), vec3f(0.126,-0.255,-0.959), vec3f(0.056,-0.266,-0.962),
+  vec3f(0.056,-0.266,-0.962), vec3f(0.126,-0.255,-0.959), vec3f(0.279,-0.960,0.001),
+  vec3f(0.056,-0.266,-0.962), vec3f(0.279,-0.960,0.001), vec3f(0.105,-0.994,0.006),
+  vec3f(0.279,-0.960,0.001), vec3f(0.330,-0.944,-0.013), vec3f(0.137,-0.255,0.957),
+  vec3f(0.279,-0.960,0.001), vec3f(0.137,-0.255,0.957), vec3f(0.118,-0.260,0.958),
+  vec3f(0.118,-0.260,0.958), vec3f(0.137,-0.255,0.957), vec3f(0.140,0.268,0.953),
+  vec3f(0.118,-0.260,0.958), vec3f(0.140,0.268,0.953), vec3f(0.126,0.255,0.959),
+  vec3f(0.126,0.255,0.959), vec3f(0.140,0.268,0.953), vec3f(0.330,0.944,0.013),
+  vec3f(0.126,0.255,0.959), vec3f(0.330,0.944,0.013), vec3f(0.279,0.960,-0.001),
+  vec3f(0.279,0.960,-0.001), vec3f(0.330,0.944,0.013), vec3f(0.137,0.255,-0.957),
+  vec3f(0.279,0.960,-0.001), vec3f(0.137,0.255,-0.957), vec3f(0.118,0.260,-0.958),
+  vec3f(0.118,0.260,-0.958), vec3f(0.137,0.255,-0.957), vec3f(0.140,-0.268,-0.953),
+  vec3f(0.118,0.260,-0.958), vec3f(0.140,-0.268,-0.953), vec3f(0.126,-0.255,-0.959),
+  vec3f(0.126,-0.255,-0.959), vec3f(0.140,-0.268,-0.953), vec3f(0.330,-0.944,-0.013),
+  vec3f(0.126,-0.255,-0.959), vec3f(0.330,-0.944,-0.013), vec3f(0.279,-0.960,0.001),
+  vec3f(0.330,-0.944,-0.013), vec3f(0.269,-0.850,-0.452), vec3f(0.146,-0.364,0.920),
+  vec3f(0.330,-0.944,-0.013), vec3f(0.146,-0.364,0.920), vec3f(0.137,-0.255,0.957),
+  vec3f(0.137,-0.255,0.957), vec3f(0.146,-0.364,0.920), vec3f(0.113,0.195,0.974),
+  vec3f(0.137,-0.255,0.957), vec3f(0.113,0.195,0.974), vec3f(0.140,0.268,0.953),
+  vec3f(0.140,0.268,0.953), vec3f(0.113,0.195,0.974), vec3f(0.269,0.850,0.452),
+  vec3f(0.140,0.268,0.953), vec3f(0.269,0.850,0.452), vec3f(0.330,0.944,0.013),
+  vec3f(0.330,0.944,0.013), vec3f(0.269,0.850,0.452), vec3f(0.146,0.364,-0.920),
+  vec3f(0.330,0.944,0.013), vec3f(0.146,0.364,-0.920), vec3f(0.137,0.255,-0.957),
+  vec3f(0.137,0.255,-0.957), vec3f(0.146,0.364,-0.920), vec3f(0.113,-0.195,-0.974),
+  vec3f(0.137,0.255,-0.957), vec3f(0.113,-0.195,-0.974), vec3f(0.140,-0.268,-0.953),
+  vec3f(0.140,-0.268,-0.953), vec3f(0.113,-0.195,-0.974), vec3f(0.269,-0.850,-0.452),
+  vec3f(0.140,-0.268,-0.953), vec3f(0.269,-0.850,-0.452), vec3f(0.330,-0.944,-0.013),
+  vec3f(0.000,0.000,1.000), vec3f(0.000,0.000,1.000), vec3f(0.000,0.000,1.000),
+  vec3f(0.000,0.000,1.000), vec3f(0.000,0.000,1.000), vec3f(0.000,0.000,1.000),
+  vec3f(0.000,0.000,1.000), vec3f(0.000,0.000,1.000), vec3f(0.000,0.000,1.000),
+  vec3f(0.000,0.000,1.000), vec3f(0.000,0.000,1.000), vec3f(0.000,0.000,1.000),
+  vec3f(0.000,0.000,-1.000), vec3f(0.000,0.000,-1.000), vec3f(0.000,0.000,-1.000));
+struct BirdOut {
+  @builtin(position) cp: vec4f,
+  @location(0) shade: f32,     // bird: broadside-ness · fish: specular flash
+  @location(1) fog: f32,
+  @location(2) agit: f32,
+  @location(3) dv: f32,        // fish dorsoventral (−belly..+back) for countershading
+  @location(4) tone: f32,      // per-individual tone jitter
+  @location(5) depth: f32,     // 0 surface .. 1 deep (underwater light grading)
+  @location(6) wpos: vec3f,    // world position (caustics)
+  @location(7) iri: f32,       // iridescence phase (thin-film sheen)
+  @location(8) obj: vec3f,     // object-space position (fish eye placement)
+  @location(9) near: f32,      // 1 = very close to camera .. 0 = far (eye LOD)
+};
+@vertex
+fn birdVs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> BirdOut {
+  var o: BirdOut;
+  let P = pos[ii]; let Vl = vel[ii];
+  let p = P.xyz; let bank = Vl.w;
+  var fwd = Vl.xyz;
+  let fl = length(fwd);
+  if (fl < 0.001) { fwd = vec3f(1.0, 0.0, 0.0); } else { fwd = fwd / fl; }
+  var side = cross(fwd, vec3f(0.0, 1.0, 0.0));
+  let sl = length(side);
+  if (sl < 0.001) { side = vec3f(0.0, 0.0, 1.0); } else { side = side / sl; }
+  let up = cross(side, fwd);
+  let wing = side * cos(bank) + up * sin(bank);
+  let nBird = normalize(cross(fwd, wing));
+  let size = V.birdDark.w;
+  let h = fract(sin(f32(ii) * 127.1) * 43758.5453);
+  let h2 = fract(sin(f32(ii) * 71.7 + 3.1) * 24634.6345);
+  let t = V.camPos.w;
+  let agit = P.w;
+  let fish = V.render.x;                 // 0 = bird · 1 = fish
+
+  var wp: vec3f;
+  var nFace: vec3f;
+  o.dv = 0.0; o.tone = 1.0; o.obj = vec3f(0.0);
+  if (fish > 0.5) {
+    /* ---- FISH: vertical-lens body, swimming undulation, mirror flank --
+       Body in fwd(x)/up(y); the flank normal is LATERAL (sideR). The tail
+       sweeps side-to-side (undulation along sideR). Per-fish size jitter.
+         render.y = swimHz · render.z = swimAmp · render.w = swimWave     */
+    let cb = cos(bank); let sb = sin(bank);
+    let upR = up * cb + side * sb;       // dorsoventral axis (roll-tilted)
+    let sideR = side * cb - up * sb;     // lateral axis
+    let fsize = size * (0.82 + 0.36 * h); // fish are not clones
+    let l = FISH_POS[vi];
+    let no = FISH_NRM[vi];
+    // carangiform swim (biomechanically correct): the body wave STARTS AT THE
+    // HEAD with ~zero amplitude and travels BACK to the tail, growing as it goes
+    // (Undulatory Swimming, SMU). The '+ t' term makes the crest move nose→tail;
+    // the smooth envelope grows the amplitude toward the tail — head barely moves.
+    let tailF = smoothstep(0.72, -0.85, l.x);
+    let u = sin(l.x * V.render.w + t * V.render.y * 6.2831 * (0.8 + 0.9 * agit) + h * 6.2831);
+    let sway = u * V.render.z * tailF;
+    wp = p + (fwd * l.x + upR * l.y + sideR * (l.z + sway)) * fsize;
+    nFace = normalize(no.x * fwd + no.y * upR + no.z * sideR);   // true surface normal
+    o.dv = clamp(l.y * 3.3, -1.0, 1.0);   // −belly .. +back
+    o.tone = 0.86 + 0.28 * h2;
+    o.obj = l;                            // object-space position for the eye
+  } else {
+    /* ---- BIRD: flap-glide (unchanged) --------------------------------
+         skyTop.w = flapHz · skyMid.w = flapAmp · horizon.w = glideMix    */
+    let l = STARLING[vi];
+    let ph = (t * V.skyTop.w * (0.85 + 0.7 * agit) + h * 7.0) * 6.2831;
+    let glideOsc = sin(t * (0.22 + h * 0.35) + h * 41.0);
+    let gliding = select(0.0, 1.0, glideOsc < (V.horizon.w * 2.0 - 1.0)) * (1.0 - min(agit * 2.0, 1.0));
+    let flap = sin(ph) * V.skyMid.w * (1.0 - gliding) + 0.22 * gliding;
+    let reach = max(abs(l.z) - 0.25, 0.0);          // 0 on body & tail — wings only
+    let tipY = flap * reach * 1.1;
+    let span = 1.0 - 0.22 * max(flap, 0.0) * (1.0 - gliding);
+    let zf = select(l.z, l.z * span, abs(l.z) > 0.3);
+    wp = p + (fwd * l.x + wing * zf + nBird * tipY) * size;
+    nFace = nBird;
+  }
+  o.cp = V.viewProj * vec4f(wp, 1.0);
+  let toCam = normalize(V.camPos.xyz - wp);
+  if (fish > 0.5) {
+    /* SPECULAR MIRROR FLASH (guanine flanks): a glint from the half-vector
+       between the sun and the eye against the flank, boosted by agitation so
+       the flash BAND travels with the wave. Real fish-silver, not a tint.   */
+    let face = nFace * sign(dot(nFace, toCam) + 1e-4);      // flank toward camera
+    let half = normalize(normalize(V.sunDir.xyz) + toCam);
+    let spec = pow(max(dot(face, half), 0.0), 22.0);
+    o.shade = spec * (0.32 + 0.68 * min(agit * 2.0, 1.0)) * V.render2.x;
+    // IRIDESCENCE PHASE — thin-film sheen grows toward grazing view of the
+    // flank; a small per-fish offset varies the hue. Coloured in the fragment.
+    o.iri = (1.0 - max(dot(face, toCam), 0.0)) * 2.4 + h * 0.5;
+  } else {
+    o.shade = abs(dot(toCam, nBird));    // bird broadside-ness (unchanged)
+    o.iri = 0.0;
+  }
+  let d = distance(V.camPos.xyz, wp);
+  o.fog = 1.0 - exp(-d * V.birdLight.w);
+  o.agit = P.w;
+  o.wpos = wp;
+  o.depth = clamp((V.render3.x - wp.y) / max(V.render3.y, 1.0), 0.0, 1.0);   // surface→deep
+  o.near = clamp(1.0 - d / 55.0, 0.0, 1.0);   // eyes only resolve up close (LOD fade)
+  return o;
+}
+@fragment
+fn birdFs(inp: BirdOut) -> @location(0) vec4f {
+  var col: vec3f;
+  if (V.render.x > 0.5) {
+    /* ---- FISH: countershading + the SILVER FLASH WAVE ----------------
+       COUNTERSHADING: dark dorsal → silver flank → pale ventral (a fish is
+       never one colour).  THE FLASH: the specular mirror glint (computed in
+       the vertex from sun+eye against the flank) lights the flank to silver;
+       boosted by agitation so a bright band travels with the wave. birdDark =
+       flank body · birdLight = silver · sunCol tints the caught light.       */
+    let back  = V.birdDark.rgb * 0.55;                          // dark back
+    let flank = V.birdDark.rgb;                                 // mid flank
+    let belly = mix(V.birdDark.rgb, vec3f(0.55, 0.60, 0.66), 0.75); // pale underside
+    var body = mix(flank, back, smoothstep(0.15, 0.9, inp.dv));
+    body = mix(body, belly, smoothstep(-0.15, -0.9, inp.dv));
+    body *= inp.tone;
+    // CAUSTICS: the dancing surface-light net plays over the flank, strongest
+    // near the surface and fading into the deep.
+    let caus = caustic(inp.wpos.xz + inp.wpos.y * 0.3, V.camPos.w) * (1.0 - inp.depth);
+    body += V.sunCol.rgb * caus * V.render2.z;
+    let flash = clamp(inp.shade, 0.0, 1.0);
+    col = mix(body, V.birdLight.rgb, flash);                    // the mirror lights up
+    col += V.sunCol.rgb * flash * 0.5;                          // the caught glint
+    // IRIDESCENCE — thin-film structural colour: a shifting blue/green/violet/
+    // rose sheen at grazing angles, strongest where light is already catching.
+    let hue = 0.5 + 0.5 * cos(6.2831 * (inp.iri + vec3f(0.0, 0.33, 0.66)));
+    let sheen = pow(clamp(inp.iri, 0.0, 1.0), 1.6) * (0.35 + 0.65 * flash);
+    col += hue * sheen * V.render3.z;
+    // BIOLUMINESCENCE (Act III / night): the school glows cold blue where it
+    // MOVES — a gentle base breathing glow, punched up by agitation, so the
+    // wave itself becomes a travelling light. render3.w = biolum gain.
+    col += vec3f(0.13, 0.72, 0.98) * (0.20 + 0.80 * min(inp.agit * 1.5, 1.0)) * V.render3.w;
+    // DEPTH-SHIFT: fish fade toward the water colour at their own depth —
+    // shallow fish stay silver-bright, deep fish sink into blue.
+    let waterAtDepth = mix(V.horizon.rgb, V.skyTop.rgb, inp.depth);
+    col = mix(col, waterAtDepth, inp.depth * V.render2.w);
+    // EYE — a dark spot on each flank near the head, LOD-faded so it only
+    // resolves up close (at flock distance the ball stays one organism).
+    // camFwd.w = eyeGain. object eye centre ≈ (0.52, 0.09) on the flank.
+    let ex = (inp.obj.x - 0.52) * 1.3; let ey = inp.obj.y - 0.09;
+    let ed = sqrt(ex * ex + ey * ey);
+    let onFlank = smoothstep(0.03, 0.06, abs(inp.obj.z));    // only on the sides, not the spine
+    let eye = smoothstep(0.085, 0.03, ed) * inp.near * onFlank * V.camFwd.w;
+    col = mix(col, vec3f(0.02, 0.02, 0.03), clamp(eye, 0.0, 1.0));
+    col += vec3f(0.7, 0.75, 0.8) * smoothstep(0.03, 0.0, length(vec2f(ex + 0.02, ey - 0.02))) * inp.near * onFlank * V.camFwd.w * 0.6;  // catchlight
+  } else {
+    // broadside = dark silhouette · edge-on = catches the dusk light
+    col = mix(V.birdLight.rgb, V.birdDark.rgb, pow(inp.shade, 0.65));
+    col += V.sunCol.rgb * (1.0 - inp.shade) * 0.18;             // rim of low sun on edge-on wings
+  }
+  col = mix(col, V.skyMid.rgb, clamp(inp.fog, 0.0, 0.92));      // aerial/aquatic haze
+  return vec4f(col, 1.0);
+}
+
+/* ---------------- DEBRIS — suspended particulate that reads the WAVE ----------
+   Real particles in the water (not a backdrop): they drift on the current and
+   are SHOVED by the same pressure front that hits the ball, then resettle. The
+   scene-wide pressure made visible. Built camera-facing on the CPU.           */
+struct DOut { @builtin(position) cp: vec4f, @location(0) uv: vec2f, @location(1) depth: f32, @location(2) bright: f32, @location(3) agit: f32, @location(4) kind: f32 };
+@vertex fn debrisVs(@location(0) aPos: vec3f, @location(1) aUV: vec2f, @location(2) aB: vec2f, @location(3) aK: f32) -> DOut {
+  var o: DOut; o.cp = V.viewProj * vec4f(aPos, 1.0); o.uv = aUV;
+  o.depth = clamp((V.render3.x - aPos.y) / max(V.render3.y, 1.0), 0.0, 1.0);
+  o.bright = aB.x; o.agit = aB.y; o.kind = aK; return o;
+}
+@fragment fn debrisFs(inp: DOut) -> @location(0) vec4f {
+  let r = length(inp.uv);
+  var col: vec3f; var a: f32;
+  if (inp.kind < 0.5) {
+    // BUBBLE — a rising ring: bright silver rim, translucent centre, catchlight
+    let rim = smoothstep(0.55, 0.92, r) * smoothstep(1.0, 0.9, r);
+    let fill = smoothstep(0.9, 0.0, r) * 0.14;
+    col = mix(V.horizon.rgb, vec3f(0.9, 0.95, 1.0), 0.6);
+    let glint = smoothstep(0.22, 0.0, length(inp.uv - vec2f(-0.32, 0.32)));
+    a = (rim * 0.8 + fill + glint * 0.7) * inp.bright * (0.5 + 0.5 * inp.depth);
+  } else if (inp.kind < 1.5) {
+    // PLANKTON — a tiny crisp bright speck (and faint cold glow at night)
+    let p = smoothstep(0.45, 0.0, r);
+    col = mix(vec3f(0.75, 0.82, 0.80), vec3f(0.13, 0.72, 0.98), inp.agit * V.render3.w);
+    a = p * inp.bright * (0.5 + 0.5 * inp.depth);
+  } else if (inp.kind < 2.5) {
+    // MARINE SNOW — a small soft irregular tan-white fleck, slow-sinking
+    let s = smoothstep(0.7, 0.05, r) * (0.7 + 0.3 * sin(inp.uv.x * 9.0 + inp.uv.y * 7.0));
+    col = vec3f(0.62, 0.62, 0.56);
+    a = s * inp.bright * 0.7 * (0.4 + 0.6 * inp.depth);
+  } else {
+    // FISH SCALE — a guanine flake torn loose by a strike; silver with a thin-film
+    // tint, FLASHING as it tumbles face-on (inp.bright carries the flash + fade,
+    // inp.agit = how broadside it is right now).
+    let core = smoothstep(0.55, 0.0, r);                 // a tight sparkle, not a soft blob
+    let irid = vec3f(0.80 + 0.18 * sin(inp.uv.y * 6.0), 0.90, 0.86 + 0.14 * cos(inp.uv.x * 6.0));
+    col = mix(vec3f(0.52, 0.62, 0.80), vec3f(0.92, 0.98, 1.0), inp.agit);
+    col = mix(col, irid, 0.3);
+    a = core * inp.bright * 0.92;
+  }
+  col += V.sunCol.rgb * inp.agit * 0.35;                            // everything catches light when the wave shoves it
+  return vec4f(col, clamp(a, 0.0, 1.0));
+}`;
+
+    /* ---- buffers -------------------------------------------------------- */
+    const f4 = 16;
+    const bufOpts = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
+    const posA = device.createBuffer({ size: MAX * f4, usage: bufOpts });
+    const posB = device.createBuffer({ size: MAX * f4, usage: bufOpts });
+    const velA = device.createBuffer({ size: MAX * f4, usage: bufOpts });
+    const velB = device.createBuffer({ size: MAX * f4, usage: bufOpts });
+    const gridCount = device.createBuffer({ size: CELLS * 4, usage: GPUBufferUsage.STORAGE });
+    const gridIdx = device.createBuffer({ size: CELLS * CAP * 4, usage: GPUBufferUsage.STORAGE });
+    const SIMF = 208;                                    // floats in Sim (+ modes + pace + avatar)
+    const VIEWF = 76;                                    // floats in View (+ render/render2/render3)
+    const simBuf = device.createBuffer({ size: SIMF * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    const viewBuf = device.createBuffer({ size: VIEWF * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    const simArr = new Float32Array(SIMF);
+    const simU32 = new Uint32Array(simArr.buffer);
+
+    /* ---- seed the cloud (deterministic) --------------------------------- */
+    const seedBirds = (anchor) => {
+      const rng = (global.ZigCore ? global.ZigCore.rng : null);
+      const r = rng ? rng(SEED) : Math.random;
+      const P = new Float32Array(MAX * 4), Vv = new Float32Array(MAX * 4);
+      for (let i = 0; i < MAX; i++) {
+        const th = r() * 6.283, ph = Math.acos(2 * r() - 1), rad = 12 + 46 * Math.cbrt(r());
+        P[i * 4] = anchor[0] + Math.sin(ph) * Math.cos(th) * rad;
+        P[i * 4 + 1] = Math.max(6, anchor[1] + Math.cos(ph) * rad * 0.55);
+        P[i * 4 + 2] = anchor[2] + Math.sin(ph) * Math.sin(th) * rad;
+        P[i * 4 + 3] = 0;
+        const va = r() * 6.283;
+        Vv[i * 4] = Math.cos(va) * 10; Vv[i * 4 + 1] = (r() - 0.5) * 3; Vv[i * 4 + 2] = Math.sin(va) * 10;
+        Vv[i * 4 + 3] = 0;
+      }
+      device.queue.writeBuffer(posA, 0, P); device.queue.writeBuffer(posB, 0, P);
+      device.queue.writeBuffer(velA, 0, Vv); device.queue.writeBuffer(velB, 0, Vv);
+    };
+
+    /* ---- ZigMesh integration (additive · promoted during the Fireflies/
+       Sickle build, 2026-07). When a species supplies opts.mesh, the letter-
+       form is baked into the render WGSL as private arrays and the shard
+       vertex/fragment paths are spliced in (V.render.x = 2). With NO mesh,
+       the source below is exactly the golden string — Murmuration and School
+       compile the same shaders they always did.                             */
+    let RENDER_SRC = RENDER_WGSL;
+    if (MESH) {
+      const ZM = global.ZigMesh;
+      if (!ZM || !ZM.toWGSL) throw new Error("opts.mesh requires zigmesh.js to be loaded");
+      const SHARD_VS = `
+  if (V.render.x > 1.5) {
+    /* SHARD (ZigMesh letterform) — roll-tilted like fish; x=length ·
+       y=camber-normal · z=lateral. Early return: fully self-shaded. */
+    let cb = cos(bank); let sb = sin(bank);
+    let upR = up * cb + side * sb;
+    let sideR = side * cb - up * sb;
+    var ssize = size * (0.78 + 0.44 * h);
+    let isAvatar = V.render2.x >= 0.0 && i32(V.render2.x) == i32(ii);
+    /* mark gain (render2.y): 0 = truly incognito · ~1 = subtle ember ·
+       ~3 = BEACON (study mode — the lead petal cannot be missed) */
+    if (isAvatar) { ssize *= 1.0 + 0.32 * min(V.render2.y, 3.0); }
+    let l = SHARD_POS[vi];
+    let no = SHARD_NRM[vi];
+    let aux = SHARD_AUX[vi];
+    let swp = p + (fwd * l.x + upR * l.y + sideR * l.z) * ssize;
+    let sn = normalize(no.x * fwd + no.y * upR + no.z * sideR);
+    o.cp = V.viewProj * vec4f(swp, 1.0);
+    let toCam = normalize(V.camPos.xyz - swp);
+    let wrap = clamp(dot(sn, normalize(V.sunDir.xyz)) * 0.5 + 0.5, 0.0, 1.0);
+    o.shade = wrap * wrap;                                  // moon wrap-light
+    o.iri = pow(1.0 - abs(dot(sn, toCam)), 2.4);            // mid-turn grazing
+    o.dv = aux.x;                                           // edge (−1..1)
+    /* GLINT: true half-vector sparkle — lights only where tilt bisects
+       moon↔eye. On a wavy field this draws the MOONPATH, and every passing
+       crest shatters and reassembles it. Gain = V.render2.z (species dial). */
+    let hvec = normalize(normalize(V.sunDir.xyz) + toCam);
+    let glint = pow(max(dot(sn, hvec), 0.0), 26.0);   // broad lobe — twisted petals still catch it
+    o.obj = vec3f(aux.y, glint, select(0.0, V.render2.y, isAvatar));   // u · glint · ember
+    o.tone = 0.85 + 0.30 * h2;
+    let sd = distance(V.camPos.xyz, swp);
+    o.fog = 1.0 - exp(-sd * V.birdLight.w);
+    o.agit = P.w;
+    o.wpos = swp;
+    o.depth = 0.0;
+    ${PHASE ? `let sph = ph[ii].x / 6.28318;
+    o.near = smoothstep(0.0, 0.07, sph) * exp(-max(sph - 0.07, 0.0) * 5.5);   // ZigPhase pulse rides in 'near'` : `o.near = 0.0;`}
+    return o;
+  }
+`;
+      const SHARD_FS = `
+  if (V.render.x > 1.5) {
+    /* SHARD: two-tone dome/hollow — the flip IS the letter. birdDark = moss
+       dome · birdLight = bone hollow · mid-turn iridescence rides agitation,
+       so the WAVEFRONT itself glows a hue the settled field lacks. */
+    let moss = V.birdDark.rgb;
+    let bone = V.birdLight.rgb;
+    var base = select(bone, moss, ff) * inp.tone;
+    var c = base * (vec3f(0.05, 0.07, 0.11) + V.sunCol.rgb * (0.22 + 0.95 * inp.shade));
+    if (!ff) { c += bone * 0.05; }                          // the hollow holds its own light
+    ${PHASE ? `c *= 0.35 + 1.5 * inp.near;                  // the heartbeat lifts the body` : ""}
+    /* the rainbow: thin-film hue · gain = V.render3.z (species-controlled ink,
+       same dial as fish iridescence). Per-agent phase (tone) + along-length
+       drift spread the SPECTRUM across the field instead of one hue ×6000;
+       agitation nearly doubles it, so the wave rolls through as color. */
+    let hue = 0.5 + 0.5 * cos(6.2831 * (inp.iri * 1.15 + inp.obj.x * 0.35 + inp.tone * 1.7 + vec3f(0.0, 0.33, 0.66)));
+    c += hue * pow(inp.iri, 0.72) * V.render3.z * (0.50 + 0.85 * min(inp.agit * 1.6, 1.0))${PHASE ? `
+         * (0.40 + 2.0 * inp.near);                         // flash = a surge of RAINBOW` : ";"}
+    ${PHASE ? `c += vec3f(1.0, 1.0, 0.92) * pow(inp.near, 2.0) * pow(inp.iri, 0.5) * 0.20;   // white-hot at the peak` : ""}
+    c += V.sunCol.rgb * pow(inp.iri, 2.2) * 0.32;           // moon rim
+    /* THE MOONPATH: glitter where the water's tilt agrees with the sky */
+    c += V.sunCol.rgb * inp.obj.y * V.render2.z * (0.7 + 0.6 * min(inp.agit * 1.5, 1.0));
+    /* the avatar's subtle ember — a warmth its kin don't carry (obj.z gain) */
+    c += vec3f(1.0, 0.58, 0.20) * inp.obj.z * (0.16 + 0.55 * inp.near + 0.30 * inp.agit);
+    c *= 0.82 + 0.18 * (1.0 - abs(inp.dv));                 // edge occlusion
+    col = mix(c, V.skyMid.rgb, clamp(inp.fog, 0.0, 0.92));
+    return vec4f(col, 1.0);
+  }
+`;
+      RENDER_SRC = RENDER_SRC
+        .replace("struct View {", ZM.toWGSL(MESH, "SHARD") + "\nstruct View {")
+        .replace("@group(0) @binding(2) var<storage, read> vel: array<vec4f>;",
+                 "@group(0) @binding(2) var<storage, read> vel: array<vec4f>;" +
+                 (PHASE ? "\n@group(0) @binding(3) var<storage, read> ph: array<vec2f>;" : ""))
+        .replace("fn birdFs(inp: BirdOut) -> @location(0) vec4f {",
+                 "fn birdFs(inp: BirdOut, @builtin(front_facing) ff: bool) -> @location(0) vec4f {")
+        .replace("var col: vec3f;\n  if (V.render.x > 0.5) {",
+                 "var col: vec3f;\n" + SHARD_FS + "  if (V.render.x > 0.5) {")
+        .replace("var wp: vec3f;\n  var nFace: vec3f;",
+                 SHARD_VS + "  var wp: vec3f;\n  var nFace: vec3f;");
+    }
+
+    /* ---- ZigPhase (additive · the TIME law, promoted during the Fireflies
+       build 2026-07). Each agent carries a phase oscillator (blink cycle) +
+       natural frequency. Every step it is pulled toward its 7 nearest
+       neighbors' phases — Kuramoto over the SAME topological graph the flock
+       flies on. U.modes.y = coupling K (chaos → lock) · U.modes.z = tempo
+       bias · U.modes.w = ignition kick (impulse fronts yank phase toward the
+       flash). Emergent result: waves of synchronized ignition.              */
+    const PHASE_WGSL = !PHASE ? "" : COMMON + `
+@group(0) @binding(0) var<uniform> U: Sim;
+@group(0) @binding(1) var<storage, read> posIn: array<vec4f>;
+@group(0) @binding(2) var<storage, read> gridCount: array<u32>;
+@group(0) @binding(3) var<storage, read> gridIdx: array<u32>;
+@group(0) @binding(4) var<storage, read> phIn: array<vec2f>;
+@group(0) @binding(5) var<storage, read_write> phOut: array<vec2f>;
+const K: u32 = 7u;
+
+@compute @workgroup_size(64)
+fn phase(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let i = gid.x; if (i >= U.count) { return; }
+  let p = posIn[i].xyz;
+  var th = phIn[i].x;
+  let om = phIn[i].y;
+
+  /* topological 7-NN — the same law the wings obey, now heard by the clock */
+  var nd: array<f32, K>;
+  var ni: array<u32, K>;
+  for (var k = 0u; k < K; k++) { nd[k] = 1e12; ni[k] = 0xffffffffu; }
+  let c = cellCoord(p);
+  for (var dz = -1; dz <= 1; dz++) {
+  for (var dy = -1; dy <= 1; dy++) {
+  for (var dx = -1; dx <= 1; dx++) {
+    let cc = c + vec3i(dx, dy, dz);
+    if (cc.x < 0 || cc.y < 0 || cc.z < 0 || cc.x >= GX || cc.y >= GY || cc.z >= GZ) { continue; }
+    let ci = cellIndex(cc);
+    let n = min(gridCount[ci], CAP);
+    for (var s = 0u; s < n; s++) {
+      let j = gridIdx[ci * CAP + s];
+      if (j == i) { continue; }
+      let q = posIn[j].xyz;
+      let d2 = dot(q - p, q - p);
+      if (d2 < nd[K - 1u]) {
+        var k = K - 1u;
+        loop {
+          if (k > 0u && nd[k - 1u] > d2) { nd[k] = nd[k - 1u]; ni[k] = ni[k - 1u]; k--; }
+          else { break; }
+        }
+        nd[k] = d2; ni[k] = j;
+      }
+    }
+  }}}
+
+  /* Kuramoto pull toward the neighbors' phases. CHARISMA: when one of your
+     seven neighbors is the avatar, its voice weighs more — persuasive, not
+     dictatorial. */
+  var pull = 0.0; var cnt = 0.0;
+  for (var k = 0u; k < K; k++) {
+    if (ni[k] == 0xffffffffu) { continue; }
+    let w = select(1.0, max(U.avatarB.w, 1.0),
+                   U.avatarA.x >= 0.0 && i32(ni[k]) == i32(U.avatarA.x));
+    pull += w * sin(phIn[ni[k]].x - th); cnt += w;
+  }
+  var dth = om * U.modes.z;                                   // own clock × tempo bias
+  if (cnt > 0.0) { dth += U.modes.y * pull / cnt; }           // K decides chaos → lock
+
+  /* PACEMAKER — the performer is one more oscillator in the graph. The pull
+     is gated by earned confidence: steady playing entrains the field to
+     YOUR beat; sloppiness lets it slip back to its own. */
+  dth += U.pace.y * sin(U.pace.x - th);
+
+  /* ignition wavefront: a strike yanks phase toward the flash moment (0) */
+  let WLIFE = select(3.5, U.pace.z, U.pace.z > 0.1);
+  for (var m = 0u; m < 8u; m++) {
+    let im = U.impulses[m];
+    if (im.w < 0.0) { continue; }
+    let age = U.time - im.w;
+    if (age < 0.0 || age > WLIFE) { continue; }
+    let r = distance(p, im.xyz);
+    let front = U.waveSpeed * age;
+    let x = abs(r - front);
+    let w = max(U.waveWidth, 1.0);
+    let f = exp(-x * x / (2.0 * w * w)) * U.imp_meta[m].x * exp(-age * (2.45 / WLIFE));
+    dth += f * U.modes.w * sin(-th);
+  }
+
+  th += dth * U.dt;
+  th -= 6.28318 * floor(th / 6.28318);
+
+  /* AVATAR: a note-on flashes the performer's body NOW — the rhythm enters
+     the field as a real event in a real place, then spreads by law */
+  if (U.avatarA.x >= 0.0 && i32(U.avatarA.x) == i32(i) && U.avatarB.y > 0.5) {
+    th = 0.075;                                   // just past the flash-point: full lantern
+  }
+  phOut[i] = vec2f(th, om);
+}`;
+
+    /* Lantern render — points of additive light on the dark. Brightness is a
+       PULSE of the phase (fast rise, slow decay — a real firefly's lantern,
+       not a sine). birdLight.rgb = lantern color · birdDark.w = size.       */
+    const LANTERN_WGSL = !PHASE ? "" : `
+struct View {
+  viewProj: mat4x4f, camPos: vec4f, camRight: vec4f, camUp: vec4f, camFwd: vec4f,
+  sunDir: vec4f, skyTop: vec4f, skyMid: vec4f, horizon: vec4f, ground: vec4f,
+  sunCol: vec4f, birdDark: vec4f, birdLight: vec4f,
+  render: vec4f, render2: vec4f, render3: vec4f,
+};
+@group(0) @binding(0) var<uniform> V: View;
+@group(0) @binding(1) var<storage, read> pos: array<vec4f>;
+@group(0) @binding(2) var<storage, read> ph: array<vec2f>;
+struct LOut { @builtin(position) cp: vec4f, @location(0) uv: vec2f, @location(1) b: f32, @location(2) agit: f32 };
+@vertex
+fn lanternVs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> LOut {
+  var corners = array<vec2f, 6>(vec2f(-1.0,-1.0), vec2f(1.0,-1.0), vec2f(1.0,1.0),
+                                vec2f(-1.0,-1.0), vec2f(1.0,1.0), vec2f(-1.0,1.0));
+  let P = pos[ii];
+  let s = ph[ii].x / 6.28318;
+  let b = smoothstep(0.0, 0.07, s) * exp(-max(s - 0.07, 0.0) * 5.5);   // rise fast, fade slow
+  let h = fract(sin(f32(ii) * 127.1) * 43758.5453);
+  let size = V.birdDark.w * (0.7 + 0.5 * h) * (0.75 + 0.9 * b);
+  let c = corners[vi];
+  let wp = P.xyz + (V.camRight.xyz * c.x + V.camUp.xyz * c.y) * size;
+  var o: LOut;
+  o.cp = V.viewProj * vec4f(wp, 1.0);
+  o.uv = c; o.b = b; o.agit = P.w;
+  return o;
+}
+@fragment
+fn lanternFs(inp: LOut) -> @location(0) vec4f {
+  let r2 = dot(inp.uv, inp.uv);
+  let core = exp(-r2 * 9.0);
+  let halo = exp(-r2 * 2.2) * 0.30;
+  let bb = 0.05 + inp.b * (0.6 + 0.55 * min(inp.agit * 1.5, 1.0));   // unlit = barely-there ember
+  var col = V.birdLight.rgb * (core + halo) * bb;
+  col += vec3f(1.0, 1.0, 0.9) * core * inp.b * 0.55;                  // white-hot heart at the flash
+  return vec4f(col, 1.0);
+}`;
+
+    /* ---- pipelines ------------------------------------------------------ */
+    const gridMod = device.createShaderModule({ code: GRID_WGSL });
+    const stepMod = device.createShaderModule({ code: STEP_WGSL });
+    const rendMod = device.createShaderModule({ code: RENDER_SRC });
+
+    const clearPipe = device.createComputePipeline({ layout: "auto", compute: { module: gridMod, entryPoint: "clearGrid" } });
+    const buildPipe = device.createComputePipeline({ layout: "auto", compute: { module: gridMod, entryPoint: "build" } });
+    const stepPipe = device.createComputePipeline({ layout: "auto", compute: { module: stepMod, entryPoint: "step" } });
+
+    /* ---- ZigPhase buffers + pipelines (only when a species asks) --------- */
+    let phA = null, phB = null, phasePipe = null, lanternPipe = null;
+    if (PHASE) {
+      phA = device.createBuffer({ size: MAX * 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+      phB = device.createBuffer({ size: MAX * 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+      const phMod = device.createShaderModule({ code: PHASE_WGSL });
+      phasePipe = device.createComputePipeline({ layout: "auto", compute: { module: phMod, entryPoint: "phase" } });
+      const lMod = device.createShaderModule({ code: LANTERN_WGSL });
+      lanternPipe = device.createRenderPipeline({
+        layout: "auto",
+        vertex: { module: lMod, entryPoint: "lanternVs" },
+        fragment: { module: lMod, entryPoint: "lanternFs", targets: [{ format: gpu.format, blend: {
+          color: { srcFactor: "one", dstFactor: "one" },                 // ADDITIVE — light adds to light
+          alpha: { srcFactor: "one", dstFactor: "one" } } }] },
+        primitive: { topology: "triangle-list" },
+        depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "less" },
+        multisample: { count: gpu.sampleCount }
+      });
+    }
+
+    const skyPipe = device.createRenderPipeline({
+      layout: "auto",
+      vertex: { module: rendMod, entryPoint: "skyVs" },
+      fragment: { module: rendMod, entryPoint: "skyFs", targets: [{ format: gpu.format }] },
+      primitive: { topology: "triangle-list" },
+      depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" },
+      multisample: { count: gpu.sampleCount }
+    });
+    const birdPipe = device.createRenderPipeline({
+      layout: "auto",
+      vertex: { module: rendMod, entryPoint: "birdVs" },
+      fragment: { module: rendMod, entryPoint: "birdFs", targets: [{ format: gpu.format }] },
+      primitive: { topology: "triangle-list", cullMode: "none" },
+      depthStencil: { format: "depth24plus", depthWriteEnabled: true, depthCompare: "less" },
+      multisample: { count: gpu.sampleCount }
+    });
+
+    /* ---- DEBRIS (suspended particulate that reads the wave) -------------- */
+    const DMAX = opts.debris || 0;
+    let debris = null;
+    if (DMAX > 0) {
+      const dpos = new Float32Array(DMAX * 3), dvel = new Float32Array(DMAX * 3), dagit = new Float32Array(DMAX);
+      const dkind = new Float32Array(DMAX);   // 0 bubble (rises) · 1 plankton (drifts) · 2 marine snow (sinks) · 3 shed scale (event)
+      const dlife = new Float32Array(DMAX);   // scale slots only: 1→0 lifetime (0 = dormant, invisible)
+      const dspin = new Float32Array(DMAX), dphase = new Float32Array(DMAX);
+      const drng = (global.ZigCore ? global.ZigCore.rng(SEED ^ 0xD3) : Math.random);
+      const EXTD = EXT * 0.9, EXTYD = EXTY;
+      // Reserve the top slots of the pool for SHED SCALES — guanine flakes torn
+      // loose when a predator strike lands, fluttering down and catching light.
+      // Event-driven (spawned on impulse), so they're a reusable "shed on impact"
+      // capability any organism can inherit, not fish-specific scenery.
+      const SCMAX = Math.max(0, Math.min(260, Math.floor(DMAX * 0.07)));
+      const SC0 = DMAX - SCMAX;                // first scale slot index
+      let scalePtr = SC0, impT0 = null;
+      for (let i = 0; i < DMAX; i++) {
+        dpos[i * 3] = (drng() - 0.5) * 2 * EXTD; dpos[i * 3 + 1] = drng() * EXTYD; dpos[i * 3 + 2] = (drng() - 0.5) * 2 * EXTD;
+        if (i >= SC0) { dkind[i] = 3; dlife[i] = 0; dspin[i] = (drng() * 2 - 1) * 4; dphase[i] = drng() * 6.283; }
+        else { const rt = drng(); dkind[i] = rt < 0.22 ? 0 : (rt < 0.60 ? 1 : 2); }   // ~22% bubbles · 38% plankton · 40% marine snow
+      }
+      const dv = new Float32Array(DMAX * 6 * 6);   // 6 verts · (pos3 + uv2 + bright/agit 2 → but 6 floats: pos3,uv2,bright... pack pos3,uv2,packedB1? use 6: x,y,z,u,v,B) → agit shared
+      const dQuad = new Float32Array(DMAX * 6 * 8); // 6 verts · 8 floats (pos3, uv2, bright, agit, pad)
+      const dbuf = device.createBuffer({ size: dQuad.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+      const debrisPipe = device.createRenderPipeline({
+        layout: "auto",
+        vertex: { module: rendMod, entryPoint: "debrisVs", buffers: [{ arrayStride: 32, attributes: [
+          { shaderLocation: 0, offset: 0, format: "float32x3" },
+          { shaderLocation: 1, offset: 12, format: "float32x2" },
+          { shaderLocation: 2, offset: 20, format: "float32x2" },
+          { shaderLocation: 3, offset: 28, format: "float32" }] }] },
+        fragment: { module: rendMod, entryPoint: "debrisFs", targets: [{ format: gpu.format, blend: {
+          color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha" }, alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha" } } }] },
+        primitive: { topology: "triangle-list" },
+        depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "less" },
+        multisample: { count: gpu.sampleCount }
+      });
+      const CORN = [[-1, -1], [1, -1], [1, 1], [-1, 1]], TRI = [0, 1, 2, 0, 2, 3];
+      debris = {
+        pipe: debrisPipe, buf: dbuf, quad: dQuad, count: DMAX, size: opts.debrisSize || 1.4,
+        bg: null,
+        update(state, eye) {
+          const dt = Math.min(state.dt, 0.05), cur = state.wind, t = state.time;
+          const imp = state.impulses, ws = state.waveSpeed, wwd = Math.max(state.waveWidth, 1) * 2.2;
+          // BREATH → water pressure: a swell inflates the medium. We use breath's
+          // RATE OF CHANGE so a crescendo pushes the water OUT from the ball and a
+          // decrescendo draws it back — the water breathes with the performer,
+          // continuously, not just on strikes. (state.breathPush scales it.)
+          const breath = state.breath || 0, bpush = state.breathPush || 0;
+          const ctr = state.center || [0, 90, 0];
+          const dB = (breath - (this._pb || 0)) / Math.max(dt, 1e-3); this._pb = breath;
+          const swell = Math.max(-2, Math.min(2, dB)) * bpush;      // signed swell strength
+          // camera-facing basis
+          let rx = eye[2], ry = 0, rz = -eye[0]; const rl = Math.hypot(rx, ry, rz) || 1; rx /= rl; rz /= rl;
+          const sz = this.size;
+          // SHED SCALES: a fresh strike tears a burst of guanine flakes loose at
+          // its origin. We detect a new impulse per slot by its changed t0, then
+          // fill dormant scale slots with an outward-then-sinking flake.
+          const shedOn = (state.shedScales === undefined) ? 1 : state.shedScales;
+          if (SCMAX > 0 && shedOn > 0.5) {
+            if (!impT0) impT0 = new Float32Array(imp.length);
+            for (let m = 0; m < imp.length; m++) {
+              const im = imp[m]; if (!im || im.t0 < 0) continue;
+              if (im.t0 !== impT0[m]) {
+                impT0[m] = im.t0;
+                const nsc = Math.min(SCMAX, 3 + Math.floor((im.strength || 0.5) * 5));   // a FEW flakes, not a bouquet
+                for (let k = 0; k < nsc; k++) {
+                  const s = scalePtr++; if (scalePtr >= DMAX) scalePtr = SC0;
+                  const a = drng() * 6.283, el = (drng() * 2 - 1), sp = 11 + drng() * 18;  // fling WIDE so they scatter, not clump
+                  dpos[s * 3]     = im.o[0] + (drng() - 0.5) * 14;
+                  dpos[s * 3 + 1] = im.o[1] + (drng() - 0.5) * 14;
+                  dpos[s * 3 + 2] = im.o[2] + (drng() - 0.5) * 14;
+                  dvel[s * 3]     = Math.cos(a) * sp;
+                  dvel[s * 3 + 1] = el * sp * 0.4 + 1;       // some fly up, some down — then all sink
+                  dvel[s * 3 + 2] = Math.sin(a) * sp;
+                  dlife[s] = 1; dspin[s] = (drng() * 2 - 1) * 5.5; dphase[s] = drng() * 6.283;
+                }
+              }
+            }
+          }
+          for (let i = 0; i < DMAX; i++) {
+            let x = dpos[i * 3], y = dpos[i * 3 + 1], z = dpos[i * 3 + 2];
+            let vx = dvel[i * 3], vy = dvel[i * 3 + 1], vz = dvel[i * 3 + 2];
+            const kind = dkind[i];
+            // SHED SCALE — event particle: sinks, flutters, and FLASHES silver as
+            // it tumbles face-on, then fades over ~3.5s. Dormant slots park unseen.
+            if (kind > 2.5) {
+              const life = dlife[i];
+              if (life <= 0) {
+                for (let n = 0; n < 6; n++) { const o = (i * 6 + n) * 8; dQuad[o + 5] = 0; dQuad[o + 7] = 3; }
+                continue;
+              }
+              vx += (cur[0] * 3 - vx) * Math.min(1, dt * 0.9);
+              vz += (cur[2] * 3 - vz) * Math.min(1, dt * 0.9);
+              vy += (-6.0 + cur[1] * 2 - vy) * Math.min(1, dt * 0.5);      // guanine flake sinks
+              vx += Math.sin(t * 3.4 + dphase[i]) * 2.4 * dt;             // flutter side-to-side
+              vz += Math.cos(t * 2.9 + dphase[i]) * 2.4 * dt;
+              vx *= (1 - dt * 0.9); vy *= (1 - dt * 0.6); vz *= (1 - dt * 0.9);   // travel a bit before settling
+              x += vx * dt; y += vy * dt; z += vz * dt;
+              dlife[i] = life - dt * 0.42;                                 // ~2.4s — no accumulating bouquets
+              dpos[i * 3] = x; dpos[i * 3 + 1] = y; dpos[i * 3 + 2] = z;
+              dvel[i * 3] = vx; dvel[i * 3 + 1] = vy; dvel[i * 3 + 2] = vz;
+              const rot = t * dspin[i] + dphase[i];
+              const face = Math.abs(Math.sin(rot));                        // 1 broadside flash · 0 edge-on
+              const br = Math.min(1, life * 1.4) * (0.12 + 0.72 * face);   // dim between flashes — a sparkle, not a lamp
+              const psz = sz * (0.09 + 0.13 * face);                       // SMALL: ~a quarter of a fish, not a petal
+              const cr = Math.cos(rot * 0.5), sr = Math.sin(rot * 0.5);
+              for (let n = 0; n < 6; n++) {
+                const c = CORN[TRI[n]], o = (i * 6 + n) * 8;
+                const qx = c[0] * 0.5, qy = c[1] * 1.25;                   // a thin flake, then rotate in view plane
+                const rxq = qx * cr - qy * sr, ryq = qx * sr + qy * cr;
+                dQuad[o] = x + rx * rxq * psz; dQuad[o + 1] = y + ryq * psz; dQuad[o + 2] = z + rz * rxq * psz;
+                dQuad[o + 3] = c[0]; dQuad[o + 4] = c[1]; dQuad[o + 5] = br; dQuad[o + 6] = face; dQuad[o + 7] = 3;
+              }
+              continue;
+            }
+            // each type moves as it should: bubbles RISE, snow SINKS, plankton drifts.
+            const riseV = kind < 0.5 ? 7.0 : (kind < 1.5 ? -0.2 : -1.4);   // bubble up · plankton ~neutral · snow down
+            // all ride the tide (breath current), streaming visibly when playing
+            vx += (cur[0] * 4.5 - vx) * Math.min(1, dt * 0.8);
+            vz += (cur[2] * 4.5 - vz) * Math.min(1, dt * 0.8);
+            vy += (riseV + cur[1] * 3 - vy) * Math.min(1, dt * 0.5);
+            if (kind < 0.5) { vx += Math.sin(t * 3 + i) * 1.2 * dt; vz += Math.cos(t * 2.6 + i) * 1.2 * dt; }  // bubble wobble
+            // the breath swell — radial push from the ball, falling off with distance
+            const bdx = x - ctr[0], bdy = y - ctr[1], bdz = z - ctr[2];
+            const bdl = Math.hypot(bdx, bdy, bdz) || 1;
+            const infl = swell * 26 * Math.exp(-bdl / 150);
+            vx += bdx / bdl * infl * dt; vy += bdy / bdl * infl * 0.55 * dt; vz += bdz / bdl * infl * dt;
+            // THE WAVE: each active impulse front shoves the particle outward as it passes
+            let hit = 0;
+            for (let m = 0; m < imp.length; m++) {
+              const im = imp[m]; if (!im || im.t0 < 0) continue;
+              const age = t - im.t0; if (age < 0 || age > 3.5) continue;
+              const dx = x - im.o[0], dy = y - im.o[1], dz = z - im.o[2];
+              const r = Math.hypot(dx, dy, dz) || 1e-3;
+              const front = ws * age, band = Math.abs(r - front);
+              const f = Math.exp(-(band * band) / (2 * wwd * wwd)) * im.strength * Math.exp(-age * 0.7);
+              if (f > 0.02) {
+                const k = f * 90 * dt;
+                vx += dx / r * k; vy += dy / r * k * 0.5; vz += dz / r * k;
+                hit = Math.max(hit, f);
+              }
+            }
+            hit = Math.max(hit, Math.abs(swell) * 0.35 * Math.exp(-bdl / 150));   // breath swell lights the water too
+            vx *= (1 - dt * 0.8); vy *= (1 - dt * 0.8); vz *= (1 - dt * 0.8);   // water damping
+            x += vx * dt; y += vy * dt; z += vz * dt;
+            // wrap the volume
+            if (y < 2) { y = EXTYD; x = (drng() - 0.5) * 2 * EXTD; z = (drng() - 0.5) * 2 * EXTD; vx = vy = vz = 0; }
+            if (x > EXTD) x -= 2 * EXTD; else if (x < -EXTD) x += 2 * EXTD;
+            if (z > EXTD) z -= 2 * EXTD; else if (z < -EXTD) z += 2 * EXTD;
+            dpos[i * 3] = x; dpos[i * 3 + 1] = y; dpos[i * 3 + 2] = z;
+            dvel[i * 3] = vx; dvel[i * 3 + 1] = vy; dvel[i * 3 + 2] = vz;
+            dagit[i] += (hit - dagit[i]) * Math.min(1, dt * 3);
+            // emit a camera-facing quad — each TYPE has its own size + shape so
+            // the water reads as a mix of real matter, not uniform specks:
+            //   bubble  → medium, round, bright rim (the shader draws the ring)
+            //   plankton→ tiny bright speck
+            //   snow    → small, slightly elongated tan flake
+            const hs = (i * 0.6180339) % 1, hs2 = (i * 0.3129) % 1;
+            let psz, aspY, br;
+            if (kind < 0.5) {            // bubble
+              psz = sz * (0.9 + 0.7 * hs); aspY = 1.0; br = 0.8 + 0.2 * hs2;
+            } else if (kind < 1.5) {     // plankton
+              psz = sz * (0.28 + 0.22 * hs); aspY = 1.0; br = 0.6 + 0.4 * hs2;
+            } else {                     // marine snow
+              psz = sz * (0.5 + 0.7 * hs); aspY = 0.6 + 1.1 * hs2; br = 0.35 + 0.45 * hs2;
+            }
+            const ag = dagit[i];
+            for (let n = 0; n < 6; n++) {
+              const c = CORN[TRI[n]], o = (i * 6 + n) * 8;
+              dQuad[o] = x + rx * c[0] * psz; dQuad[o + 1] = y + c[1] * psz * aspY; dQuad[o + 2] = z + rz * c[0] * psz;
+              dQuad[o + 3] = c[0]; dQuad[o + 4] = c[1]; dQuad[o + 5] = br; dQuad[o + 6] = ag; dQuad[o + 7] = kind;
+            }
+          }
+          device.queue.writeBuffer(dbuf, 0, dQuad);
+        }
+      };
+      debris.bg = device.createBindGroup({ layout: debrisPipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: viewBuf } }] });
+      debris.setView = (vb) => { debris.bg = device.createBindGroup({ layout: debrisPipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: vb } }] }); };
+    }
+
+    /* ---- bind groups (double-buffered A→B, B→A) -------------------------- */
+    const mkGridBG = (pin) => device.createBindGroup({
+      layout: buildPipe.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: simBuf } },
+        { binding: 1, resource: { buffer: pin } },
+        { binding: 2, resource: { buffer: gridCount } },
+        { binding: 3, resource: { buffer: gridIdx } }]
+    });
+    // clearGrid only touches gridCount — auto layout exposes just that binding
+    const clearBG = device.createBindGroup({
+      layout: clearPipe.getBindGroupLayout(0),
+      entries: [{ binding: 2, resource: { buffer: gridCount } }]
+    });
+    const mkStepBG = (pin, vin, pout, vout) => device.createBindGroup({
+      layout: stepPipe.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: simBuf } },
+        { binding: 1, resource: { buffer: pin } },
+        { binding: 2, resource: { buffer: vin } },
+        { binding: 3, resource: { buffer: gridCount } },
+        { binding: 4, resource: { buffer: gridIdx } },
+        { binding: 5, resource: { buffer: pout } },
+        { binding: 6, resource: { buffer: vout } }]
+    });
+    const mkDrawBG = (pcur, vcur, phcur) => {
+      const entries = [
+        { binding: 0, resource: { buffer: viewBuf } },
+        { binding: 1, resource: { buffer: pcur } },
+        { binding: 2, resource: { buffer: vcur } }];
+      if (MESH && PHASE) entries.push({ binding: 3, resource: { buffer: phcur } });   // pulse-shards
+      return device.createBindGroup({ layout: birdPipe.getBindGroupLayout(0), entries });
+    };
+    // sky only reads the View uniform
+    const skyBG = device.createBindGroup({
+      layout: skyPipe.getBindGroupLayout(0),
+      entries: [{ binding: 0, resource: { buffer: viewBuf } }]
+    });
+    const mkPhaseBG = (pin, phin, phout) => !PHASE ? null : device.createBindGroup({
+      layout: phasePipe.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: simBuf } },
+        { binding: 1, resource: { buffer: pin } },
+        { binding: 2, resource: { buffer: gridCount } },
+        { binding: 3, resource: { buffer: gridIdx } },
+        { binding: 4, resource: { buffer: phin } },
+        { binding: 5, resource: { buffer: phout } }]
+    });
+    const mkLanternBG = (pcur, phcur) => !PHASE ? null : device.createBindGroup({
+      layout: lanternPipe.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: viewBuf } },
+        { binding: 1, resource: { buffer: pcur } },
+        { binding: 2, resource: { buffer: phcur } }]
+    });
+    const sets = [
+      { grid: mkGridBG(posA), step: mkStepBG(posA, velA, posB, velB), draw: mkDrawBG(posB, velB, phB),
+        phase: mkPhaseBG(posA, phA, phB), lantern: mkLanternBG(posB, phB) },
+      { grid: mkGridBG(posB), step: mkStepBG(posB, velB, posA, velA), draw: mkDrawBG(posA, velA, phA),
+        phase: mkPhaseBG(posB, phB, phA), lantern: mkLanternBG(posA, phA) }
+    ];
+    let flip = 0;
+
+    /* ---- the per-frame call --------------------------------------------- */
+    const flock = {
+      MAX, EXT, EXTY,
+      count: Math.min(opts.count || 30000, MAX),
+      vertsPerAgent: MESH ? MESH.verts : (opts.verts || 21),   // bird = 21 · fish = 33 · shard = mesh.verts
+      seed: seedBirds,
+      /* Surface seeding — petals spread uniformly across the whole membrane
+         (a lake skin, an ocean top), not balled like a flock. */
+      seedSurface(level, ext) {
+        const rng = (global.ZigCore ? global.ZigCore.rng : null);
+        const r = rng ? rng(SEED ^ 0x5F1A) : Math.random;
+        const P = new Float32Array(MAX * 4), Vv = new Float32Array(MAX * 4);
+        for (let i = 0; i < MAX; i++) {
+          P[i * 4]     = (r() * 2 - 1) * ext;
+          P[i * 4 + 1] = level + (r() - 0.5) * 1.6;
+          P[i * 4 + 2] = (r() * 2 - 1) * ext;
+          P[i * 4 + 3] = 0;
+          const va = r() * 6.283;
+          Vv[i * 4] = Math.cos(va) * 0.6; Vv[i * 4 + 1] = 0; Vv[i * 4 + 2] = Math.sin(va) * 0.6; Vv[i * 4 + 3] = 0;
+        }
+        device.queue.writeBuffer(posA, 0, P); device.queue.writeBuffer(posB, 0, P);
+        device.queue.writeBuffer(velA, 0, Vv); device.queue.writeBuffer(velB, 0, Vv);
+      },
+      /* ZigPhase: deterministic phase + natural-frequency seeding.
+         baseOmega rad/s (≈0.7 Hz → 4.4) · spread = ±fraction of base. */
+      seedPhase(baseOmega, spread) {
+        if (!PHASE) return;
+        const om0 = baseOmega || 4.4, sp = (spread === undefined ? 0.25 : spread);
+        const rng = (global.ZigCore ? global.ZigCore.rng : null);
+        const r = rng ? rng(SEED ^ 0x9A5E) : Math.random;
+        const ph = new Float32Array(MAX * 2);
+        for (let i = 0; i < MAX; i++) {
+          ph[i * 2] = r() * 6.28318;                            // phase: anywhere in the cycle
+          ph[i * 2 + 1] = om0 * (1 - sp + 2 * sp * r());        // its own clock
+        }
+        device.queue.writeBuffer(phA, 0, ph);
+        device.queue.writeBuffer(phB, 0, ph);
+      },
+      // pack the per-frame Sim uniforms (shared by frame() and computeInto())
+      _packSim(state) {
+        simArr[0] = state.dt; simArr[1] = state.time; simArr[2] = state.breath; simArr[3] = state.bend;
+        simArr[4] = state.attack; simArr[5] = state.waveSpeed; simArr[6] = state.waveWidth; simArr[7] = state.energy;
+        simU32[8] = this.count; simArr[9] = state.agitAmbient || 0; simArr[10] = state.cohW; simArr[11] = state.sepW;
+        simArr.set(state.anchor, 12);          // vec4
+        simArr.set(state.refpt, 16);           // vec4
+        simArr[20] = state.wind[0]; simArr[21] = state.wind[1]; simArr[22] = state.wind[2]; simArr[23] = state.aliW;
+        simArr.set(state.knobsA, 24);          // contagion · sepRadius · vmin · vmaxBase
+        simArr.set(state.knobsB, 28);          // vmaxAgit · waveKick · bankGain · churn
+        for (let m = 0; m < 8; m++) {
+          const im = state.impulses[m];
+          const o = 32 + m * 4, o2 = 64 + m * 4;
+          if (im && im.t0 >= 0) {
+            simArr[o] = im.o[0]; simArr[o + 1] = im.o[1]; simArr[o + 2] = im.o[2]; simArr[o + 3] = im.t0;
+            simArr[o2] = im.strength; simArr[o2 + 1] = 0; simArr[o2 + 2] = 0; simArr[o2 + 3] = 0;
+          } else { simArr[o + 3] = -1; simArr[o2] = 0; }
+        }
+        simArr.set(state.taps, 96);            // 64 floats
+        if (state.wanderers) simArr.set(state.wanderers, 160); else for (let k = 0; k < 16; k++) simArr[160 + k] = (k % 4 === 0 ? -1 : 0);
+        if (state.wmeta) simArr.set(state.wmeta, 176); else simArr.fill(0, 176, 192);
+        simArr[192] = state.medium || 0;       // 0 air · 1 water
+        simArr[193] = state.K || 0;            // ZigPhase: Kuramoto coupling (chaos → lock)
+        simArr[194] = state.tempo === undefined ? 1 : state.tempo;   // tempo bias (bend)
+        simArr[195] = state.ignite || 0;       // ignition-wave phase kick (strike)
+        simArr[196] = state.pacePhase || 0;    // Pacemaker: the performer's beat phase
+        simArr[197] = state.pacePull || 0;     // Pacemaker: entrainment strength (earned, not set)
+        simArr[198] = state.waveLife || 0;     // Surface: ring lifetime s (0 = golden 3.5)
+        simArr[199] = 0;
+        /* AVATAR — the performer embodied as ONE agent; influence spreads
+           only through the local laws (neighbors, contagion, phase) */
+        if (state.avatarA) { simArr.set(state.avatarA, 200); simArr.set(state.avatarB, 204); }
+        else { simArr[200] = -1; simArr.fill(0, 201, 208); }
+        device.queue.writeBuffer(simBuf, 0, simArr);
+      },
+      /* ---- SCENE MODE — attach to a shared world (multi-species) ----------
+         attachScene(scene) once; then each frame:
+           flock.computeInto(encoder, state)   // records its compute pass
+           ... scene draws sky ...
+           flock.recordInto(renderPass)         // draws its agents (shared depth)
+         The flock binds the SCENE's view uniform, so every species shares one
+         camera; each keeps its own sim/grid buffers. Standalone frame() below
+         is untouched — Murmuration keeps its proven path.                    */
+      _sceneDraw: null, _scene: null,
+      attachScene(scene) {
+        this._scene = scene;
+        const sceneEntries = (pcur, vcur, phcur) => {
+          const e = [
+            { binding: 0, resource: { buffer: scene.viewBuf } },
+            { binding: 1, resource: { buffer: pcur } },
+            { binding: 2, resource: { buffer: vcur } }];
+          if (MESH && PHASE) e.push({ binding: 3, resource: { buffer: phcur } });
+          return e;
+        };
+        this._sceneDraw = [
+          device.createBindGroup({ layout: birdPipe.getBindGroupLayout(0), entries: sceneEntries(posB, velB, phB) }),
+          device.createBindGroup({ layout: birdPipe.getBindGroupLayout(0), entries: sceneEntries(posA, velA, phA) })
+        ];
+        if (debris) debris.setView(scene.viewBuf);
+        return this;
+      },
+      debris,
+      computeInto(enc, state) {
+        this._packSim(state);
+        const va = this._scene && this._scene._viewArr;
+        if (debris) debris.update(state, va ? [va[16], va[17], va[18]] : [0, 90, 300]);
+        gpu.ensureTargets();
+        const s = sets[flip];
+        const cp = enc.beginComputePass();
+        cp.setPipeline(clearPipe); cp.setBindGroup(0, clearBG); cp.dispatchWorkgroups(Math.ceil(CELLS / 64));
+        cp.setPipeline(buildPipe); cp.setBindGroup(0, s.grid); cp.dispatchWorkgroups(Math.ceil(this.count / 64));
+        cp.setPipeline(stepPipe); cp.setBindGroup(0, s.step); cp.dispatchWorkgroups(Math.ceil(this.count / 64));
+        if (PHASE) { cp.setPipeline(phasePipe); cp.setBindGroup(0, s.phase); cp.dispatchWorkgroups(Math.ceil(this.count / 64)); }
+        cp.end();
+      },
+      recordInto(pass) {
+        if (lanternPipe && !MESH) { pass.setPipeline(lanternPipe); pass.setBindGroup(0, sets[flip].lantern); pass.draw(6, this.count); flip ^= 1; if (debris) { pass.setPipeline(debris.pipe); pass.setBindGroup(0, debris.bg); pass.setVertexBuffer(0, debris.buf); pass.draw(debris.count * 6); } return; }
+        pass.setPipeline(birdPipe); pass.setBindGroup(0, this._sceneDraw[flip]); pass.draw(this.vertsPerAgent, this.count);
+        if (debris) { pass.setPipeline(debris.pipe); pass.setBindGroup(0, debris.bg); pass.setVertexBuffer(0, debris.buf); pass.draw(debris.count * 6); }
+        flip ^= 1;
+      },
+      frame(state, viewArr) {
+        this._packSim(state);
+        device.queue.writeBuffer(viewBuf, 0, viewArr);
+        if (debris) debris.update(state, [viewArr[16], viewArr[17], viewArr[18]]);
+
+        gpu.ensureTargets();
+        const s = sets[flip];
+        const enc = device.createCommandEncoder();
+        const cp = enc.beginComputePass();
+        cp.setPipeline(clearPipe); cp.setBindGroup(0, clearBG); cp.dispatchWorkgroups(Math.ceil(CELLS / 64));
+        cp.setPipeline(buildPipe); cp.setBindGroup(0, s.grid); cp.dispatchWorkgroups(Math.ceil(this.count / 64));
+        cp.setPipeline(stepPipe); cp.setBindGroup(0, s.step); cp.dispatchWorkgroups(Math.ceil(this.count / 64));
+        if (PHASE) { cp.setPipeline(phasePipe); cp.setBindGroup(0, s.phase); cp.dispatchWorkgroups(Math.ceil(this.count / 64)); }
+        cp.end();
+
+        const swapTex = gpu.context.getCurrentTexture();
+        const swapView = swapTex.createView();
+        const rp = enc.beginRenderPass({
+          colorAttachments: [{
+            view: gpu.sampleCount > 1 ? gpu.msaaTex.createView() : swapView,
+            resolveTarget: gpu.sampleCount > 1 ? swapView : undefined,
+            clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: "clear", storeOp: gpu.sampleCount > 1 ? "discard" : "store"
+          }],
+          depthStencilAttachment: {
+            view: gpu.depthTex.createView(),
+            depthClearValue: 1, depthLoadOp: "clear", depthStoreOp: "discard"
+          }
+        });
+        rp.setPipeline(skyPipe); rp.setBindGroup(0, skyBG); rp.draw(3);
+        if (lanternPipe && !MESH) {
+          /* Fireflies mode: points of additive light, not silhouettes */
+          rp.setPipeline(lanternPipe); rp.setBindGroup(0, s.lantern); rp.draw(6, this.count);
+        } else {
+          rp.setPipeline(birdPipe); rp.setBindGroup(0, s.draw); rp.draw(this.vertsPerAgent, this.count);
+        }
+        if (debris) { rp.setPipeline(debris.pipe); rp.setBindGroup(0, debris.bg); rp.setVertexBuffer(0, debris.buf); rp.draw(debris.count * 6); }
+        rp.end();
+
+        /* frame readback — export capture / verification (one frame on request) */
+        let cap = null;
+        if (this._capResolve) {
+          const w = gpu.w, h = gpu.h, bpr = Math.ceil(w * 4 / 256) * 256;
+          const buf = device.createBuffer({ size: bpr * h, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+          enc.copyTextureToBuffer({ texture: swapTex }, { buffer: buf, bytesPerRow: bpr, rowsPerImage: h }, [w, h, 1]);
+          cap = { buf, bpr, w, h, resolve: this._capResolve };
+          this._capResolve = null;
+        }
+        device.queue.submit([enc.finish()]);
+        if (cap) {
+          cap.buf.mapAsync(GPUMapMode.READ).then(() => {
+            const data = new Uint8Array(cap.buf.getMappedRange());
+            const out = new Uint8ClampedArray(cap.w * cap.h * 4);
+            for (let y = 0; y < cap.h; y++) out.set(data.subarray(y * cap.bpr, y * cap.bpr + cap.w * 4), y * cap.w * 4);
+            cap.buf.unmap(); cap.buf.destroy();
+            cap.resolve({ width: cap.w, height: cap.h, pixels: out, format: gpu.format });
+          }).catch(e => cap.resolve({ error: String(e) }));
+        }
+        flip ^= 1;
+      },
+      _capResolve: null,
+      capture() { return new Promise((res) => { this._capResolve = res; }); }
+    };
+    return flock;
+  };
+
+  /* ========================================================================
+     FOREST — the ROOTED archetype (the second great primitive).
+     GPU-instanced anchored strands: each holdfast roots a tapering stipe that
+     bends under a CURRENT vector — stiff at the base, loose at the tip. The
+     sway is pure vertex work (no sim); the strand is a camera-facing ribbon so
+     it always reads. Inherits the underwater light (depth-shift · caustics ·
+     bioluminescent tips) straight from the shared View uniform, so a kelp
+     forest is lit by the same god rays as the school. Reusable for seagrass,
+     anemones, and grasses-in-wind (same system, air current).
+     Instance data (vec4 per strand): rootX · rootZ · height · phase.
+     ===================================================================== */
+  /* ========================================================================
+     FOREST v2 — the ROOTED archetype, ARTICULATED (movement ported from
+     Kelp WebGL 036). The mesh is rebuilt on the CPU every frame: each stipe
+     and blade is a segment chain whose direction accumulates from a stack of
+     forces — upright stiffness, current lean, travelling-swell wave (breath by
+     DELAY via Drive.tap), micro-eddies, buoyancy, surge, drape, carry — each
+     clamped per segment. Blades TWIST (width narrows edge-on, widens flat) so a
+     flat ribbon reads as a 3D being turning in the water. Floats (pneumatocysts),
+     holdfast roots, and wear/aging included. Inherits the underwater light.
+     ===================================================================== */
+  const FOREST_WGSL = `
+struct View {
+  viewProj: mat4x4f, camPos: vec4f, camRight: vec4f, camUp: vec4f, camFwd: vec4f,
+  sunDir: vec4f, skyTop: vec4f, skyMid: vec4f, horizon: vec4f, ground: vec4f,
+  sunCol: vec4f, birdDark: vec4f, birdLight: vec4f, render: vec4f, render2: vec4f, render3: vec4f,
+};
+struct Forest { colStipe: vec4f, colBladeLo: vec4f, colBladeHi: vec4f, colFloat: vec4f };
+@group(0) @binding(0) var<uniform> V: View;
+@group(0) @binding(1) var<uniform> F: Forest;
+
+fn marineSnow(dir: vec3f) -> vec3f {
+  let sp = dir.xy * 70.0 + vec2f(0.0, V.camPos.w * 0.5);
+  let cell = floor(sp); let hh = fract(sin(dot(cell, vec2f(19.73, 83.11))) * 3571.31);
+  let d = fract(sp) - 0.5; let mote = smoothstep(0.13, 0.0, length(d)) * step(0.86, hh);
+  return vec3f(0.55, 0.62, 0.60) * mote * (0.35 + 0.65 * max(dir.y, 0.0));
+}
+fn waterColor(dir: vec3f) -> vec3f {
+  let y = dir.y; let deep = V.skyTop.rgb; let mid = V.skyMid.rgb; let surf = V.horizon.rgb;
+  var col = mix(mid, deep, smoothstep(0.0, -0.75, y));
+  col = mix(col, surf, smoothstep(0.05, 0.85, y));
+  let sd = normalize(V.sunDir.xyz); let s = max(dot(dir, sd), 0.0);
+  col = mix(col, surf * 1.5 + V.sunCol.rgb * 0.35, smoothstep(0.82, 0.995, y));
+  col += V.sunCol.rgb * pow(s, 90.0) * 0.6 * V.sunDir.w;
+  let ang = atan2(dir.x, dir.z);
+  let ripple = 0.55 + 0.45 * sin(ang * 16.0 + V.camPos.w * 0.35) * sin(ang * 6.3 - V.camPos.w * 0.21);
+  col += V.sunCol.rgb * pow(max(y, 0.0), 1.4) * pow(s, 2.5) * ripple * V.render2.y;
+  col += marineSnow(dir) * V.ground.w;
+  return col;
+}
+fn caustic(p: vec2f, t: f32) -> f32 {
+  let q = p * 0.14;
+  var v = sin(q.x * 1.3 + t * 0.6) * sin(q.y * 1.1 - t * 0.5);
+  v += 0.5 * sin(q.x * 2.7 - t * 0.42 + 1.3) * sin(q.y * 2.3 + t * 0.7);
+  v += 0.25 * sin((q.x + q.y) * 3.9 + t * 0.9);
+  return pow(clamp(v * 0.5 + 0.5, 0.0, 1.0), 3.0);
+}
+struct SkyOut { @builtin(position) cp: vec4f, @location(0) uv: vec2f };
+@vertex fn skyVs(@builtin(vertex_index) vi: u32) -> SkyOut {
+  var o: SkyOut; let xy = vec2f(f32((vi << 1u) & 2u), f32(vi & 2u)) * 2.0 - 1.0;
+  o.cp = vec4f(xy, 0.9999, 1.0); o.uv = xy; return o;
+}
+@fragment fn skyFs(inp: SkyOut) -> @location(0) vec4f {
+  let dir = normalize(V.camFwd.xyz + V.camRight.xyz * inp.uv.x * V.camUp.w * V.camRight.w + V.camUp.xyz * inp.uv.y * V.camUp.w);
+  return vec4f(waterColor(dir), 1.0);
+}
+struct KOut {
+  @builtin(position) cp: vec4f,
+  @location(0) t: f32, @location(1) light: f32, @location(2) kind: f32,
+  @location(3) wear: f32, @location(4) depth: f32, @location(5) wpos: vec3f, @location(6) side: f32,
+};
+@vertex fn kelpVs(@location(0) aPos: vec3f, @location(1) aParam: vec4f, @location(2) aWear: f32) -> KOut {
+  var o: KOut; o.cp = V.viewProj * vec4f(aPos, 1.0);
+  o.t = aParam.x; o.side = aParam.y; o.light = aParam.z; o.kind = aParam.w; o.wear = aWear; o.wpos = aPos;
+  o.depth = clamp((V.render3.x - aPos.y) / max(V.render3.y, 1.0), 0.0, 1.0);
+  return o;
+}
+@fragment fn kelpFs(inp: KOut) -> @location(0) vec4f {
+  let across = 1.0 - abs(inp.side);
+  var col: vec3f; var alpha: f32;
+  if (inp.kind < 0.5) {                       // STIPE
+    col = mix(F.colStipe.rgb * 0.65, F.colStipe.rgb, inp.light);
+    alpha = smoothstep(0.0, 0.30, across) * (0.85 + 0.15 * inp.depth);
+  } else if (inp.kind < 1.5) {                // BLADE
+    col = mix(F.colBladeLo.rgb, F.colBladeHi.rgb, inp.light);
+    col = mix(col, vec3f(0.60, 0.47, 0.13), clamp(inp.wear, 0.0, 1.0) * 0.78);   // WEAR bleach
+    alpha = smoothstep(0.0, 0.30, across) * (0.80 + 0.20 * inp.depth) * (1.0 - inp.wear * 0.30);
+  } else if (inp.kind < 2.5) {                // FLOAT (pneumatocyst) — soft
+    col = F.colFloat.rgb; alpha = across * across * (0.5 + 0.3 * inp.depth);
+  } else {                                    // HOLDFAST — dark root
+    col = vec3f(0.05, 0.07, 0.045) * (0.6 + 0.8 * inp.depth);
+    alpha = smoothstep(0.0, 0.32, across) * (0.9 + 0.1 * inp.depth);
+  }
+  if (inp.kind < 1.5) {                        // light plays on stipe + blades
+    let caus = caustic(inp.wpos.xz + inp.wpos.y * 0.3, V.camPos.w) * (1.0 - inp.depth);
+    col += V.sunCol.rgb * caus * V.render2.z * 0.7;
+    col += vec3f(0.13, 0.72, 0.98) * smoothstep(0.6, 1.0, inp.t) * V.render3.w * 0.9;   // biolum tips at night
+  }
+  let waterAtDepth = mix(V.horizon.rgb, V.skyTop.rgb, inp.depth);
+  col = mix(col, waterAtDepth, inp.depth * V.render2.w);
+  return vec4f(col, alpha);
+}`;
+
+  ZigWebGPU.createForest = function (gpu, opts) {
+    opts = opts || {};
+    const device = gpu.device;
+    const G = global.ZigCore;
+    const rng = G ? G.rng(opts.seed || 0xC0FFEE) : Math.random;
+    const cfg = { TWIST: 0.7, LIFT_GAIN: 1.7, WAVE_AMP: 0.16, WAVE_FREQ: 1.1, EDDY: 0.13,
+      MICRO: 0.17, MSCALE: 12.6, STIPE_STIFF: 0.35, STIPE_LEAN: 0.11, STIPE_FLEX: 1.2,
+      BUOY: 0.13, DRAPE: 0.18, SURGE: 0.6, CARRY: 0.55, BLADE_LAG: 0.10, STIPE_LAG: 0.07 };
+    const STSEG = 14, BLSEG = 8, HFSEG = 5;
+    const floorY = opts.floorY != null ? opts.floorY : 8;
+    const spread = opts.spread || 130;
+    const hMin = opts.heightMin || 120, hMax = opts.heightMax || 168;
+
+    /* ---- build the persistent plant structures (once) ---- */
+    const NP = Math.min(opts.count || 34, opts.max || 400);
+    const plants = [];
+    for (let i = 0; i < NP; i++) {
+      const scl = 0.7 + 0.6 * rng();
+      const nB = (opts.blades || 12) + Math.floor(rng() * 5) - 2;
+      const blades = [];
+      for (let k = 0; k < nB; k++) {
+        blades.push({ tA: 0.10 + 0.86 * (k / Math.max(1, nB - 1)) + (rng() - 0.5) * 0.05,
+          az: rng() * 6.283, elev: 0.5 + rng() * 0.7, len: (18 + 10 * rng()) * scl,
+          baseW: (1.1 + 0.6 * rng()) * scl, wf: 0.9 + rng() * 0.8, phase: rng() * 6.283,
+          twp: rng() * 6.283, buoy: 0.4 + rng() * 0.6, delayF: (2 + rng() * 45) / 60,
+          wear: rng() < 0.3 ? 0.3 + rng() * 0.5 : 0, elder: false });
+      }
+      const nSp = 4 + Math.floor(rng() * 4);       // sporophylls at base
+      for (let s = 0; s < nSp; s++)
+        blades.push({ tA: 0.03 + rng() * 0.10, az: rng() * 6.283, elev: 0.3 + rng() * 0.5,
+          len: (7 + 4 * rng()) * scl, baseW: 0.9 * scl, wf: 0.9 + rng() * 0.7, phase: rng() * 6.283,
+          twp: rng() * 6.283, buoy: 0.15, delayF: (2 + rng() * 45) / 60, wear: 0, elder: false });
+      const haptera = [];
+      const nn = 7 + Math.floor(rng() * 5);
+      for (let n = 0; n < nn; n++) haptera.push({ az: rng() * 6.283, dip: -0.2 - rng() * 1.1,
+        len: (5 + 6 * rng()) * scl, w: 0.6 + 0.5 * rng(), curl: (rng() - 0.5) * 1.6 });
+      // few towers → deliberate framing placement (sides); many → scattered forest
+      let rootX, rootZ;
+      if (NP <= 3) { rootX = (i - (NP - 1) / 2) * spread * 1.5 + (rng() - 0.5) * 12; rootZ = (rng() - 0.5) * 30 - 15; }
+      else { rootX = (rng() - 0.5) * 2 * spread; rootZ = (rng() - 0.5) * 2 * spread; }
+      plants.push({ rootX, rootZ,
+        height: (hMin + rng() * (hMax - hMin)), stipeW: (1.3 + 0.6 * rng()) * scl,
+        rest: (rng() * 2 - 1) * 0.2, wf: 0.4 + rng() * 0.4, phase: rng() * 6.283,
+        leanGain: 0.6 + rng() * 0.5, delayF: (2 + rng() * 40) / 60, scl, blades, haptera });
+    }
+    for (let e = 0; e < Math.min(3, NP); e++) {   // elder fronds: dark, torn, late
+      const p = plants[Math.floor(rng() * NP)]; if (!p.blades.length) continue;
+      const b = p.blades[Math.floor(rng() * p.blades.length)];
+      b.elder = true; b.wear = 0.85; b.baseW *= 1.4; b.delayF += 70 / 60;
+    }
+
+    /* ---- GPU buffers ---- */
+    const maxVerts = NP * (STSEG * 6 + 20 * (BLSEG * 6 + 6) + 12 * HFSEG * 6) + 512;
+    const vbuf = new Float32Array(maxVerts * 8);
+    const vertBuf = device.createBuffer({ size: vbuf.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+    const viewBuf = device.createBuffer({ size: 76 * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    const forestBuf = device.createBuffer({ size: 16 * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    const fp = new Float32Array(16);
+    const mod = device.createShaderModule({ code: FOREST_WGSL });
+    const skyPipe = device.createRenderPipeline({ layout: "auto",
+      vertex: { module: mod, entryPoint: "skyVs" },
+      fragment: { module: mod, entryPoint: "skyFs", targets: [{ format: gpu.format }] },
+      primitive: { topology: "triangle-list" },
+      depthStencil: { format: "depth24plus", depthWriteEnabled: false, depthCompare: "always" },
+      multisample: { count: gpu.sampleCount } });
+    const kelpPipe = device.createRenderPipeline({ layout: "auto",
+      vertex: { module: mod, entryPoint: "kelpVs", buffers: [{ arrayStride: 32, attributes: [
+        { shaderLocation: 0, offset: 0, format: "float32x3" },
+        { shaderLocation: 1, offset: 12, format: "float32x4" },
+        { shaderLocation: 2, offset: 28, format: "float32" }] }] },
+      fragment: { module: mod, entryPoint: "kelpFs", targets: [{ format: gpu.format }] },
+      primitive: { topology: "triangle-list", cullMode: "none" },
+      depthStencil: { format: "depth24plus", depthWriteEnabled: true, depthCompare: "less" },
+      multisample: { count: gpu.sampleCount, alphaToCoverageEnabled: gpu.sampleCount > 1 } });
+    const skyBG = device.createBindGroup({ layout: skyPipe.getBindGroupLayout(0), entries: [
+      { binding: 0, resource: { buffer: viewBuf } }] });
+    const mkKelpBG = (vb) => device.createBindGroup({ layout: kelpPipe.getBindGroupLayout(0), entries: [
+      { binding: 0, resource: { buffer: vb } }, { binding: 1, resource: { buffer: forestBuf } }] });
+    let kelpBG = mkKelpBG(viewBuf);
+
+    /* ---- CPU articulation (ported from 036, into 3D) ---- */
+    const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+    const micro = (x, y, seed, t) => Math.sin(x * cfg.MSCALE + y * cfg.MSCALE * 0.7 + t * 1.7 + seed)
+      + 0.55 * Math.sin(x * cfg.MSCALE * 1.9 - y * cfg.MSCALE * 1.3 + t * 2.6 + seed * 1.7);
+    let vi = 0;
+    const P = []; const LI = []; const WI = []; const WA = [];  // spine pts · light · width · real-3D width axis
+    function push(x, y, z, t, side, light, kind, wear) {
+      const o = vi * 8; vbuf[o] = x; vbuf[o + 1] = y; vbuf[o + 2] = z;
+      vbuf[o + 3] = t; vbuf[o + 4] = side; vbuf[o + 5] = light; vbuf[o + 6] = kind; vbuf[o + 7] = wear; vi++;
+    }
+    /* ribbon: if `real3d`, use the precomputed 3D twisting width axes in WA[]
+       (blades read as genuine 3D straps — orbit reveals flat↔edge); else the
+       axis is camera-facing (fine for the ~cylindrical stipe & holdfast). */
+    function ribbon(N, kind, wear, eye, real3d) {
+      for (let i = 0; i < N; i++) {
+        const a = P[i], b = P[i + 1];
+        let wx, wy, wz;
+        if (real3d) {
+          const A0 = WA[i], A1 = WA[i + 1] || WA[i];
+          // per-vertex axis; use i's axis for the a-end, i+1's for the b-end below
+          wx = A0[0]; wy = A0[1]; wz = A0[2];
+          var wx1 = A1[0], wy1 = A1[1], wz1 = A1[2];
+        } else {
+          let dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
+          const mx = (a[0] + b[0]) * 0.5, my = (a[1] + b[1]) * 0.5, mz = (a[2] + b[2]) * 0.5;
+          let cx = eye[0] - mx, cy = eye[1] - my, cz = eye[2] - mz;
+          wx = dy * cz - dz * cy; wy = dz * cx - dx * cz; wz = dx * cy - dy * cx;
+          const wl = Math.hypot(wx, wy, wz) || 1; wx /= wl; wy /= wl; wz /= wl;
+          var wx1 = wx, wy1 = wy, wz1 = wz;
+        }
+        const w0 = WI[i], w1 = WI[i + 1], l0 = LI[i], l1 = LI[i + 1], t0 = i / N, t1 = (i + 1) / N;
+        const L0 = [a[0] + wx * w0, a[1] + wy * w0, a[2] + wz * w0], R0 = [a[0] - wx * w0, a[1] - wy * w0, a[2] - wz * w0];
+        const L1 = [b[0] + wx1 * w1, b[1] + wy1 * w1, b[2] + wz1 * w1], R1 = [b[0] - wx1 * w1, b[1] - wy1 * w1, b[2] - wz1 * w1];
+        push(L0[0], L0[1], L0[2], t0, -1, l0, kind, wear); push(R0[0], R0[1], R0[2], t0, 1, l0, kind, wear); push(L1[0], L1[1], L1[2], t1, -1, l1, kind, wear);
+        push(R0[0], R0[1], R0[2], t0, 1, l0, kind, wear); push(R1[0], R1[1], R1[2], t1, 1, l1, kind, wear); push(L1[0], L1[1], L1[2], t1, -1, l1, kind, wear);
+      }
+    }
+    function quad(cx, cy, cz, r, kind, eye) {       // camera-facing soft quad (floats)
+      let ex = eye[0] - cx, ey = eye[1] - cy, ez = eye[2] - cz;
+      const el = Math.hypot(ex, ey, ez) || 1; ex /= el; ey /= el; ez /= el;
+      let rx = ey * 0 - ez * 0, ry = ez * 1 - ex * 0, rz = ex * 0 - ey * 1;  // up=(0,1,0)
+      rx = ey * 0 - ez * 1; ry = ez * 0 - ex * 0; rz = ex * 1 - ey * 0;      // cross(toCam,up)
+      const rl = Math.hypot(rx, ry, rz) || 1; rx /= rl; ry /= rl; rz /= rl;
+      const ux = ey * rz - ez * ry, uy = ez * rx - ex * rz, uz = ex * ry - ey * rx;
+      const C = [[-1, -1], [1, -1], [1, 1], [-1, 1]], I = [0, 1, 2, 0, 2, 3];
+      for (let n = 0; n < 6; n++) { const u = C[I[n]][0], w = C[I[n]][1];
+        push(cx + (rx * u + ux * w) * r, cy + (ry * u + uy * w) * r, cz + (rz * u + uz * w) * r, 0.5, u, 0.6, kind, 0); }
+    }
+
+    const forest = {
+      MAX: opts.max || 400, count: NP, plants,
+      _build(state, viewArr) {
+        vi = 0;
+        const eye = [viewArr[16], viewArr[17], viewArr[18]], t = viewArr[19];
+        const cx = state.current[0], cz = state.current[1];
+        const hMag = Math.hypot(cx, cz); const hx = hMag > 1e-4 ? cx / hMag : 1, hz = hMag > 1e-4 ? cz / hMag : 0;
+        const tap = (G && G.Drive) ? (s) => G.Drive.tap(s) : () => 0.3;
+        for (const p of plants) {
+          const rx = p.rootX, rz = p.rootZ;
+          /* holdfast */
+          for (const g of p.haptera) {
+            const gx = Math.cos(g.az), gz = Math.sin(g.az); let px = rx, py = floorY, pz = rz, ang = g.dip;
+            for (let k = 0; k <= HFSEG; k++) { P[k] = [px, py, pz]; LI[k] = 0.2 + 0.3 * p.scl; WI[k] = g.w * (1 - k / HFSEG * 0.85);
+              ang += g.curl * 0.09; const step = g.len / HFSEG; px += gx * Math.cos(ang) * step; py += Math.sin(ang) * step; pz += gz * Math.cos(ang) * step; }
+            ribbon(HFSEG, 3, 0, eye);
+          }
+          /* stipe — articulated chain in the current's vertical plane */
+          let X = 0, Y = 0, ang = Math.PI / 2 + p.rest * 0.25;
+          const flex = cfg.STIPE_FLEX, stiff = cfg.STIPE_STIFF / flex;
+          const seg = p.height / STSEG;
+          for (let i = 0; i <= STSEG; i++) {
+            const wx = rx + hx * X, wy = floorY + Y, wz = rz + hz * X;
+            P[i] = [wx, wy, wz];
+            const sw = tap(p.delayF + i * cfg.STIPE_LAG);
+            const lift = Math.min(1, sw * cfg.LIFT_GAIN);
+            LI[i] = Math.min(1, 0.22 + 0.6 * sw + 0.35 * p.scl * 0.5); WI[i] = p.stipeW * (1 - 0.5 * i / STSEG);
+            const tn = i / STSEG;
+            const upright = Math.sin(Math.PI / 2 - ang) * stiff * (1 - 0.6 * tn);
+            const lean = (p.rest + hMag * (0.4 + 0.9 * lift) * p.leanGain) * cfg.STIPE_LEAN * flex;
+            const wave = Math.sin(t * p.wf + p.phase - i * 0.6) * (0.04 + 0.16 * lift) * flex;
+            const mic = micro(wx * 0.01, wy * 0.01, p.phase + 2, t) * cfg.MICRO * 0.13 * flex;
+            let dA = upright + lean + wave + mic; dA = clamp(dA, -0.42, 0.42); ang += dA;
+            X += Math.cos(ang) * seg; Y += Math.sin(ang) * seg;
+          }
+          ribbon(STSEG, 0, 0, eye);
+          /* blades — each flows out on its own azimuth, sways + twists */
+          for (const b of p.blades) {
+            const ia = Math.min(STSEG - 1, Math.floor(b.tA * STSEG)), fr = b.tA * STSEG - ia;
+            const A = [P[ia][0] + (P[ia + 1][0] - P[ia][0]) * fr, P[ia][1] + (P[ia + 1][1] - P[ia][1]) * fr, P[ia][2] + (P[ia + 1][2] - P[ia][2]) * fr];
+            const bx = Math.cos(b.az), bz = Math.sin(b.az);
+            const perp = [-Math.sin(b.az), 0, Math.cos(b.az)];   // horizontal, ⟂ to the blade's plane
+            let bX = 0, bY = 0, ang2 = b.elev;
+            const wr = Math.min(1.2, b.wear), bLen = b.len * (1 - Math.min(0.6, wr) * 0.3), bseg = bLen / BLSEG;
+            for (let k = 0; k <= BLSEG; k++) {
+              const carry = hMag * cfg.CARRY * (0.3 + 0.7 * k / BLSEG);
+              const wpx = A[0] + bx * bX + hx * carry, wpy = A[1] + bY, wpz = A[2] + bz * bX + hz * carry;
+              P[k] = [wpx, wpy, wpz];
+              const sw = tap(b.delayF + k * cfg.BLADE_LAG + b.tA * 0.16);
+              const eddy = Math.sin(t * b.wf + b.phase + k * 0.6) * cfg.EDDY;
+              const water = Math.max(0, sw + eddy), lift = Math.min(1, water * cfg.LIFT_GAIN);
+              const buoyR = Math.sin(b.elev - ang2) * cfg.BUOY * (0.6 + 0.8 * b.buoy);
+              const drape = Math.sin(-1.5708 - ang2) * cfg.DRAPE * (k / BLSEG) * (1 - lift);
+              const surge = Math.sin(1.5708 - ang2) * (0.75 * lift + 0.25) * cfg.SURGE * (0.5 + 0.9 * b.buoy);
+              const wave = Math.sin(t * cfg.WAVE_FREQ + b.phase - k * 0.8) * lift * cfg.WAVE_AMP;
+              const mic = micro(wpx * 0.01, wpy * 0.01, b.phase, t) * cfg.MICRO * 0.09 * (0.5 + lift);
+              let dA = buoyR + drape + surge + wave + mic; dA = clamp(dA, -0.42, 0.42); ang2 += dA;
+              let lg = Math.min(1, 0.24 + 0.6 * lift + 0.26 * p.scl * 0.5); if (b.elder) lg *= 0.55;
+              LI[k] = lg;
+              const tn = k / BLSEG;
+              // REAL 3D TWIST: rotate the strap's width axis around its long axis.
+              // long axis ≈ the blade direction in its plane (cos·[bx,0,bz] + sin·up)
+              const ca = Math.cos(ang2), sa = Math.sin(ang2);
+              const lx = bx * ca, ly = sa, lz = bz * ca;                     // blade forward
+              // n = normalize(cross(long, perp)) — the strap's other face axis
+              let nx = ly * perp[2] - lz * perp[1], ny = lz * perp[0] - lx * perp[2], nz = lx * perp[1] - ly * perp[0];
+              const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl;
+              const tw = b.twp + t * 0.4 + k * 0.34 + micro(wpx * 0.01, wpy * 0.01, b.phase + 7, t) * 0.5;
+              const ct = Math.cos(tw), st = Math.sin(tw);
+              WA[k] = [perp[0] * ct + nx * st, perp[1] * ct + ny * st, perp[2] * ct + nz * st];
+              const taper = Math.sin(Math.pow(tn, 0.7) * Math.PI) * 1.1 + 0.12;
+              let w = b.baseW * taper;                                       // constant strap; the TWIST is real rotation now
+              if (wr > 0) w *= (1 - Math.min(0.85, wr) * 0.6 * tn * tn);
+              WI[k] = w;
+              bX += Math.cos(ang2) * bseg; bY += Math.sin(ang2) * bseg;
+            }
+            ribbon(BLSEG, 1, wr, eye, true);   // real-3D twisting strap
+            if (!b.elder && b.buoy > 0.3) quad(A[0], A[1], A[2], b.buoy * 1.2 * p.scl, 2, eye);   // float at base
+          }
+        }
+        return vi;
+      },
+      _packForest(s) {
+        fp.set(s.colStipe, 0); fp.set(s.colBladeLo, 4); fp.set(s.colBladeHi, 8); fp.set(s.colFloat, 12);
+        device.queue.writeBuffer(forestBuf, 0, fp);
+      },
+      _scene: null,
+      attachScene(scene) { this._scene = scene; kelpBG = mkKelpBG(scene.viewBuf); return this; },
+      computeInto(enc, state) {           // rooted — rebuild the mesh against the shared view + upload
+        this._packForest(state);
+        const va = this._scene ? this._scene._viewArr : null;
+        if (va) { const n = this._build(state, va); device.queue.writeBuffer(vertBuf, 0, vbuf, 0, n * 8); }
+      },
+      recordInto(pass) { pass.setPipeline(kelpPipe); pass.setBindGroup(0, kelpBG); pass.setVertexBuffer(0, vertBuf); pass.draw(vi); },
+      frame(state, viewArr) {
+        this._packForest(state);
+        device.queue.writeBuffer(viewBuf, 0, viewArr);
+        const n = this._build(state, viewArr);
+        device.queue.writeBuffer(vertBuf, 0, vbuf, 0, n * 8);
+        gpu.ensureTargets();
+        const enc = device.createCommandEncoder();
+        const swapView = gpu.context.getCurrentTexture().createView();
+        const rp = enc.beginRenderPass({
+          colorAttachments: [{
+            view: gpu.sampleCount > 1 ? gpu.msaaTex.createView() : swapView,
+            resolveTarget: gpu.sampleCount > 1 ? swapView : undefined,
+            clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: "clear", storeOp: gpu.sampleCount > 1 ? "discard" : "store"
+          }],
+          depthStencilAttachment: { view: gpu.depthTex.createView(), depthClearValue: 1, depthLoadOp: "clear", depthStoreOp: "discard" }
+        });
+        rp.setPipeline(skyPipe); rp.setBindGroup(0, skyBG); rp.draw(3);
+        rp.setPipeline(kelpPipe); rp.setBindGroup(0, kelpBG); rp.setVertexBuffer(0, vertBuf); rp.draw(n);
+        rp.end();
+        device.queue.submit([enc.finish()]);
+      }
+    };
+    return forest;
+  };
+
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>
+/* ===== inlined: species/lake.js ===== */
+/* =============================================================================
+   THE LAKE — ZigFlight · species/lake.js · v0.1
+   Throw a stone. Watch the rings fan out. Then become the frog.
+
+   Bill's vision (2026-07-20): stones → rings → incarnation. Act one you are
+   the sky: notes fall on the water as stones, rings fan out and CROSS (eight
+   live fronts superpose — interference is free). Act two you press F and
+   become the frog: leaping on your attacks, splashing rings of your own,
+   playing in and around the waves you made. Waves GROW with activity — ring
+   strength rides accumulated energy and flow — and they DIE SLOWLY: water
+   has memory ("swell, not decay" come home).
+
+   Engine: Surface law (medium 2 — the skin) · waveLife 12s · everything else
+   inherited: ZigPhase shimmer, Pacemaker, Avatar-as-frog, ZigMidi duet.
+
+   Cameras (X cycles): CHASE · OVERHEAD (above the last stone) ·
+   SIDE SKIN (wave depth + peaks in profile) · COCKPIT (the frog's eyes).
+   ========================================================================== */
+(function (global) {
+  "use strict";
+  const ZC = global.ZigCore, ZG = global.ZigWebGPU, ZM = global.ZigMesh, ZMI = global.ZigMidi;
+
+  const SEED = 0x1A6E;
+  const COUNT = 6000;
+  const EXT = 150, EXTY = 90;
+  const LAKE = 40;                                 // the water level
+  const CTRV = [0, LAKE, 0];
+  const PETAL = Object.assign({}, ZM ? ZM.presets.sicklePetal : {});
+
+  const Lake = global.TheLake = { version: "0.4.1", flock: null, gpu: null, stage: "loaded", booted: false };
+
+  const withTimeout = (p, ms, what) => Promise.race([p,
+    new Promise((_, rej) => setTimeout(() => rej(new Error(what + " stalled (" + (ms / 1000) + "s)")), ms))]);
+
+  function hud(el) {
+    return {
+      pill(ok, txt) { el.querySelector("#probe").innerHTML =
+        '<span class="pill ' + (ok ? "ok" : "bad") + '">PROBE ' + (ok ? "●" : "✕") + " " + (ok ? "GREEN" : "RED") +
+        "</span> <span class='dim'>" + txt + "</span>"; },
+      line(id, txt) { const n = el.querySelector("#" + id); if (n) n.textContent = txt; }
+    };
+  }
+
+  Lake.boot = async function (canvas, hudEl) {
+    const H = hud(hudEl);
+
+    Lake.stage = "asking for a WebGPU adapter";
+    H.line("status", "asking the browser for a WebGPU adapter + device…");
+    if (!global.navigator || !navigator.gpu) {
+      H.pill(false, "navigator.gpu missing — use Chrome/Edge; check chrome://gpu");
+      H.line("status", "gate closed"); return { ok: false };
+    }
+    let gpu;
+    try { gpu = await withTimeout(ZG.init(canvas, { msaa: true }), 10000, "adapter/device request"); }
+    catch (e) {
+      const m = (e && e.message) || String(e);
+      H.pill(false, m); H.line("status", "gate closed — fix WebGPU, then reload");
+      return { ok: false, reason: m };
+    }
+    H.pill(true, gpu.probe.desc);
+    Lake.gpu = gpu;
+    gpu.device.lost.then((i) => { H.pill(false, "device lost: " + (i.message || i.reason)); H.line("status", "gate re-closed — reload the node"); });
+
+    Lake.stage = "waking ZigCore";
+    let ewiStatus = "";
+    ZC.Perf.init({ idle: true, onStatus: (s) => { ewiStatus = s; H.line("midi", s); } });
+    ZC.Drive.init({ depth: 10 });
+    ZC.Climate.init(SEED);
+    ZC.Temperament.init(SEED);
+    ZC.Turnover.init(SEED, { slots: 2, interval: 170, departSec: 16, returnSec: 12, reach: 2.2 });
+    ZC.Pacemaker.init();
+
+    Lake.stage = "pouring the lake + compiling the kernel";
+    H.line("status", "pouring the lake · compiling the kernel…");
+    /* TWO WATERS (Bill, 2026-07-20): sickle-leaves as the skin, WOODBLOCKS
+       as the under-row 14 below. Stones are spheres, so the deep stratum
+       hears every ring ~1s late and softer — echo in DEPTH, layering with
+       the wall echoes. Scene mode: two species, one world, one camera. */
+    const DEEP = LAKE - 14, COUNT_D = 2600;
+    const scene = ZG.createScene(gpu, { sky: true });
+    const flock = ZG.createFlock(gpu, {
+      max: 20000, count: COUNT, seed: SEED,
+      extent: EXT, extentY: EXTY, cell: 12, debris: 0,
+      mesh: ZM.shard(PETAL), phase: {}
+    });
+    const flockD = ZG.createFlock(gpu, {
+      max: 8000, count: COUNT_D, seed: SEED ^ 0xDEE9,
+      extent: EXT, extentY: EXTY, cell: 12, debris: 0,
+      mesh: ZM.shard(ZM.presets.woodblock), phase: {}
+    });
+    scene.add(flock); scene.add(flockD);
+    flock.seed(CTRV);            flockD.seed([0, DEEP, 0]);
+    flock.seedSurface(LAKE, EXT * 0.88);
+    flockD.seedSurface(DEEP, EXT * 0.8);
+    flock.seedPhase(4.4, 0.25);  flockD.seedPhase(3.2, 0.3);   // deeper = slower lanterns
+    Lake.flock = flock; Lake.flockD = flockD;
+
+    const taps = new Float32Array(64);
+    const wanderers = new Float32Array(16), wmeta = new Float32Array(16);
+    const impulses = [];
+    for (let i = 0; i < 8; i++) impulses.push({ o: [0, 0, 0], t0: -1, strength: 0 });
+    let impPtr = 0;
+
+    const state = {
+      dt: 0, time: 0, breath: 0, bend: 0, attack: 0, energy: 0,
+      waveSpeed: 13, waveWidth: 5,               // rings amble, they don't strike
+      waveLife: 12,                              // WATER HAS MEMORY — slow fade
+      agitAmbient: 0.05,
+      cohW: 0.3, sepW: 3.4, aliW: 0.15,
+      anchor: [0, LAKE, 0, 0],
+      refpt: [0, LAKE, 0, 8],
+      wind: [0, 0, 0],
+      knobsA: [0.4, 3.4, 0.05, 1.6],             // the skin drifts, it doesn't fly
+      knobsB: [3, 34, 0.5, 0.3],                 // waveKick↑ (crest height) · calm churn
+      impulses, taps, wanderers, wmeta,
+      medium: 2,                                  // ← SURFACE — the lake law
+      K: 0, tempo: 1, ignite: 2.0,
+      pacePhase: 0, pacePull: 0,
+      avatarA: [-1, 0, LAKE, 0],                  // stone mode: no body (the sky throws)
+      avatarB: [0.9, 0, 0.1, 5],
+      center: CTRV, breathPush: 0
+    };
+
+    /* ---- stones + THE ECHO POOL ------------------------------------------
+       Finite water: hard walls at ±POOL. A reflection off a wall is exactly
+       a phantom stone thrown from the MIRROR position at the same moment
+       (image-source acoustics) — so when a ring's front reaches a wall, we
+       spawn its mirror and the arc peels back INTO the pool. One bounce per
+       ring, half strength; echoes share the same 8 wavefront slots. */
+    const POOL = EXT * 0.88;
+    let lastStone = [0, LAKE, 0], stoneN = 0, echoQ = [];
+    function spawnImpulse(x, z, t0, strength) {
+      const im = impulses[impPtr]; impPtr = (impPtr + 1) % 8;
+      im.o = [x, LAKE, z]; im.t0 = t0; im.strength = strength;
+      return im;
+    }
+    function throwStone(x, z, strength, gen) {
+      const str = (strength || 0.7) * (0.55 + 0.75 * Math.min(ZC.Drive.energy, 1) + 0.5 * ZC.Pacemaker.flow);
+      spawnImpulse(x, z, state.time, str);
+      state.refpt = [x, LAKE, z, state.refpt[3]];
+      lastStone = [x, LAKE, z]; stoneN++;
+      if ((gen || 0) < 1 && str * 0.5 > 0.14) {
+        /* schedule the four first-order echoes: mirror sources, born the
+           moment the real front kisses each wall */
+        const ws = state.waveSpeed, t0 = state.time;
+        const walls = [
+          { d: POOL - x,  mx: 2 * POOL - x,  mz: z },
+          { d: POOL + x,  mx: -2 * POOL - x, mz: z },
+          { d: POOL - z,  mx: x,  mz: 2 * POOL - z },
+          { d: POOL + z,  mx: x,  mz: -2 * POOL - z }];
+        for (const wll of walls) {
+          if (wll.d < 4) continue;
+          const at = t0 + wll.d / ws;
+          if (at - t0 < state.waveLife - 1.5) echoQ.push({ at, x: wll.mx, z: wll.mz, t0, str: str * 0.5 });
+        }
+      }
+    }
+    Lake.throwStone = throwStone;
+
+    /* the under-row's own physics: slower fronts, longer memory, softer
+       crests, its own rest level — but the SAME stones (shared impulse list) */
+    const stateD = Object.assign({}, state, {
+      waveSpeed: 9.5, waveLife: 16,
+      anchor: [0, DEEP, 0, 0],
+      knobsA: state.knobsA.slice(), knobsB: [3, 24, 0.5, 0.22],
+      wanderers: new Float32Array(16), wmeta: new Float32Array(16),
+      avatarA: [-1, 0, DEEP, 0], avatarB: [0, 0, 0, 0],
+      center: [0, DEEP, 0]
+    });
+    Lake.echoPending = () => echoQ.length;
+
+    /* ---- the frog --------------------------------------------------------- */
+    const frog = { on: false, x: 20, z: 0, ang: 0, hopT: -1, hop: null };
+    function startHop(pitch, vel) {
+      const dist = 8 + 26 * ZC.Perf.breath;
+      const h = 5 + Math.min(1, Math.max(0, (pitch - 48) / 54)) * 18;
+      frog.hop = { x0: frog.x, z0: frog.z, h,
+        x1: frog.x + Math.cos(frog.ang) * dist, z1: frog.z + Math.sin(frog.ang) * dist,
+        vel: vel || 0.7 };
+      frog.hop.x1 = Math.max(-EXT + 30, Math.min(EXT - 30, frog.hop.x1));
+      frog.hop.z1 = Math.max(-EXT + 30, Math.min(EXT - 30, frog.hop.z1));
+      frog.hopT = 0;
+    }
+
+    /* ---- view ------------------------------------------------------------- */
+    const view = new Float32Array(76);
+    const setV4 = (o, a, b, c, d) => { view[o] = a; view[o + 1] = b; view[o + 2] = c; view[o + 3] = d; };
+    const MOON = [0.46, 0.55, 0.74];
+    const MOSS = [0.075, 0.112, 0.100], BONE = [0.80, 0.84, 0.80];   // water tones, lifted
+    const dial = { ink: 1.5, moon: 1.7, camRad: 130, fov: 1.05, spectral: false,
+                   Kmax: 2.6, paceGain: 2.2, time: 0.7, mark: 2, genesis: false, cam: 0 };
+    const CAMS = ["chase", "overhead", "side skin", "cockpit"];
+    let camPhase = 0;
+    const applyDials = () => {
+      if (dial.spectral) {
+        setV4(52, 0, 0, 0, 0);
+        view[56] = 0; view[57] = 0; view[58] = 0;
+        view[60] = 0; view[61] = 0; view[62] = 0;
+        view[63] = 0.0012;
+      } else {
+        setV4(52, MOON[0] * dial.moon, MOON[1] * dial.moon, MOON[2] * dial.moon, 0.0);
+        view[56] = MOSS[0]; view[57] = MOSS[1]; view[58] = MOSS[2];
+        view[60] = BONE[0]; view[61] = BONE[1]; view[62] = BONE[2];
+        view[63] = 0.0024;
+      }
+      view[74] = dial.ink;
+    };
+    setV4(32, 0.30, 0.60, -0.35, 0.06);
+    setV4(36, 0.002, 0.004, 0.012, 0.0);
+    setV4(40, 0.005, 0.009, 0.021, 0.0);
+    setV4(44, 0.011, 0.018, 0.032, 0.0);
+    setV4(48, 0.003, 0.004, 0.007, 0.0);
+    setV4(56, MOSS[0], MOSS[1], MOSS[2], 0.8);
+    setV4(60, BONE[0], BONE[1], BONE[2], 0.0024);
+    setV4(64, 2, 0, 0, 0);
+    setV4(68, -1, 0, 0, 0);
+    setV4(72, 0, 0, 0.9, 0);
+    applyDials();
+
+    /* focus point per camera: frog when embodied, else the last stone */
+    const aimP = [0, LAKE, 0], cpPos = [20, LAKE + 1, 0], vsm = [0, 0, 0], cpFwd = [1, 0, 0];
+    function camera(t, dt) {
+      const aspect = gpu.canvas.clientWidth / Math.max(1, gpu.canvas.clientHeight);
+      const focus = frog.on ? [frog.x, LAKE + 1, frog.z] : lastStone;
+      let eye, ctr, up = null, fov = dial.fov;
+
+      if (dial.cam === 3) {                       // COCKPIT — the frog's eyes
+        const f = cpFwd;
+        eye = [cpPos[0] - f[0] * 1.5, cpPos[1] + 1.1, cpPos[2] - f[2] * 1.5];
+        ctr = [eye[0] + f[0], eye[1] + f[1] * 0.4 - 0.06, eye[2] + f[2]];
+        fov = 1.18;
+      } else if (dial.cam === 1) {                // OVERHEAD — above the release
+        aimSlow(focus, dt, 7);
+        eye = [aimP[0], LAKE + dial.camRad * 1.35, aimP[2] + dial.camRad * 0.28];
+        ctr = [aimP[0], LAKE, aimP[2]];
+      } else if (dial.cam === 2) {                // SIDE SKIN — depth + peaks in profile
+        aimSlow(focus, dt, 7);
+        eye = [aimP[0] * 0.25, LAKE + 5.5, dial.camRad * 1.7];
+        ctr = [aimP[0] * 0.25, LAKE + 2.2, 0];
+      } else {                                    // CHASE — still + steep: the waves
+        aimSlow(focus, dt, 9);                     // are the motion; water fills the frame
+        const ang = camPhase;
+        eye = [aimP[0] + Math.cos(ang) * dial.camRad, LAKE + 16 + dial.camRad * 0.55, aimP[2] + Math.sin(ang) * dial.camRad];
+        ctr = [aimP[0], LAKE + 1, aimP[2]];
+      }
+
+      const vp = ZG.mat.mul(ZG.mat.persp(fov, aspect, 0.3, 1400), ZG.mat.lookAt(eye, ctr, [0, 1, 0]));
+      view.set(vp, 0);
+      let fx = ctr[0] - eye[0], fy = ctr[1] - eye[1], fz = ctr[2] - eye[2];
+      const fl = Math.hypot(fx, fy, fz) || 1; fx /= fl; fy /= fl; fz /= fl;
+      let rx = fz, rz = -fx; const rl = Math.hypot(rx, rz) || 1; rx /= rl; rz /= rl;
+      const ux = -rz * fy, uy = rz * fx - rx * fz, uz = rx * fy;
+      setV4(16, eye[0], eye[1], eye[2], t);
+      setV4(20, rx, 0, rz, aspect);
+      setV4(24, -ux, -uy, -uz, Math.tan(fov / 2));
+      setV4(28, fx, fy, fz, 0);
+    }
+    function aimSlow(target, dt, cap) {
+      const fdt = dt || 0.016, k = Math.min(1, fdt * 0.9);
+      let sx = (target[0] - aimP[0]) * k, sz = (target[2] - aimP[2]) * k;
+      const sL = Math.hypot(sx, sz), mx = cap * fdt;
+      if (sL > mx) { sx *= mx / sL; sz *= mx / sL; }
+      aimP[0] += sx; aimP[2] += sz;
+    }
+
+    /* ---- the loop ---------------------------------------------------------- */
+    let t = 0, st = 0, fastB = 0, avPitch = 72, avLastMs = -1, prevNoteMs = -1e9, rainT = 3, fps = 0, fN = 0, fAcc = 0, hudT = 0;
+    function frame(nowMs) {
+      const dt = ZC.clock.tick(nowMs);
+      t += dt;
+      const sdt = dt * dial.time;
+      st += sdt;
+      ZC.Recorder.update();
+      if (Lake.player) Lake.player.update(dt);
+      ZC.Perf.update(dt, t);
+      ZC.Drive.update(dt);
+      ZC.Climate.update(sdt);
+      ZC.Temperament.update(sdt);
+      ZC.Turnover.update(sdt, flock.count, CTRV, 70);
+      ZC.Turnover.getWanderers(wanderers, wmeta);
+      ZC.Drive.taps(taps, state.refpt[3]);
+
+      state.dt = sdt; state.time = st;
+      /* RAIN when the water sleeps — the sky keeps the pool alive, then
+         steps aside the moment the performer arrives */
+      const performerHere = ZC.Perf.live || ZC.Perf._sim > 0 || (Lake.player && Lake.player.playing);
+      if (!performerHere) {
+        rainT -= sdt;
+        if (rainT <= 0) {
+          throwStone((ZC.util.hash1(st * 1.7) * 2 - 1) * POOL * 0.8,
+                     (ZC.util.hash1(st * 2.9 + 5.1) * 2 - 1) * POOL * 0.8,
+                     0.55 + 0.35 * ZC.util.hash1(st * 4.3));
+          rainT = 1.6 + 3 * ZC.Climate.drift(2);
+        }
+      } else { rainT = 1.4; }
+
+      /* echoes come home */
+      for (let i = echoQ.length - 1; i >= 0; i--) {
+        if (echoQ[i].at <= st) {
+          const ev = echoQ[i]; echoQ.splice(i, 1);
+          spawnImpulse(ev.x, ev.z, ev.t0, ev.str);   // the mirror stone — its arc re-enters the pool
+        }
+      }
+      state.breath = ZC.Perf.breath; state.bend = ZC.Perf.bend; state.attack = ZC.Perf.attack;
+      state.energy = ZC.Drive.energy;
+      state.knobsB[3] = 0.22 + 0.3 * ZC.Temperament.axis(0);
+      state.agitAmbient = 0.03 + 0.05 * ZC.Climate.drift(0);
+      const thr = 0.10 + 0.06 * ZC.Climate.drift(1);
+      state.K = dial.Kmax * ZC.util.smoothstep(thr, 0.75, ZC.Perf.breath);
+      state.tempo = 1 + 0.3 * ZC.Perf.bend;
+      ZC.Pacemaker.update(dt);
+      state.pacePhase = ZC.Pacemaker.phase;
+      state.pacePull = dial.paceGain * ZC.Pacemaker.pull;
+      const rate = Math.min(3.2, Math.max(0.4, ZC.Pacemaker.omega / (4.4 * dial.time)));
+      state.tempo *= 1 + (rate - 1) * 0.85 * ZC.Pacemaker.confidence;
+      state.K = Math.min(dial.Kmax, state.K + dial.Kmax * 0.4 * ZC.Pacemaker.flow);
+
+      /* NOTES: stones from the sky, or the frog's mind */
+      let newNote = -1, newVel = 0, deliberate = false;
+      ZC.Perf.heldT.forEach((t0, note) => { if (t0 > avLastMs) {
+        deliberate = (t0 - prevNoteMs) > 300;   // followed silence — a CHOSEN stone
+        prevNoteMs = t0; avLastMs = t0; newNote = note; } });
+      if (newNote >= 0) { avPitch = newNote; newVel = ZC.Perf.attack; }
+
+      if (!frog.on) {
+        state.avatarA[0] = -1;
+        if (newNote >= 0 && deliberate) {
+          /* stone lands where the pitch aims it: low notes near, high far */
+          const px = ((avPitch - 75) / 27) * EXT * 0.55;
+          const pz = ((stoneN % 2) * 2 - 1) * (18 + 24 * ZC.util.hash1(stoneN * 3.7));
+          throwStone(Math.max(-EXT + 25, Math.min(EXT - 25, px)), pz, 0.5 + 0.8 * newVel);
+        }
+      } else {
+        /* THE FROG — bend steers, attack leaps, splashdown rings */
+        state.avatarA[0] = 0;
+        frog.ang += ZC.Perf.bend * sdt * 1.8 + sdt * 0.1;
+        if (frog.hopT < 0 && newNote >= 0 && deliberate && newVel > 0.3) startHop(avPitch, newVel);
+        if (frog.hopT >= 0 && frog.hop) {
+          frog.hopT += sdt / 0.85;
+          const s = Math.min(1, frog.hopT), hp = frog.hop;
+          frog.x = hp.x0 + (hp.x1 - hp.x0) * s;
+          frog.z = hp.z0 + (hp.z1 - hp.z0) * s;
+          state.avatarA[1] = frog.x;
+          state.avatarA[2] = LAKE + 0.6 + hp.h * 4 * s * (1 - s);
+          state.avatarA[3] = frog.z;
+          if (s >= 1) { frog.hopT = -1; throwStone(frog.x, frog.z, 0.55 + 0.9 * hp.vel); state.avatarB[2] = 0.9; frog.hop = null; }
+        } else {
+          state.avatarA[1] = frog.x; state.avatarA[2] = LAKE + 0.6; state.avatarA[3] = frog.z;
+          state.avatarB[2] = 0.1 + 0.6 * ZC.Perf.attack;
+        }
+        state.avatarB[1] = newNote >= 0 ? 1 : 0;
+      }
+      view[68] = frog.on ? 0 : -1;
+      view[69] = (frog.on && dial.cam !== 3) ? [0, 0.9, 3.0][dial.mark] : 0;
+
+      /* WATER HAS MEMORY: crisp attack, liquid release; light rides stored
+         energy so the lake keeps glowing after the breath stops */
+      const bRaw = ZC.Perf.breathRaw;
+      fastB += (bRaw - fastB) * Math.min(1, dt * (bRaw > fastB ? 28 : 1.1));
+      const en = Math.min(1, ZC.Drive.energy);
+      const act = ZC.Perf.live || ZC.Perf._sim > 0;
+      const rev = dial.genesis ? ZC.util.smoothstep(0.03, 0.6, Math.max(act ? ZC.Perf.breath : 0, en * 0.9)) : 1;
+      view[74] = dial.ink * rev * (0.32 + 0.85 * fastB + 0.75 * en);
+      if (!dial.spectral) {
+        const ml = dial.moon * rev * (0.55 + 0.5 * fastB + 0.45 * en);
+        view[52] = MOON[0] * ml; view[53] = MOON[1] * ml; view[54] = MOON[2] * ml;
+        view[56] = MOSS[0] * rev; view[57] = MOSS[1] * rev; view[58] = MOSS[2] * rev;
+        view[60] = BONE[0] * rev; view[61] = BONE[1] * rev; view[62] = BONE[2] * rev;
+      }
+      view[59] = 0.8 * (0.85 + 0.3 * ZC.Perf.breath);
+      view[70] = 3.2 * dial.moon * rev;                      // MOONPATH gain (render2.z)
+
+      /* cockpit proxy */
+      {
+        const pk = Math.min(1, dt * 1.8);
+        const ox = cpPos[0], oy = cpPos[1], oz = cpPos[2];
+        const tgt = frog.on ? [state.avatarA[1], state.avatarA[2], state.avatarA[3]] : [lastStone[0], LAKE + 2, lastStone[2]];
+        cpPos[0] += (tgt[0] - cpPos[0]) * pk;
+        cpPos[1] += (tgt[1] - cpPos[1]) * pk;
+        cpPos[2] += (tgt[2] - cpPos[2]) * pk;
+        const iv = 1 / Math.max(dt, 1e-3);
+        vsm[0] += ((cpPos[0] - ox) * iv - vsm[0]) * Math.min(1, dt * 2.5);
+        vsm[1] += ((cpPos[1] - oy) * iv - vsm[1]) * Math.min(1, dt * 2.5);
+        vsm[2] += ((cpPos[2] - oz) * iv - vsm[2]) * Math.min(1, dt * 2.5);
+        const vl = Math.hypot(vsm[0], vsm[1], vsm[2]);
+        if (vl > 0.5) { cpFwd[0] = vsm[0] / vl; cpFwd[1] = vsm[1] / vl; cpFwd[2] = vsm[2] / vl; }
+      }
+
+      /* the deep row breathes the same life, a shade dimmer */
+      stateD.dt = state.dt; stateD.time = state.time;
+      stateD.breath = state.breath; stateD.bend = state.bend; stateD.attack = state.attack;
+      stateD.energy = state.energy;
+      stateD.K = state.K * 0.85; stateD.tempo = state.tempo;
+      stateD.pacePhase = state.pacePhase; stateD.pacePull = state.pacePull * 0.7;
+      stateD.agitAmbient = state.agitAmbient;
+      stateD.cohW = state.cohW; stateD.refpt = state.refpt;
+
+      camera(t, dt);
+      scene.frame(view, [state, stateD]);
+
+      fAcc += dt; fN++;
+      if (fAcc >= 0.5) { fps = fN / fAcc; fAcc = 0; fN = 0; }
+      hudT += dt;
+      if (hudT > 0.25) {
+        hudT = 0;
+        H.line("status", (frog.on ? "FROG" : "STONES") + " · 6000+2600 · " + fps.toFixed(0) + " fps · " +
+          (ZC.Perf.live ? "LIVE" : (ZC.Perf._sim > 0 ? "SIM" : "rain")) +
+          " · breath " + "▮".repeat(Math.round(ZC.Perf.breath * 10)).padEnd(10, "▯") +
+          " · water " + "≋".repeat(Math.max(0, Math.round(en * 6))).padEnd(6, "·") +
+          (echoQ.length ? " · echoes " + echoQ.length : "") +
+          (ZC.Pacemaker.confidence > 0.35 ? "  ·  you " + ZC.Pacemaker.bpm.toFixed(0) + "bpm" +
+            (ZC.Pacemaker.confidence > 0.7 ? " FOLLOWING" : " listening") : ""));
+        H.line("engine", "cam " + CAMS[dial.cam] + " · " + (dial.spectral ? "SPECTRAL" : "moonlit") +
+          (dial.genesis ? " · GENESIS" : "") + " · time " + dial.time.toFixed(2) +
+          "× · ink " + dial.ink.toFixed(1) + " · waveLife " + state.waveLife + "s");
+        if (Lake.player) {
+          const pl = Lake.player, mm = (x) => Math.floor(x / 60) + ":" + ("0" + Math.floor(x % 60)).slice(-2);
+          H.line("midi", (ewiStatus ? ewiStatus + "  ·  " : "") + "track " + mm(pl.t) + "/" + mm(pl.duration) + (pl.playing ? " ▶" : " ⏸"));
+        }
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+
+    /* ---- the duet + hands -------------------------------------------------- */
+    Lake.player = null;
+    Lake.loadMidi = (buf) => {
+      const parsed = ZMI.parse(buf);
+      Lake.player = ZMI.createPlayer(parsed, { loop: true });
+      Lake.player.playing = true;
+      return { notes: parsed.notes, duration: parsed.duration };
+    };
+    global.addEventListener("dragover", (e) => e.preventDefault());
+    global.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!f) return;
+      try { const r = Lake.loadMidi(await f.arrayBuffer()); H.line("midi", "track loaded: " + f.name + " · " + r.notes + " notes"); }
+      catch (err) { H.line("midi", "not a readable .mid: " + err.message); }
+    });
+
+    global.addEventListener("keydown", (e) => {
+      const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+      if (e.code === "KeyB") ZC.Perf.sim(0.85);
+      if (e.code === "Space") { throwStone(0, 0, 0.9); e.preventDefault(); }
+      if (e.code === "KeyF") frog.on = !frog.on;                          // become the frog
+      if (e.code === "KeyX") dial.cam = (dial.cam + 1) % 4;               // cycle cameras
+      if (e.code === "KeyI") dial.ink = clamp(dial.ink + 0.15, 0, 3);
+      if (e.code === "KeyK") dial.ink = clamp(dial.ink - 0.15, 0, 3);
+      if (e.code === "KeyO") dial.moon = clamp(dial.moon + 0.2, 0.2, 3.5);
+      if (e.code === "KeyL") dial.moon = clamp(dial.moon - 0.2, 0.2, 3.5);
+      if (e.code === "Equal") dial.camRad = clamp(dial.camRad - 10, 26, 360);
+      if (e.code === "Minus") dial.camRad = clamp(dial.camRad + 10, 26, 360);
+      if (e.code === "BracketRight") dial.fov = clamp(dial.fov + 0.05, 0.5, 1.4);
+      if (e.code === "BracketLeft") dial.fov = clamp(dial.fov - 0.05, 0.5, 1.4);
+      if (e.code === "KeyP") dial.spectral = !dial.spectral;
+      if (e.code === "KeyR") dial.genesis = !dial.genesis;
+      if (e.code === "KeyV") dial.mark = (dial.mark + 1) % 3;
+      if (e.code === "KeyJ") dial.Kmax = clamp(dial.Kmax + 0.2, 0, 6);
+      if (e.code === "KeyM") dial.Kmax = clamp(dial.Kmax - 0.2, 0, 6);
+      if (e.code === "KeyY") dial.paceGain = clamp(dial.paceGain + 0.2, 0, 5);
+      if (e.code === "KeyH") dial.paceGain = clamp(dial.paceGain - 0.2, 0, 5);
+      if (e.code === "Comma") dial.time = clamp(dial.time / 1.15, 0.15, 1.6);
+      if (e.code === "Period") dial.time = clamp(dial.time * 1.15, 0.15, 1.6);
+      if (e.code === "KeyT" && Lake.player) Lake.player.toggle();
+      if (e.code === "KeyC") { dial.camRad = 130; dial.fov = 1.05; camPhase = 0; }
+      applyDials();
+    });
+    global.addEventListener("keyup", (e) => { if (e.code === "KeyB") ZC.Perf.sim(0); });
+    canvas.addEventListener("pointerdown", (e) => {
+      const r = canvas.getBoundingClientRect();
+      const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
+      const ny = 1 - ((e.clientY - r.top) / r.height) * 2;
+      throwStone(nx * EXT * 0.6, -ny * EXT * 0.5, 0.85);
+    });
+
+    Lake.stage = "alive"; Lake.booted = true;
+    H.line("status", "still water — play a note to throw a stone · F to become the frog");
+    return { ok: true, flock };
+  };
+
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>
+  const say = (t) => { const n = document.getElementById("status"); if (n) n.textContent = t; };
+  addEventListener("error", (e) => say("script error: " + e.message + " — " +
+    ((e.filename || "").split(/[\\/]/).pop() || "?") + ":" + e.lineno));
+  addEventListener("unhandledrejection", (e) => say("async error: " +
+    ((e.reason && e.reason.message) || e.reason)));
+
+  addEventListener("load", () => {
+    if (!window.TheLake || !window.ZigWebGPU || !window.ZigCore || !window.ZigMesh || !window.ZigMidi) {
+      say("script load failed — missing " + ["ZigCore","ZigMesh","ZigMidi","ZigWebGPU","TheLake"]
+        .filter((n) => !window[n]).join(", ") + ". Open the single-file build from the Zigverse folder instead.");
+      return;
+    }
+    const canvas = document.getElementById("stage");
+    TheLake.boot(canvas, document.getElementById("hud"))
+      .catch((e) => { say("boot error: " + (e && e.message || e)); console.error("[lake]", e); });
+    setTimeout(() => {
+      if (!TheLake.booted) {
+        const el = document.getElementById("engine");
+        if (el) el.textContent = "watchdog: boot stopped at “" + TheLake.stage + "” — press F12, send Glyph the Console";
+      }
+    }, 14000);
+  });
+</script>
+</body>
+</html>

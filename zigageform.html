@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ZIG · AGE → FORM (a metamorphosis through the alphabet)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #010204; overflow: hidden;
+               font: 12px/1.5 "Cascadia Code", "SF Mono", Consolas, monospace; color: #a8a89a; }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; left: 14px; top: 12px; user-select: none; pointer-events: none; text-shadow: 0 1px 3px #000; }
+  #hud .title { color: #ded8c8; letter-spacing: 0.18em; font-size: 11px; }
+  #hud .dim { color: #5f5f57; }
+  .pill { padding: 1px 8px; border-radius: 9px; font-size: 11px; letter-spacing: 0.08em; }
+  .pill.ok  { background: #10240f; color: #8aff7a; border: 1px solid #2d5a28; }
+  .pill.bad { background: #2a0d0d; color: #ff8a7a; border: 1px solid #5a2828; }
+  #hud div { margin-top: 3px; }
+  #hint { position: fixed; right: 14px; bottom: 10px; color: #3d3d38; user-select: none; text-align: right; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div id="hud">
+  <div class="title">ZIG · AGE → FORM <span class="dim">— you can read every organism's age in its shape (FORM FIELD · age)</span></div>
+  <div id="probe"><span class="pill bad">PROBE …</span> <span class="dim">asking the GPU</span></div>
+  <div id="status" class="dim">booting…</div>
+  <div id="ecology" class="dim"></div>
+  <div id="engine" class="dim"></div>
+  <div id="audio" class="dim"></div>
+  <div id="midi" class="dim"></div>
+</div>
+<div id="hint">every letter walks the alphabet as it ages: born a <b>seed</b> → matures into a <b>sickle</b> in its prime → thins to a <b>whisper</b> → spends into an <b>echo</b> → renews as a seed.<br>
+staggered lifespans, so the field holds every stage at once — a living census of shapes. this is Aging made visible as METAMORPHOSIS, not a dim.<br>
+hold B / play to bring them alive. the rack is ordered youngest→oldest; swap window.ZIG_WARDROBE to write a different life-arc.</div>
+
+<script>
+  window.ZIG_LETTER = "sicklePetal";
+  // the life-arc rack — ordered youngest → oldest; FORM FIELD maps age 0→1 across it
+  window.ZIG_WARDROBE = "seed,sicklePetal,whisper,echo";
+  window.ZIG_FORM = "age";           // ← FORM FIELD: each agent's letter follows its AGE
+  window.ZIG_AGING = 1;              // ← the lifespan clock that drives it
+  window.ZIG_MARK = 0;
+  window.ZIG_GENESIS = 0;            // alive on arrival so the generations read
+  window.ZIG_CAM = 58;
+</script>
+<script src="engine/zigcore.js"></script>
+<script src="engine/zigmesh.js"></script>
+<script src="engine/zigmidi.js"></script>
+<script src="engine/zigwebgpu.js"></script>
+<script src="species/sickleswarm.js"></script>
+<script>
+  const say = (t) => { const n = document.getElementById("status"); if (n) n.textContent = t; };
+  addEventListener("error", (e) => say("script error: " + e.message + " — " +
+    ((e.filename || "").split(/[\\/]/).pop() || "?") + ":" + e.lineno));
+  addEventListener("unhandledrejection", (e) => say("async error: " +
+    ((e.reason && e.reason.message) || e.reason)));
+
+  addEventListener("load", () => {
+    if (!window.SickleField || !window.ZigWebGPU || !window.ZigCore || !window.ZigMesh) {
+      say("script load failed — missing " + ["ZigCore","ZigMesh","ZigMidi","ZigWebGPU","SickleField"]
+        .filter((n) => !window[n]).join(", ") + ". Open the single-file build instead.");
+      return;
+    }
+    const canvas = document.getElementById("stage");
+    SickleField.boot(canvas, document.getElementById("hud"))
+      .catch((e) => { say("boot error: " + (e && e.message || e)); console.error("[zigageform]", e); });
+    setTimeout(() => {
+      if (!SickleField.booted) {
+        const el = document.getElementById("engine");
+        if (el) el.textContent = "watchdog: boot stopped at “" + SickleField.stage +
+          "” — press F12 and send Glyph the Console";
+      }
+    }, 14000);
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZigKeys — the Zigverse Control Key</title>
+<style>
+  :root{ --night:#04060c; --panel:#0a0e18; --line:#1a2233; --bone:#d8d4c8; --dim:#6a7488;
+         --field:#7fd4c0; --lake:#9aa8e8; --fire:#f0c060; --cfg:#c89ad4; --studio:#88d88f; --scope:#f0a860; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--night);color:var(--bone);font-family:"Segoe UI",system-ui,sans-serif;line-height:1.5;padding:30px 20px 70px}
+  .wrap{max-width:900px;margin:0 auto}
+  h1{font-weight:300;letter-spacing:.18em;font-size:25px}
+  h1 .z{color:var(--field)}
+  .sub{color:var(--dim);font-size:12.5px;margin:6px 0 22px;letter-spacing:.05em}
+  h2{font-weight:400;font-size:14px;letter-spacing:.14em;text-transform:uppercase;margin:30px 0 3px}
+  h2.core{color:var(--bone)} h2.field{color:var(--field)} h2.lake{color:var(--lake)}
+  h2.fire{color:var(--fire)} h2.cfg{color:var(--cfg)} h2.studio{color:var(--studio)} h2.scope{color:var(--scope)}
+  .note{color:var(--dim);font-size:12px;margin-bottom:9px}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:4px}
+  th{text-align:left;color:var(--dim);font-weight:400;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;padding:5px 10px;border-bottom:1px solid var(--line)}
+  td{padding:5px 10px;border-bottom:1px solid #10141f;vertical-align:top}
+  tr:hover td{background:var(--panel)}
+  kbd{display:inline-block;min-width:20px;text-align:center;background:#121828;border:1px solid #263049;border-bottom-width:2px;border-radius:5px;padding:1px 6px;font-family:Consolas,monospace;font-size:12px;color:#e8e4d8}
+  td.k{white-space:nowrap}
+  .d{color:var(--dim);font-size:11.5px}
+  .cfgcode{font-family:Consolas,monospace;color:#b8a0d0;font-size:12px}
+  .foot{margin-top:34px;border-top:1px solid var(--line);padding-top:12px;color:var(--dim);font-size:11.5px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>ZIG<span class="z">KEYS</span></h1>
+  <div class="sub">every active dial · engine ZigCore v0.7 · ZigWebGPU v0.10.1 · ZigMesh v0.5 · 2026-07-24 · the keymap is doctrine — keys never reshuffle, only add</div>
+
+  <h2 class="core">Every World — the shared core</h2>
+  <div class="note">Identical everywhere. The EWI connects itself; when it's live, your breath and notes replace B and Space.</div>
+  <table>
+    <tr><th>Key</th><th>Does</th></tr>
+    <tr><td class="k"><kbd>B</kbd> <span class="d">hold</span></td><td>Breathe — simulate breath without the horn (release to exhale)</td></tr>
+    <tr><td class="k"><kbd>Space</kbd> / click</td><td>Strike — a wavefront (Lake: throw a stone where you click)</td></tr>
+    <tr><td class="k"><kbd>+</kbd> / <kbd>−</kbd></td><td>Camera in / out</td></tr>
+    <tr><td class="k"><kbd>[</kbd> / <kbd>]</kbd></td><td>Field of view — narrow / wide</td></tr>
+    <tr><td class="k"><kbd>C</kbd></td><td>Center — reset the camera</td></tr>
+    <tr><td class="k"><kbd>,</kbd> / <kbd>.</kbd></td><td>Metabolism — slow / speed the world's time</td></tr>
+  </table>
+
+  <h2 class="field">The Field family</h2>
+  <div class="note">Sickle Field · Halo Field · Orchard · Pearl Whisper · Membrane · Murmuration Study · Material Field (all run on sickleswarm.js).</div>
+  <table>
+    <tr><th>Key</th><th>Does</th><th>Law</th></tr>
+    <tr><td class="k"><kbd>I</kbd> / <kbd>K</kbd></td><td>Rainbow ink — iridescence gain</td><td class="d">—</td></tr>
+    <tr><td class="k"><kbd>O</kbd> / <kbd>L</kbd></td><td>Moonlight up / down</td><td class="d">—</td></tr>
+    <tr><td class="k"><kbd>J</kbd> / <kbd>M</kbd></td><td>Heartbeat depth — max coupling your breath can reach</td><td class="d">ZigPhase</td></tr>
+    <tr><td class="k"><kbd>Y</kbd> / <kbd>H</kbd></td><td>Your pull — how hard your beat entrains the field</td><td class="d">Pacemaker</td></tr>
+    <tr><td class="k"><kbd>F</kbd> / <kbd>G</kbd></td><td>Wind — how hard letters lean into the currents</td><td class="d">ZigFlow</td></tr>
+    <tr><td class="k"><kbd>W</kbd> / <kbd>S</kbd></td><td>Murmuration — calm field ⟷ one folding, breathing body</td><td class="d">Load / the blend</td></tr>
+    <tr><td class="k"><kbd>E</kbd> / <kbd>D</kbd></td><td>Memory glass — how long flashes ghost on the dark</td><td class="d">Afterimage</td></tr>
+    <tr><td class="k"><kbd>V</kbd></td><td>Lead-petal mark: hidden → ember → beacon</td><td class="d">Avatar</td></tr>
+    <tr><td class="k"><kbd>X</kbd></td><td>Cockpit — fly the avatar first-person</td><td class="d">—</td></tr>
+    <tr><td class="k"><kbd>N</kbd></td><td>Wardrobe — re-dress the field into its next letter, live</td><td class="d">wardrobe worlds</td></tr>
+    <tr><td class="k"><kbd>A</kbd></td><td>Arm the horn's voice (MOTU M2; split via ZIG_SPLIT)</td><td class="d">ZigTimbre</td></tr>
+    <tr><td class="k"><kbd>T</kbd></td><td>Play / pause a dropped .mid duet</td><td class="d">ZigMidi</td></tr>
+    <tr><td class="k"><kbd>P</kbd></td><td>Spectral ink — black the body, keep the iridescence</td><td class="d">—</td></tr>
+    <tr><td class="k"><kbd>R</kbd></td><td>Genesis — black until you breathe</td><td class="d">—</td></tr>
+  </table>
+
+  <h2 class="lake">The Lake</h2>
+  <div class="note">Its own creature — 3 species, water physics. Deliberate notes throw stones; ribbons feed the water.</div>
+  <table>
+    <tr><th>Key</th><th>Does</th></tr>
+    <tr><td class="k"><kbd>I</kbd> / <kbd>K</kbd></td><td>Rainbow ink</td></tr>
+    <tr><td class="k"><kbd>O</kbd> / <kbd>L</kbd></td><td>Moonlight (feeds the moonpath)</td></tr>
+    <tr><td class="k"><kbd>U</kbd> / <kbd>G</kbd></td><td>Petal size</td></tr>
+    <tr><td class="k"><kbd>W</kbd> / <kbd>S</kbd></td><td>Fluid smear — fast water becomes brushstrokes</td></tr>
+    <tr><td class="k"><kbd>Q</kbd> / <kbd>Z</kbd></td><td>Current — how strongly the water carries the skin &amp; koi <span class="d">(ZigFlow)</span></td></tr>
+    <tr><td class="k"><kbd>E</kbd> / <kbd>D</kbd></td><td>Memory glass — glints &amp; splash crowns ghost</td></tr>
+    <tr><td class="k"><kbd>J</kbd> / <kbd>M</kbd></td><td>Heartbeat depth · <kbd>Y</kbd>/<kbd>H</kbd> your pull</td></tr>
+    <tr><td class="k"><kbd>F</kbd></td><td>Become the FROG — attacks hop; landings splash real stones</td></tr>
+    <tr><td class="k"><kbd>X</kbd></td><td>Cycle cameras: chase → overhead → side skin → cockpit</td></tr>
+    <tr><td class="k"><kbd>V</kbd></td><td>Mark cycle · <kbd>0</kbd> RE-POUR the lake</td></tr>
+    <tr><td class="k"><kbd>A</kbd></td><td>Arm the horn's voice · <kbd>T</kbd> duet · <kbd>P</kbd> spectral · <kbd>R</kbd> genesis</td></tr>
+  </table>
+
+  <h2 class="fire">Fireflies (ZigGlow 004)</h2>
+  <div class="note">The sync species — lanterns, not letterforms. Breath is the coupling.</div>
+  <table>
+    <tr><th>Key</th><th>Does</th></tr>
+    <tr><td class="k"><kbd>I</kbd> / <kbd>K</kbd></td><td>Sync depth — max coupling breath can reach <span class="d">(ZigPhase)</span></td></tr>
+    <tr><td class="k"><kbd>O</kbd> / <kbd>L</kbd></td><td>Lantern size · <kbd>W</kbd>/<kbd>S</kbd> glow (specks ↔ blazing cloud)</td></tr>
+    <tr><td class="k"><kbd>E</kbd> / <kbd>D</kbd></td><td>Ghosts — how long a blink lingers <span class="d">(Afterimage)</span></td></tr>
+    <tr><td class="k"><kbd>F</kbd> / <kbd>G</kbd></td><td>Meadow wind <span class="d">(ZigFlow)</span> · <kbd>Y</kbd>/<kbd>H</kbd> your pull</td></tr>
+    <tr><td class="k"><kbd>P</kbd></td><td>A different night (blue register)</td></tr>
+  </table>
+
+  <h2 class="cfg">Page dials — set once per world (window.ZIG_*)</h2>
+  <div class="note">Not live keys — edit the &lt;script&gt; block at the top of a world's .html (or ask Glyph). This is how one organism becomes many.</div>
+  <table>
+    <tr><th>Config</th><th>Does</th></tr>
+    <tr><td class="cfgcode">ZIG_LETTER</td><td>which letterform (sicklePetal, halo, whisper, bubble, orb… 14 total)</td></tr>
+    <tr><td class="cfgcode">ZIG_MATERIAL</td><td>composed surface — grain/weather/subsurface (nacre, wood, volcanic, glass… 19)</td></tr>
+    <tr><td class="cfgcode">ZIG_ECOLOGY</td><td>material palette + color ecology (pearl, moonstone, copper…)</td></tr>
+    <tr><td class="cfgcode">ZIG_BIOME</td><td>born colors, one family, temperature drift (orchard)</td></tr>
+    <tr><td class="cfgcode">ZIG_WARDROBE</td><td>letters baked together for live swap ("seed,whisper")</td></tr>
+    <tr><td class="cfgcode">ZIG_MURMUR</td><td>starting murmuration amount (0 → 1.4)</td></tr>
+    <tr><td class="cfgcode">ZIG_SKIN</td><td>the invisible elastic membrane (the flock reveals it)</td></tr>
+    <tr><td class="cfgcode">ZIG_RESERVE</td><td>"coherence" — spends buy agreement, not color</td></tr>
+    <tr><td class="cfgcode">ZIG_SKY / ZIG_FX</td><td>atmosphere ("dusk") · effect ("gong")</td></tr>
+    <tr><td class="cfgcode">ZIG_VOICE / ZIG_SPLIT</td><td>pin an audio input by name · hear L/R as two voices</td></tr>
+    <tr><td class="cfgcode">ZIG_CAM · MARK · GENESIS · MINT · UNDERROW</td><td>camera dist · beacon · black-until-breath · letter refinement · resonator deep</td></tr>
+  </table>
+
+  <h2 class="studio">The Material Studio (turntable — study bench)</h2>
+  <div class="note">Judge letters &amp; materials up close before printing 6000. Not a performance world.</div>
+  <table>
+    <tr><th>Key</th><th>Does</th></tr>
+    <tr><td class="k"><kbd>←</kbd> / <kbd>→</kbd></td><td>Walk the alphabet · <kbd>1</kbd>–<kbd>9</kbd>,<kbd>0</kbd> jump to a letter</td></tr>
+    <tr><td class="k"><kbd>M</kbd> / <kbd>N</kbd></td><td>Cycle the 19 materials</td></tr>
+    <tr><td class="k"><kbd>B</kbd></td><td>Grain depth ×1 / ½ / 2 / 0 (the restraint dial)</td></tr>
+    <tr><td class="k"><kbd>T</kbd></td><td>The Mint — cut gem → polished → blown glass</td></tr>
+    <tr><td class="k">wheel</td><td>ZOOM into the matter — watch the organic fractals resolve</td></tr>
+    <tr><td class="k"><kbd>Q</kbd> / <kbd>A</kbd></td><td>Sculpt DNA — curve (bend) · <i>sweep</i> on the ring letters (halo/compass/echo)</td></tr>
+    <tr><td class="k"><kbd>W</kbd> / <kbd>S</kbd></td><td>Sculpt DNA — <b>twist</b> (the highlight-sweep) · <i>swirl</i> on the closed forms (bubble/orb)</td></tr>
+    <tr><td class="k"><kbd>E</kbd> / <kbd>D</kbd></td><td>Sculpt DNA — taper (how drawn the tip)</td></tr>
+    <tr><td class="k"><kbd>C</kbd> / <kbd>V</kbd></td><td>Sculpt DNA — camber (how cupped) · <i>squash</i> on the closed forms</td></tr>
+    <tr><td class="k"><kbd>Z</kbd> / <kbd>X</kbd></td><td>Sculpt DNA — width</td></tr>
+    <tr><td class="k"><kbd>G</kbd></td><td>3×3 orientation grid · <kbd>Space</kbd> freeze a pose · <kbd>R</kbd> reset this letter's DNA</td></tr>
+  </table>
+
+  <h2 class="scope">ZigScope (the audio stethoscope)</h2>
+  <table>
+    <tr><th>Key</th><th>Does</th></tr>
+    <tr><td class="k"><kbd>A</kbd></td><td>Arm the ear (mono mix) · <kbd>2</kbd> arm SPLIT (L/R = two voices)</td></tr>
+    <tr><td class="k"><kbd>C</kbd></td><td>Capture 60 s of telemetry → JSON · <kbd>R</kbd> reset peaks</td></tr>
+  </table>
+
+  <div class="foot">
+    One key means one thing <b>within</b> a world; across worlds a key can differ (W/S = murmuration in the fields, smear in the Lake, glow in Fireflies) — consistent where your hands are, always. Breath is the source of life; every dial only shapes how that life becomes visible.
+  </div>
+</div>
+</body>
+</html>

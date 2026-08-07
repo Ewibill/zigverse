@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ZIGGLOW 004 · FIREFLIES — shell v0.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #010204; overflow: hidden;
+               font: 12px/1.5 "Cascadia Code", "SF Mono", Consolas, monospace; color: #9aa48f; }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; left: 14px; top: 12px; user-select: none; pointer-events: none;
+         text-shadow: 0 1px 3px #000; }
+  #hud .title { color: #cfd8b8; letter-spacing: 0.18em; font-size: 11px; }
+  #hud .dim { color: #5b6355; }
+  .pill { padding: 1px 8px; border-radius: 9px; font-size: 11px; letter-spacing: 0.08em; }
+  .pill.ok  { background: #10240f; color: #8aff7a; border: 1px solid #2d5a28; }
+  .pill.bad { background: #2a0d0d; color: #ff8a7a; border: 1px solid #5a2828; }
+  #hud div { margin-top: 3px; }
+  #hint { position: fixed; right: 14px; bottom: 10px; color: #3d443a; user-select: none; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div id="hud">
+  <div class="title">ZIGGLOW 004 · FIREFLIES <span class="dim">shell v0.1.2 — the field, before the rhythm</span></div>
+  <div id="probe"><span class="pill bad">PROBE …</span> <span class="dim">asking the GPU</span></div>
+  <div id="status" class="dim">booting…</div>
+  <div id="engine" class="dim"></div>
+  <div id="midi" class="dim"></div>
+</div>
+<div id="hint">hold B — breathe · click / Space — strike · EWI when connected</div>
+
+<script src="engine/zigcore.js"></script>
+<script src="engine/zigwebgpu.js"></script>
+<script src="species/fireflies.js"></script>
+<script>
+  /* nothing fails invisibly — every error lands on the glass */
+  const say = (t) => { const n = document.getElementById("status"); if (n) n.textContent = t; };
+  addEventListener("error", (e) => say("script error: " + e.message + " — " +
+    ((e.filename || "").split(/[\\/]/).pop() || "?") + ":" + e.lineno));
+  addEventListener("unhandledrejection", (e) => say("async error: " +
+    ((e.reason && e.reason.message) || e.reason)));
+
+  addEventListener("load", () => {
+    if (!window.Fireflies || !window.ZigWebGPU || !window.ZigCore) {
+      say("script load failed — missing " + ["ZigCore","ZigWebGPU","Fireflies"]
+        .filter((n) => !window[n]).join(", ") + ". Are engine/ and species/ next to this file?");
+      return;
+    }
+    const canvas = document.getElementById("stage");
+    Fireflies.boot(canvas, document.getElementById("hud"))
+      .catch((e) => { say("boot error: " + (e && e.message || e)); console.error("[fireflies]", e); });
+    /* watchdog: if boot hasn't finished in 14s, say where it stopped */
+    setTimeout(() => {
+      if (!Fireflies.booted) {
+        const el = document.getElementById("engine");
+        if (el) el.textContent = "watchdog: boot stopped at “" + Fireflies.stage +
+          "” — press F12 and send Glyph the Console";
+      }
+    }, 14000);
+  });
+</script>
+</body>
+</html>
