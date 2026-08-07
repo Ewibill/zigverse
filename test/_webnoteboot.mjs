@@ -1,0 +1,20 @@
+import { chromium } from "playwright";
+const KNOWN=/valid external Instance reference no longer exists/i;
+const b=await chromium.launch({executablePath:"/opt/pw-browsers/chromium",args:["--enable-unsafe-webgpu","--enable-features=Vulkan","--use-angle=vulkan","--use-vulkan=swiftshader","--no-sandbox"]});
+const p=await b.newPage();const e=[];p.on("pageerror",x=>e.push(x.message));p.on("console",m=>{if(m.type()==="error")e.push(m.text())});
+await p.goto("file:///home/claude/zigverse/dist/Environment_v1.5_webenergy.html");
+await p.waitForTimeout(3000);
+const hasWeb=await p.evaluate(()=>!!(window.SickleField&&window.SickleField.flock&&window.SickleField.flock.web));
+// Play a held note → note→form summons + web energy injected (both-at-once). Then release.
+await p.evaluate(()=>{const P=window.ZigCore.Perf; P.live=true; P.held.add(72); P.heldT&&P.heldT.set(72,1e12); P.attack=0.9;});
+await p.waitForTimeout(900);
+const errHeld=e.filter(x=>!KNOWN.test(x)).length;
+await p.evaluate(()=>{const P=window.ZigCore.Perf; P.held.clear();});
+await p.waitForTimeout(1400);
+const errAfter=e.filter(x=>!KNOWN.test(x)).length;
+console.log("flock.web present:",hasWeb);
+console.log("hard errors while note held:",errHeld," after release:",errAfter);
+await b.close();
+const okk = hasWeb && errAfter===0;
+console.log(okk?"\nWEB-NOTE BOOT: PASS":"\nWEB-NOTE BOOT: FAIL");
+process.exit(okk?0:1);

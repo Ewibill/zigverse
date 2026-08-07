@@ -1,0 +1,10 @@
+import { chromium } from "playwright";
+const KNOWN=/valid external Instance reference no longer exists/i;
+const b=await chromium.launch({executablePath:"/opt/pw-browsers/chromium",args:["--enable-unsafe-webgpu","--enable-features=Vulkan","--use-angle=vulkan","--use-vulkan=swiftshader","--no-sandbox"]});
+const p=await b.newPage();const e=[];p.on("pageerror",x=>e.push(x.message));p.on("console",m=>{if(m.type()==="error")e.push(m.text())});
+await p.goto("file:///home/claude/zigverse/zigmedium.html#med=water&force=float");
+await p.waitForTimeout(3000);
+const s=await p.evaluate(()=>({g:window.ZIG_BREATHGAIN,c:window.ZIG_BREATHCURVE,br:(window.ZigCore&&ZigCore.Perf?ZigCore.Perf.breath:null),st:(document.getElementById("status")||{}).textContent||""}));
+const hard=e.filter(x=>!KNOWN.test(x));
+console.log("gain:",s.g,"curve:",s.c,"live breath:",typeof s.br==="number"?s.br.toFixed(3):s.br,"|",JSON.stringify(s.st.slice(0,60)),"hard:",hard.length);hard.slice(0,2).forEach(x=>console.log("  ",x.slice(0,150)));
+await b.close();process.exit(hard.length===0 && /fps/.test(s.st)?0:1);

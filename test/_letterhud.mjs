@@ -1,0 +1,13 @@
+import { chromium } from "playwright";
+const KNOWN=/valid external Instance reference no longer exists/i;
+const b=await chromium.launch({executablePath:"/opt/pw-browsers/chromium",args:["--enable-unsafe-webgpu","--enable-features=Vulkan","--use-angle=vulkan","--use-vulkan=swiftshader","--no-sandbox"]});
+const p=await b.newPage();const e=[];p.on("pageerror",x=>e.push(x.message));p.on("console",m=>{if(m.type()==="error")e.push(m.text())});
+await p.goto("file:///home/claude/zigverse/dist/Environment_v0.6_vitrine.html#world=tidepool");
+await p.waitForTimeout(2800);
+const s0=await p.evaluate(()=>(document.getElementById("status")||{}).textContent||"");
+await p.keyboard.press("KeyN");await p.waitForTimeout(300);
+const s1=await p.evaluate(()=>(document.getElementById("status")||{}).textContent||"");
+console.log("status now:",s0.slice(0,46));
+console.log("after N   :",s1.slice(0,46));
+console.log("hard:",e.filter(x=>!KNOWN.test(x)).length);
+await b.close();

@@ -1,0 +1,18 @@
+import { chromium } from "playwright";
+const KNOWN=/valid external Instance reference no longer exists/i;
+const b=await chromium.launch({executablePath:"/opt/pw-browsers/chromium",args:["--enable-unsafe-webgpu","--enable-features=Vulkan","--use-angle=vulkan","--use-vulkan=swiftshader","--no-sandbox"]});
+const p=await b.newPage();await p.setViewportSize({width:1400,height:760});
+const e=[];p.on("pageerror",x=>e.push(x.message));p.on("console",m=>{if(m.type()==="error")e.push(m.text())});
+await p.goto("file:///home/claude/zigverse/dist/Material_Sheet.html");
+await p.waitForTimeout(2800);
+const shape0=await p.evaluate(()=>(document.getElementById("shape")||{}).textContent||"");
+const nLabels=await p.evaluate(()=>document.getElementById("labels").children.length);
+const labelText=await p.evaluate(()=>Array.from(document.getElementById("labels").children).map(x=>x.textContent).join(","));
+await p.keyboard.press("ArrowRight");await p.waitForTimeout(200);
+const shape1=await p.evaluate(()=>(document.getElementById("shape")||{}).textContent||"");
+const status=await p.evaluate(()=>(document.getElementById("status")||{}).textContent||"");
+console.log("shape shown:",shape0);
+console.log("after →   :",shape1);
+console.log("label cells:",nLabels,"→",labelText);
+console.log("status:",status.slice(0,44),"| hard:",e.filter(x=>!KNOWN.test(x)).length);
+await b.close();

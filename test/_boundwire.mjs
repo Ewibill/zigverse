@@ -1,0 +1,6 @@
+import { chromium } from "playwright";
+const KNOWN=/valid external Instance reference no longer exists/i;
+const b=await chromium.launch({executablePath:"/opt/pw-browsers/chromium",args:["--enable-unsafe-webgpu","--enable-features=Vulkan","--use-angle=vulkan","--use-vulkan=swiftshader","--no-sandbox"]});
+async function boot(hash){const p=await b.newPage();const e=[];p.on("pageerror",x=>e.push(x.message));p.on("console",m=>{if(m.type()==="error")e.push(m.text())});await p.goto("file:///home/claude/zigverse/dist/Environment_v0.5_boundary.html"+hash);await p.waitForTimeout(2800);const s=await p.evaluate(()=>({bnd:window.ZIG_BOUNDARY,disp:(document.getElementById("boundpick")||{}).value,live:/fps/.test((document.getElementById("status")||{}).textContent||"")}));await p.close();return{hash,bnd:s.bnd,disp:s.disp,live:s.live,h:e.filter(x=>!KNOWN.test(x))};}
+for(const hz of ["#world=tidepool","#world=deep","#world=tidepool&bound=vessel","#world=custom&med=air&force=neutral&cur=drift&bound=column","#world=tidepool&bound=none"]){const r=await boot(hz);console.log((hz+"                                              ").slice(0,48),"→ ZIG_BOUNDARY:",(String(r.bnd)+"     ").slice(0,6)," dropdown shows:",(r.disp+"       ").slice(0,8),r.live?"live":"DEAD","hard:",r.h.length);}
+await b.close();

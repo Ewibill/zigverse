@@ -1,0 +1,13 @@
+import { chromium } from "playwright";
+const KNOWN=/valid external Instance reference no longer exists/i;
+const b=await chromium.launch({executablePath:"/opt/pw-browsers/chromium",args:["--enable-unsafe-webgpu","--enable-features=Vulkan","--use-angle=vulkan","--use-vulkan=swiftshader","--no-sandbox"]});
+const p=await b.newPage();const e=[];p.on("pageerror",x=>e.push(x.message));p.on("console",m=>{if(m.type()==="error")e.push(m.text())});
+await p.goto("file:///home/claude/zigverse/dist/Environment_v0.9_shadowcolor.html#world=custom&mat=copper");
+await p.waitForTimeout(3000);
+const hud0=await p.evaluate(()=>(document.getElementById("hud")||{}).innerText||"");
+await p.keyboard.press("Digit0");await p.keyboard.press("Digit0");await p.waitForTimeout(200);
+const hud1=await p.evaluate(()=>(document.getElementById("hud")||{}).innerText||"");
+const g=(s)=>{const m=s.match(/shadow ([0-9.]+)/);return m?m[1]:"(none)";};
+console.log("shadow @default:",g(hud0),"| after 0,0:",g(hud1));
+console.log("live:",/fps/.test(hud0),"hard:",e.filter(x=>!KNOWN.test(x)).length);
+await b.close();

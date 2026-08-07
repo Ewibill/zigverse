@@ -26,7 +26,7 @@
 (function (global) {
   "use strict";
   const ZigMesh = global.ZigMesh || (global.ZigMesh = {});
-  ZigMesh.VERSION = "0.5.0";   // 0.3: SECOND ALPHABET · 0.3.1: MINT · 0.4: WARDROBE · 0.5: SHELL (the closed phylum — bubble, orb, rotX merges)
+  ZigMesh.VERSION = "0.6.0";   // 0.3: SECOND ALPHABET · 0.3.1: MINT · 0.4: WARDROBE · 0.5: SHELL · 0.6: THIRD SET (thorn·plume·drop·crook·scallop·burr — 20 letterforms)
 
   const V3 = {
     sub: (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]],
@@ -55,9 +55,18 @@
     /* spine — bowed in z (the sickle), param along x */
     const spine = (u) => [(u - 0.5) * o.length, 0, o.curve * Math.sin(Math.PI * u)];
 
-    /* stations: local frame + three rows (edge+ · cambered center · edge−) */
+    /* THICKNESS — o.thickness>0 adds a BACK centre that dips below the edges, closing
+       the cross-section into a thin solid LENS (thick in the middle, sharp at the edges)
+       so the blade reads as matter, not foil. 0 = the original single cambered sheet. */
+    const TH = Math.max(0, o.thickness || 0);
+    /* back-centre offset along the face normal: CONVEX (default) bulges the back AWAY
+       (−TH → a biconvex lens) · HOLLOW curves it the SAME way as the front, just shy of
+       the front dome (a thin cupped SHELL, concave underside). */
+    const backOff = o.hollow ? Math.min(TH, o.camber * 0.9) : -TH;
+
+    /* stations: local frame + rows (edge+ · front centre · edge− · back centre) */
     const P = [], N = [], SD = [], UU = [];
-    const rows = [];                                // rows[s] = {p:[3][3], n:[3][3]}
+    const rows = [];
     for (let s = 0; s <= S; s++) {
       const u = s / S;
       const eps = 0.5 / S;
@@ -69,27 +78,31 @@
       const n0 = V3.norm(V3.cross(T, lat));         // face normal (dome side)
       const h = halfW(u), c = spine(u);
       const tilt = 1.25 * o.camber;                 // edge normals lean outward on the dome
+      const nb0 = V3.scl(n0, -1);
       rows.push({
-        p: [V3.add(c, V3.scl(lat, h)),                                  // edge +
-            V3.add(c, V3.scl(n0, o.camber * h)),                        // cambered center
-            V3.sub(c, V3.scl(lat, h))],                                 // edge −
-        n: [V3.norm(V3.add(n0, V3.scl(lat, tilt))),
-            n0,
-            V3.norm(V3.sub(n0, V3.scl(lat, tilt)))],
+        eP: V3.add(c, V3.scl(lat, h)),                    // edge +
+        cF: V3.add(c, V3.scl(n0, o.camber * h)),          // front (cambered) centre
+        eM: V3.sub(c, V3.scl(lat, h)),                    // edge −
+        cB: V3.add(c, V3.scl(n0, backOff * h)),           // back centre — convex (−TH, bulges back) or hollow (toward front, a cup)
+        nEPf: V3.norm(V3.add(n0, V3.scl(lat, tilt))), nCf: n0, nEMf: V3.norm(V3.sub(n0, V3.scl(lat, tilt))),
+        nEPb: V3.norm(V3.add(nb0, V3.scl(lat, tilt))), nCb: nb0, nEMb: V3.norm(V3.sub(nb0, V3.scl(lat, tilt))),
         u
       });
     }
 
-    /* two strips of quads → 4·S triangles, CCW from the dome side */
-    const emit = (r0, r1, a, b) => {   // quad between row r0/r1, columns a→b
-      const q = [[r0, a], [r0, b], [r1, b], [r0, a], [r1, b], [r1, a]];
-      for (const [r, ccol] of q) {
-        const R = rows[r];
-        P.push(...R.p[ccol]); N.push(...R.n[ccol]);
-        SD.push(ccol === 0 ? 1 : (ccol === 1 ? 0 : -1)); UU.push(R.u);
+    const pv = (p, n, sd, uu) => { P.push(p[0], p[1], p[2]); N.push(n[0], n[1], n[2]); SD.push(sd); UU.push(uu); };
+    const quad = (A, B, C, D) => { pv(...A); pv(...B); pv(...C); pv(...A); pv(...C); pv(...D); };   // tris ABC · ACD
+    for (let s = 0; s < S; s++) {
+      const r0 = rows[s], r1 = rows[s + 1];
+      /* FRONT dome (CCW from the dome side) — edge+→centre, centre→edge− */
+      quad([r0.eP, r0.nEPf, 1, r0.u], [r0.cF, r0.nCf, 0, r0.u], [r1.cF, r1.nCf, 0, r1.u], [r1.eP, r1.nEPf, 1, r1.u]);
+      quad([r0.cF, r0.nCf, 0, r0.u], [r0.eM, r0.nEMf, -1, r0.u], [r1.eM, r1.nEMf, -1, r1.u], [r1.cF, r1.nCf, 0, r1.u]);
+      if (TH > 0) {
+        /* BACK dome (reverse winding so it faces the other way) — edge−→back, back→edge+ */
+        quad([r1.eM, r1.nEMb, -1, r1.u], [r1.cB, r1.nCb, 0, r1.u], [r0.cB, r0.nCb, 0, r0.u], [r0.eM, r0.nEMb, -1, r0.u]);
+        quad([r1.cB, r1.nCb, 0, r1.u], [r1.eP, r1.nEPb, 1, r1.u], [r0.eP, r0.nEPb, 1, r0.u], [r0.cB, r0.nCb, 0, r0.u]);
       }
-    };
-    for (let s = 0; s < S; s++) { emit(s, s + 1, 0, 1); emit(s, s + 1, 1, 2); }
+    }
 
     return {
       pos: new Float32Array(P), nrm: new Float32Array(N),
@@ -199,7 +212,9 @@
         mesh: ZigMesh.make(p.spec, opts), pos: p.pos, rotY: p.rotY, rotX: p.rotX, scale: p.scale
       })));
     }
-    const s2 = rf === 1 ? s : Object.assign({}, s, { segs: Math.min(48, (s.segs || 14) * rf) });
+    const s2 = Object.assign({}, s, rf === 1 ? {} : { segs: Math.min(48, (s.segs || 14) * rf) });
+    if (opts && opts.thickness != null && s2.thickness == null) s2.thickness = opts.thickness;   // global THICKNESS unless the preset sets its own
+    if (opts && opts.hollow != null && s2.hollow == null) s2.hollow = opts.hollow;               // HOLLOW: back curves as a concave shell instead of a convex lens
     if (s2.gen === "shell") return ZigMesh.shell(s2);
     return s2.gen === "arc" ? ZigMesh.arc(s2) : ZigMesh.shard(s2);
   };
@@ -351,6 +366,46 @@
         rotX: 1.5708 },
       { spec: { gen: "arc", segs: 14, radius: 0.60, sweep: 5.9, width: 0.13, twist: 0.5, taper: 0.55, camber: 0.30 },
         rotX: 1.5708, rotY: 1.5708 }
+    ] },
+
+    /* ================= THE THIRD SET (Glyph, 2026-07-31) =======================
+       The first alphabet asked what a body looks like; the second, what role it
+       plays. The third fills the silhouettes the first two left open — the hard,
+       the curling, the plumed, the plump, the shelled, the tangled. Same three
+       generators, new corners of shape-space. */
+
+    /* THORN — rigid, straight, drawn to a needle. Edge-on a line, broadside a
+       slim dagger; unlike the whisper it does NOT soften as it turns — it holds
+       its point. Defense · quill · ice-needle · the hard stroke. */
+    thorn:       { segs: 12, length: 2.4, width: 0.14, curve: 0.03, twist: 0.15, taper: 0.96, camber: 0.15 },
+
+    /* PLUME — a feather that flutters: fuller than the ribbon, gently bowed,
+       high twist so the highlight flickers all along its length. Flight ·
+       quill-in-air · the trailing flourish. */
+    plume:       { segs: 18, length: 2.3, width: 0.30, curve: 0.24, twist: 2.05, taper: 0.86, camber: 0.16 },
+
+    /* DROP — a plump teardrop: broad and deep-cupped at the base, drawn to a
+       single point. Rounder than the ember, pointed where the ember is blunt.
+       Water · ripeness · the held bead. */
+    drop:        { segs: 12, length: 1.25, width: 0.50, curve: 0.10, twist: 0.30, taper: 0.90, camber: 0.72 },
+
+    /* CROOK — a tight hook that turns back on itself: a shepherd's crook, a
+       fiddlehead, a question mark. Recursion · memory folding over · the
+       gesture that returns. (arc, small radius, partial sweep.) */
+    crook:       { gen: "arc", segs: 18, radius: 0.40, sweep: 3.6, width: 0.20, twist: 1.10, taper: 0.50, camber: 0.28 },
+
+    /* SCALLOP — a shallow, wide-mouthed cap, pressed flat: a fish-scale, a
+       petal-cup, a dish. The bubble laid open. Armor · overlap · tessera ·
+       the plate. (shell, low squash, wide mouth.) */
+    scallop: { gen: "shell", segs: 7, rings: 14, radius: 0.66, sweep: 1.5, squash: 0.55, swirl: 0.25, breathe: 0.04 },
+
+    /* BURR — two short blades crossed, NOT mirrored: where the seed opens, the
+       burr tangles. A caltrop, a knot, a snag. Catch · anchor · the thing that
+       holds. (merge, crossed ~1.15 rad.) */
+    burr: { gen: "merge", parts: [
+      { spec: { segs: 10, length: 1.40, width: 0.20, curve: 0.16, twist: 0.60, taper: 0.80, camber: 0.35 } },
+      { spec: { segs: 10, length: 1.25, width: 0.18, curve: -0.12, twist: 0.50, taper: 0.80, camber: 0.35 },
+        rotY: 1.15 }
     ] }
   };
 

@@ -1,0 +1,10 @@
+import { chromium } from "playwright";
+const KNOWN=/valid external Instance reference no longer exists/i;
+const b=await chromium.launch({executablePath:"/opt/pw-browsers/chromium",args:["--enable-unsafe-webgpu","--enable-features=Vulkan","--use-angle=vulkan","--use-vulkan=swiftshader","--no-sandbox"]});
+const p=await b.newPage({viewport:{width:1400,height:900}});const e=[];p.on("pageerror",x=>e.push(x.message));
+await p.goto("file:///home/claude/zigverse/zigspectrum.html");await p.waitForTimeout(3600);
+await p.evaluate(()=>window.ZigCore.Perf.sim(0.7));await p.waitForTimeout(900);
+await p.screenshot({path:"/tmp/mat.png"});
+const probe=await p.evaluate(()=>(document.getElementById("probe")||{}).textContent||"");
+console.log("hard:",e.filter(x=>!KNOWN.test(x)).length,"probe:",probe.slice(0,30));
+await b.close();
