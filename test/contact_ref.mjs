@@ -108,5 +108,73 @@ function drive(shapes, steps, push, release) {
   ok(r.worst < SKIN * 0.6, `nothing gets inside any of them (deepest ${r.worst.toFixed(3)})`);
 }
 
+
+// ---------------------------------------------------------------- 7) SELF-CONTACT — a body that cannot pass through ITSELF
+// The hard half. Every segment against every other, changing every frame, so it buckets into a
+// uniform grid and tests only the nine cells around each segment. Two things must be skipped or
+// the law tears the body apart instead of protecting it: bonded near-neighbours (touching BY
+// CONSTRUCTION — a contradiction the two laws would fight over forever) and every pair twice.
+{
+  const R = bond.rest * 0.55, SKIP = 4;
+
+  // a body forced into a tight coil, which is exactly where a line crosses itself
+  const coil = (selfOn, turns) => {
+    const N = 160, st = mk(N, N); st.par = S.chain(N);
+    let a = 0, rad = bond.rest * 5;
+    for (let i = 0; i < N; i++) { st.pos[i*3] = Math.cos(a)*rad; st.pos[i*3+1] = Math.sin(a)*rad; a += (turns*6.283185307)/N; }
+    const acc = new Float64Array(N*3);
+    const sub = 8*(bond.substeps||1), dt = 1/60/sub;
+    for (let q = 0; q < 700*sub; q++) {
+      acc.fill(0);
+      S.accel(bond, st.pos, st.vel, st.par, N, acc);
+      for (let i = 0; i < N; i++) { acc[i*3] -= st.vel[i*3]*1.2; acc[i*3+1] -= st.vel[i*3+1]*1.2; }
+      if (selfOn) C.self(st.pos, st.vel, st.par, N, 0, acc, { r: R, skip: SKIP });
+      for (let i = 0; i < N; i++) for (let k = 0; k < 2; k++) { st.vel[i*3+k] += acc[i*3+k]*dt; st.pos[i*3+k] += st.vel[i*3+k]*dt; }
+    }
+    let fin = true; for (let i = 0; i < N*3; i++) if (!Number.isFinite(st.pos[i])) fin = false;
+    let contour = 0; for (let i = 1; i < N; i++) contour += Math.hypot(st.pos[i*3]-st.pos[(i-1)*3], st.pos[i*3+1]-st.pos[(i-1)*3+1]);
+    return { st, N, fin, worst: C.worstSelf(st.pos, N, 0, R, SKIP), stretch: contour/(bond.rest*(N-1)) };
+  };
+
+  const off = coil(false, 3), on = coil(true, 3);
+  ok(on.fin, "a self-avoiding body stays finite");
+  ok(off.worst > R * 0.8, `WITHOUT the law a tight coil runs through itself (overlap ${off.worst.toFixed(2)} vs radius ${R.toFixed(2)})`);
+  ok(on.worst < off.worst * 0.12, `WITH it the overlap all but vanishes (${on.worst.toFixed(3)} vs ${off.worst.toFixed(2)}) — it KEEPS MATTER OUT, it does not merely push back`);
+  ok(on.stretch < 1.2, `and the body is not torn doing it (stretch ${on.stretch.toFixed(2)})`);
+
+  // MOMENTUM: a body may not push itself
+  {
+    const N = 60, st = mk(N, N); st.par = S.chain(N);
+    let a = 0; for (let i = 0; i < N; i++) { st.pos[i*3] = Math.cos(a)*bond.rest*3; st.pos[i*3+1] = Math.sin(a)*bond.rest*3; a += (2*6.283185307)/N; }
+    const acc = new Float64Array(N*3);
+    C.self(st.pos, st.vel, st.par, N, 0, acc, { r: R, skip: SKIP });
+    let fx = 0, fy = 0; for (let i = 0; i < N; i++) { fx += acc[i*3]; fy += acc[i*3+1]; }
+    ok(Math.hypot(fx, fy) < 1e-9, `self-contact has zero net force (${Math.hypot(fx,fy).toExponential(1)}) — a body cannot push itself`);
+  }
+
+  // BONDED NEIGHBOURS ARE LEFT ALONE — a straight body must feel nothing
+  {
+    const N = 40, st = mk(N, N); st.par = S.chain(N);
+    for (let i = 0; i < N; i++) st.pos[i*3] = i * bond.rest;   // rest < 2R, so neighbours DO overlap
+    const acc = new Float64Array(N*3);
+    C.self(st.pos, st.vel, st.par, N, 0, acc, { r: R, skip: SKIP });
+    ok(acc.every((v) => v === 0), "a straight body feels NOTHING — bonded neighbours are exempt, not fought");
+  }
+
+  // opt-in and cheap
+  {
+    const N = 240, st = mk(N, N); st.par = S.chain(N);
+    let a = 0; for (let i = 0; i < N; i++) { st.pos[i*3] = Math.cos(a)*bond.rest*8; st.pos[i*3+1] = Math.sin(a)*bond.rest*8; a += (5*6.283185307)/N; }
+    const acc = new Float64Array(N*3);
+    const t0 = process.hrtime.bigint();
+    for (let q = 0; q < 500; q++) { acc.fill(0); C.self(st.pos, st.vel, st.par, N, 0, acc, { r: R, skip: SKIP }); }
+    const ms = Number(process.hrtime.bigint()-t0)/1e6/500;
+    ok(ms < 1.2, `240 segments cost ${ms.toFixed(3)} ms/call — the grid keeps it affordable`);
+    const z = new Float64Array(N*3);
+    C.self(st.pos, st.vel, st.par, N, 0, z, { r: 0 });
+    ok(z.every((v) => v === 0), "radius 0 does nothing — the law is opt-in");
+  }
+}
+
 console.log(fail ? `contact_ref: ${fail} FAIL` : "contact_ref: PASS");
 process.exit(fail ? 1 : 0);

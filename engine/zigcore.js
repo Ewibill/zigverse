@@ -967,7 +967,9 @@
       { id: "surface",      pillar: "physics", since: "0.5",    enables: "membrane/fluid skins — a level that carries waves", proof: "resonator_shell_check" },
       { id: "zigflow",      pillar: "physics", since: "0.8",    enables: "divergence-free current field — currents swirl, never drain or pile up", proof: "zigflow_ref" },
       { id: "membrane",     pillar: "physics", since: "0.10",   enables: "elastic space + topological memory — the surface remembers what it lived", proof: "membrane_ref" },
-      { id: "contact", pillar: "physics", since: "0.16(core)", enables: "MATTER THAT OCCUPIES SPACE - static exclusion. Flocking separation is a force between strangers, a preference that can be overpowered; this is a body that cannot be entered. A stone, a pillar, a reef: something a creature must go AROUND, which turns a drawing into a creature in a PLACE. The general case (a body against itself) is the same mathematics with both sides moving", proof: "contact_ref" },
+      { id: "reciprocity", pillar: "habitat", since: "0.18(core)", enables: "THE MEDIUM REMEMBERS BEING MOVED - a momentum field agents stir and are carried by, so a body finally leaves a mark on what it moves through. Every medium law before this was one-way. Momentum is conserved between body and medium (deposit is an IMPULSE, push x dt, shed BEHIND the body or a swimmer drowns in its own backwash); the wake fades and spreads; one body passage measurably changes the water another is in; and INDUCED DRAG emerges unasked - shedding a wake costs speed. NO VORTICITY, therefore no drafting: a follower directly behind is pushed BACKWARD, which is why real fish school offset", proof: "wake_ref" },
+      { id: "shape-memory", pillar: "physics", since: "0.17(core)", enables: "a body REMEMBERS the angle it grew at - per-joint rest curvature recorded at growth (state.kap0), so a spiral holds its spiral instead of straining to unwind. Without it a shell creeps forever (motion still 5.6/s after 1500 frames of silence); with it, 0.4. This is what lets a performed shape persist rather than relaxing away", proof: "shell_species_ref" },
+      { id: "contact", pillar: "physics", since: "0.16(core)", enables: "MATTER THAT OCCUPIES SPACE - static exclusion AND a body that cannot pass through ITSELF (uniform-grid broadphase, bonded near-neighbours exempt, every pair resolved once so a body cannot push itself; coils PACK instead of interpenetrating - measured overlap 0.84 -> 0.03). Flocking separation is a force between strangers, a preference that can be overpowered; this is a body that cannot be entered. A stone, a pillar, a reef: something a creature must go AROUND, which turns a drawing into a creature in a PLACE. The general case (a body against itself) is the same mathematics with both sides moving", proof: "contact_ref" },
       { id: "allometry", pillar: "physics", since: "0.15(core)", enables: "per-segment REST LENGTH - one body whose segments differ in size. A kelp frond tapers, a whale tapers, and a SHELL is a body whose every segment slightly outgrows the last", proof: "structure_ref" },
       { id: "shell", pillar: "life", since: "0.15(core)", enables: "GROWTH WITH ROTATION - constant turn plus constant growth ratio traces a logarithmic spiral: nautilus, ammonite, ram horn, fern crozier. One of the commonest forms in biology because it is simply what steady growth plus steady turning draws, and it is self-similar so the animal never changes proportion. Interval sets the whorl tightness and handedness; attack opens the ratio", proof: "structure_ref" },
       { id: "undulation", pillar: "life", since: "0.14(core)", enables: "SWIMMING - age() fed in as a phase offset makes a bonded body carry a travelling wave head to tail, which is how every eel, fish, snake and worm moves. No new rhythm: zigphase clock read through structure geometry. The wave writes ANGLES (rest curvature), never forces - muscle changes what the body considers REST and the elastic structure follows, so no drive level can tear a bond", proof: "structure_ref" },
@@ -1139,6 +1141,183 @@
   };
 
   /* ==========================================================================
+     ZigCore.Wake — RECIPROCITY: the medium remembers being moved. (v0.18)
+
+     Every medium law so far has been ONE-WAY. `zigflow` pushes agents; `medium`
+     gives them drag; `slip` decides along from across. In every case the world
+     acts on the creature and the creature leaves no mark. That asymmetry is the
+     deepest tell that a Zigverse world is a simulation rather than a place —
+     real bodies disturb what they move through, and the disturbance outlives
+     them by a few seconds.
+
+     This is a MOMENTUM FIELD on a grid. An agent pushing against the medium
+     deposits exactly what it takes; the field spreads and fades; and the field
+     pushes back on whatever is standing in it. Because deposit and sample are
+     the same coupling with the sign reversed, momentum is CONSERVED between body
+     and medium — the proof checks it, so nothing here is a hidden thruster.
+
+     What it buys, beyond honesty: a wake is shared history. One body's passage
+     changes the water another body swims in, so DRAFTING falls out — a follower
+     in the leader's wake is carried. Nothing scripts that; it is what a momentum
+     field does. It is also the substrate Scout's note keeps circling (social
+     signalling, resource economies, light ecology are all "a field that spreads
+     and decays, written by agents and read by agents") — a scalar version of
+     exactly this machinery.
+
+     HONEST SCOPE — this is deposit, diffuse, decay. It is not a fluid solver:
+     no self-advection, no pressure projection, therefore NO VORTICITY. That has
+     one specific consequence worth stating plainly, because the obvious guess is
+     wrong: there is no DRAFTING here. Real schooling benefit comes from the
+     reverse Karman street a swimmer sheds, and a diffusive field has no vortices
+     to sit between. Measured: a follower directly behind a leader is pushed
+     BACKWARD, always, with the effect falling off as it moves laterally aside —
+     which is honest backwash, and is incidentally why real fish school OFFSET
+     rather than in line.
+
+     What it does give, all of it earned rather than scripted: momentum
+     conservation between body and medium · a wake that fades and spreads · one
+     body's passage measurably changing the water another is in · and INDUCED
+     DRAG — a swimmer that sheds momentum goes slower for it (48.05 without a
+     wake, 46.38 with), which nothing in the code asks for.
+     ====================================================================== */
+  ZigCore.Wake = {
+    VERSION: "0.18.0",
+
+    /* a grid of momentum over a square region, anchored at (ox, oy) */
+    create(cells, cell, ox, oy) {
+      const n = cells | 0;
+      return { n, cell, ox: ox || 0, oy: oy || 0,
+               vx: new Float64Array(n * n), vy: new Float64Array(n * n),
+               tx: new Float64Array(n * n), ty: new Float64Array(n * n) };
+    },
+
+    /* RECENTER — shift the grid by whole cells so a travelling body stays inside
+       it. Whole cells only, so the shift is lossless: the wake is carried, not
+       resampled. What scrolls off the edge is forgotten, which is correct — a
+       wake that far behind has faded anyway. */
+    recenter(g, x, y) {
+      const half = g.n * g.cell * 0.5;
+      const di = Math.round((x - half - g.ox) / g.cell), dj = Math.round((y - half - g.oy) / g.cell);
+      if (!di && !dj) return false;
+      g.tx.fill(0); g.ty.fill(0);
+      for (let j = 0; j < g.n; j++) for (let i = 0; i < g.n; i++) {
+        const si = i + di, sj = j + dj;
+        if (si < 0 || si >= g.n || sj < 0 || sj >= g.n) continue;
+        g.tx[j * g.n + i] = g.vx[sj * g.n + si];
+        g.ty[j * g.n + i] = g.vy[sj * g.n + si];
+      }
+      g.vx.set(g.tx); g.vy.set(g.ty);
+      g.ox += di * g.cell; g.oy += dj * g.cell;
+      return true;
+    },
+
+    /* bilinear weights for a world point; returns false if outside */
+    _at(g, x, y, o) {
+      const fx = (x - g.ox) / g.cell, fy = (y - g.oy) / g.cell;
+      const i0 = Math.floor(fx), j0 = Math.floor(fy);
+      if (i0 < 0 || j0 < 0 || i0 >= g.n - 1 || j0 >= g.n - 1) return false;
+      const sx = fx - i0, sy = fy - j0;
+      o.i0 = i0; o.j0 = j0;
+      o.w00 = (1 - sx) * (1 - sy); o.w10 = sx * (1 - sy);
+      o.w01 = (1 - sx) * sy;       o.w11 = sx * sy;
+      return true;
+    },
+
+    /* STIR — agents give the medium exactly what they take from it. `push` is the
+       per-agent acceleration the body is applying AGAINST the water; the field
+       receives the negative.
+
+       The deposit is SHED BEHIND the agent, one `shed` distance down its own
+       velocity. Without that offset an agent writes into the cell it is standing
+       in and samples it back the same step — it pushes against its own backwash
+       and cancels itself out. (Measured before the fix: a swimmer pushing +9 the
+       whole time travelled BACKWARD, -8 to -24.) A real swimmer leaves its wake
+       behind; that is not a detail, it is the whole mechanism. */
+    stir(g, pos, vel, n, head, push, dt, gain, shed) {
+      /* the field holds VELOCITY, `push` is an ACCELERATION, so what is deposited
+         is an IMPULSE: push x dt. Without the dt the wake accumulates without
+         bound every step and the swimmer drowns in its own backwash — measured
+         before this fix, a body pushing +9 forever ended up at -56. `gain`
+         absorbs how much water a cell stands for. */
+      const k = ((gain === undefined) ? 1 : gain) * dt;
+      const o = {};
+      const back = (shed === undefined) ? g.cell * 1.5 : shed;
+      for (let a = (head || 0); a < n; a++) {
+        let bx = 0, by = 0;
+        if (vel) {
+          const vx = vel[a * 3], vy = vel[a * 3 + 1];
+          const L = Math.hypot(vx, vy);
+          if (L > 1e-6) { bx = -vx / L * back; by = -vy / L * back; }
+        }
+        if (!this._at(g, pos[a * 3] + bx, pos[a * 3 + 1] + by, o)) continue;
+        const px = -push[a * 3] * k, py = -push[a * 3 + 1] * k;
+        const b = o.j0 * g.n + o.i0;
+        g.vx[b] += px * o.w00; g.vy[b] += py * o.w00;
+        g.vx[b + 1] += px * o.w10; g.vy[b + 1] += py * o.w10;
+        g.vx[b + g.n] += px * o.w01; g.vy[b + g.n] += py * o.w01;
+        g.vx[b + g.n + 1] += px * o.w11; g.vy[b + g.n + 1] += py * o.w11;
+      }
+      return g;
+    },
+
+    /* RELAX — the wake spreads and fades. `spread` 0..0.25 is how far momentum
+       leaks to neighbours per step; `life` is the seconds to fall to 1/e. Water
+       has memory, but not forever. */
+    relax(g, dt, opts) {
+      const o = opts || {};
+      const spread = Math.max(0, Math.min(0.24, o.spread === undefined ? 0.12 : o.spread));
+      const life = o.life === undefined ? 2.2 : o.life;
+      const keep = Math.exp(-dt / Math.max(1e-3, life));
+      const N = g.n;
+      g.tx.set(g.vx); g.ty.set(g.vy);
+      for (let j = 1; j < N - 1; j++) for (let i = 1; i < N - 1; i++) {
+        const b = j * N + i;
+        const lapx = g.tx[b - 1] + g.tx[b + 1] + g.tx[b - N] + g.tx[b + N] - 4 * g.tx[b];
+        const lapy = g.ty[b - 1] + g.ty[b + 1] + g.ty[b - N] + g.ty[b + N] - 4 * g.ty[b];
+        g.vx[b] = (g.tx[b] + spread * lapx) * keep;
+        g.vy[b] = (g.ty[b] + spread * lapy) * keep;
+      }
+      /* edges just fade — momentum that reaches the rim leaves the world */
+      for (let i = 0; i < N; i++) {
+        for (const b of [i, (N - 1) * N + i, i * N, i * N + N - 1]) { g.vx[b] *= keep * 0.9; g.vy[b] *= keep * 0.9; }
+      }
+      return g;
+    },
+
+    /* CARRY — the field pushes back on whatever stands in it. This is the other
+       half of `stir`, and the pair is what makes the coupling reciprocal.
+
+       It is a VELOCITY MATCH, not a raw acceleration: the water pulls a body
+       toward the water's own motion, `k * (fluid - body)`. Still water therefore
+       drags a moving body, moving water carries a still one, and a body already
+       going with the flow feels nothing — which is what being IN a medium means.
+       Raw acceleration would give none of those three. */
+    carry(g, pos, vel, n, head, acc, gain) {
+      const k = (gain === undefined) ? 1 : gain, o = {};
+      for (let a = (head || 0); a < n; a++) {
+        if (!this._at(g, pos[a * 3], pos[a * 3 + 1], o)) continue;
+        const b = o.j0 * g.n + o.i0;
+        const fx = g.vx[b] * o.w00 + g.vx[b + 1] * o.w10 + g.vx[b + g.n] * o.w01 + g.vx[b + g.n + 1] * o.w11;
+        const fy = g.vy[b] * o.w00 + g.vy[b + 1] * o.w10 + g.vy[b + g.n] * o.w01 + g.vy[b + g.n + 1] * o.w11;
+        acc[a * 3] += (fx - vel[a * 3]) * k;
+        acc[a * 3 + 1] += (fy - vel[a * 3 + 1]) * k;
+      }
+      return acc;
+    },
+
+    /* TOTAL — the momentum the medium is holding. The proof's honesty check:
+       what the body gave up must show up here. */
+    total(g) {
+      let x = 0, y = 0;
+      for (let i = 0; i < g.vx.length; i++) { x += g.vx[i]; y += g.vy[i]; }
+      return [x, y];
+    },
+
+    /* ENERGY — for measuring that a wake actually fades. */
+    energy(g) { let e = 0; for (let i = 0; i < g.vx.length; i++) e += g.vx[i]*g.vx[i] + g.vy[i]*g.vy[i]; return e; }
+  };
+
+  /* ==========================================================================
      ZigCore.Contact — MATTER THAT OCCUPIES SPACE (v0.16 · 2026-08-07)
 
      Nothing in the Canon has ever given an agent VOLUME. Flocking's separation is
@@ -1165,7 +1344,7 @@
      is the same shape as a bond and settles rather than bouncing forever.
      Opt-in: no shapes, no work, byte-identical. ============================== */
   ZigCore.Contact = {
-    VERSION: "0.16.0",
+    VERSION: "0.17.0",
 
     exclude(pos, vel, n, head, acc, shapes, opts) {
       if (!shapes || !shapes.length) return acc;
@@ -1194,6 +1373,107 @@
         }
       }
       return acc;
+    },
+
+    /* ==========================================================================
+       SELF — a body that cannot pass through ITSELF. (v0.17)
+
+       The other half of contact, and the hard half. A stone is cheap because it
+       holds still: one pass over the agents. A body against itself is every
+       segment against every other, changing every frame — 240 segments is ~28,000
+       pairs per substep, times four to eight substeps, times sixty frames. Naive
+       does not hold framerate, so this buckets the body into a UNIFORM GRID at the
+       contact diameter and only tests the nine cells around each segment. Cost
+       goes from O(n²) to roughly O(n).
+
+       TWO THINGS MUST BE SKIPPED or the law tears the body apart instead of
+       protecting it:
+         · the segment's own near neighbours along the chain (`skip` links), which
+           are touching BY CONSTRUCTION — a bond holds them at rest length, and
+           asking them to also stay a diameter apart is a contradiction the two
+           laws would fight over forever;
+         · every pair twice. Each pair is resolved once, with equal and opposite
+           force, so the body conserves its own momentum and cannot push itself.
+
+       What this buys: coils PACK instead of interpenetrating. A tight turn stops
+       being a line crossing a line and becomes a body pressed against itself —
+       which is what a snake in a knot, kelp in a mat, or a shell's whorls actually
+       are. (Bill's v0.6 recording showed a body running clean through its own
+       coils; this is the answer to it.) ==================================== */
+    self(pos, vel, par, n, head, acc, opts) {
+      const o = opts || {};
+      const R = o.r || 0;                                  if (R <= 0) return acc;
+      /* PER-AGENT RADII, for bodies that are not one thickness. A shell is
+         allometric — the apex is tiny and the aperture is huge — and forcing a
+         single radius on it shoves the small inner whorls apart by the APERTURE's
+         diameter, so they cannot nest and the spiral tangles. With `radii` the
+         contact distance for a pair is r_i + r_j, which is what two spheres of
+         different size actually want. `r` still sets the broadphase cell, so it
+         should be the LARGEST radius present. (Found by species/shell.js.) */
+      const RA = o.radii || null;
+      /* self-contact must be STIFF. A body pressing on itself is fighting its own
+         bonds, which are stiff by construction, so a soft response just lets the
+         coil sink in: measured on a 3-turn coil, k 700 leaves 0.31 of overlap
+         while k 6000 leaves 0.03 — the difference between "pushes back" and
+         "keeps matter out". */
+      const k = (o.k === undefined) ? 6000 : o.k;
+      const damp = (o.damp === undefined) ? 50 : o.damp;
+      const skip = (o.skip === undefined) ? 4 : o.skip;
+      const h = head || 0, D = R * 2;
+      if (n - h < skip + 2) return acc;
+
+      /* bucket into a uniform grid at the contact diameter */
+      const cells = new Map();
+      const key = (a, b) => a * 73856093 ^ b * 19349663;
+      for (let i = h; i < n; i++) {
+        const cx = Math.floor(pos[i*3] / D), cy = Math.floor(pos[i*3+1] / D);
+        const kk = key(cx, cy);
+        let arr = cells.get(kk); if (!arr) { arr = []; cells.set(kk, arr); }
+        arr.push(i);
+      }
+
+      for (let i = h; i < n; i++) {
+        const i3 = i * 3;
+        const cx = Math.floor(pos[i3] / D), cy = Math.floor(pos[i3+1] / D);
+        for (let gx = -1; gx <= 1; gx++) for (let gy = -1; gy <= 1; gy++) {
+          const arr = cells.get(key(cx + gx, cy + gy)); if (!arr) continue;
+          for (let a = 0; a < arr.length; a++) {
+            const j = arr[a];
+            if (j <= i) continue;                          // each pair exactly once
+            if (j - i <= skip) continue;                   // bonded neighbours are touching by construction
+            const j3 = j * 3;
+            const dx = pos[i3] - pos[j3], dy = pos[i3+1] - pos[j3+1], dz = pos[i3+2] - pos[j3+2];
+            const d2 = dx*dx + dy*dy + dz*dz;
+            const Dij = RA ? (RA[i] + RA[j]) : D;
+            if (d2 >= Dij * Dij) continue;
+            const d = Math.sqrt(d2) || 1e-6;
+            const nx = dx/d, ny = dy/d, nz = dz/d;
+            let f = (Dij - d) * k;
+            if (vel) {
+              const vn = (vel[i3]-vel[j3])*nx + (vel[i3+1]-vel[j3+1])*ny + (vel[i3+2]-vel[j3+2])*nz;
+              if (vn < 0) f -= vn * damp;
+            }
+            f *= 0.5;                                       // shared between the two
+            acc[i3] += nx*f; acc[i3+1] += ny*f; acc[i3+2] += nz*f;
+            acc[j3] -= nx*f; acc[j3+1] -= ny*f; acc[j3+2] -= nz*f;
+          }
+        }
+      }
+      return acc;
+    },
+
+    /* WORST — the deepest self-overlap, in world units. Ignores the same near
+       neighbours the law does, so it measures what the law is actually
+       responsible for rather than the bonds it is not allowed to touch. */
+    worstSelf(pos, n, head, r, skip, radii) {
+      const D = r * 2, sk = (skip === undefined) ? 4 : skip;
+      let worst = 0;
+      for (let i = (head||0); i < n; i++) for (let j = i + sk + 1; j < n; j++) {
+        const Dij = radii ? (radii[i] + radii[j]) : D;
+        const d = Math.hypot(pos[i*3]-pos[j*3], pos[i*3+1]-pos[j*3+1], pos[i*3+2]-pos[j*3+2]);
+        if (Dij - d > worst) worst = Dij - d;
+      }
+      return worst;
     },
 
     /* DEEPEST — how far the worst offender has penetrated, in world units. The
@@ -1280,6 +1560,7 @@
       const i = n;
       const step = (len === undefined) ? bond.rest : len;
       if (state.rest) state.rest[i] = step;
+      if (state.kap0) state.kap0[i] = 0;      // plain growth rests straight; shell() overwrites
       pos[i * 3]     = pos[tail * 3]     + d[0] * step;
       pos[i * 3 + 1] = pos[tail * 3 + 1] + d[1] * step;
       pos[i * 3 + 2] = pos[tail * 3 + 2] + d[2] * step;
@@ -1435,6 +1716,12 @@
       const hx = d[0]/L * c - d[1]/L * s2, hy = d[0]/L * s2 + d[1]/L * c;
       const last = (state.rest && prev >= 0) ? state.rest[tail] : bond.rest;
       const i = this.grow(state, bond, [hx, hy, 0], last * (ratio === undefined ? 1.02 : ratio));
+      /* REMEMBER THE TURN. Without this the bend law targets STRAIGHT and a spiral
+         is under permanent tension trying to unwind — it creeps forever and never
+         settles (measured: motion still 5.6/s after 1500 frames of silence). A
+         shell's rest shape IS its spiral, so the angle it grew at becomes the
+         angle it prefers. This is shape memory: the body keeps what was played. */
+      if (state.kap0) state.kap0[i] = turn;
       if (span) { while (state.n - (state.head || 0) > span) this.retire(state); if ((state.head || 0) > span) this.compact(state); }
       return i;
     },

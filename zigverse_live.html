@@ -2,14 +2,19 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>ZIGVERSE · GROWTH BENCH — the performed body (ZigCore Structure v0.13)</title>
+<title>ZIGVERSE — the performed body</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   html, body { margin: 0; height: 100%; background: #04060a; overflow: hidden;
                font: 12px/1.5 "Cascadia Code", "SF Mono", Consolas, monospace; color: #8f9aa4; }
   #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
   #hud { position: fixed; left: 14px; top: 12px; user-select: none; pointer-events: none;
-         text-shadow: 0 1px 3px #000; }
+         text-shadow: 0 1px 3px #000; transition: opacity .35s; }
+  #hud.hide, #panel.hide, #hint.hide { opacity: 0; pointer-events: none; }
+  #panel { transition: opacity .35s; }
+  #hint { transition: opacity .35s; }
+  body { cursor: none; }
+  body.showui { cursor: default; }
   #hud .title { color: #b8cfd8; letter-spacing: 0.18em; font-size: 11px; }
   #hud .dim { color: #55606b; }
   #hud div { margin-top: 3px; }
@@ -68,7 +73,7 @@
     <option value="16">16</option>
   </select>
 </div>
-<div id="hint">play the EWI · SPACE straight · ↑/↓ bend · R reset · 1–5 bond · mode: draw / swim / shell · stones · self-contact · span: unbounded records, bounded TRAVELS</div>
+<div id="hint">H hud · F fullscreen · D mode · X span · S stones · C self-contact · 1–5 bond · R reset</div>
 
 <script src="engine/zigcore.js"></script>
 <script>
@@ -161,6 +166,7 @@ let bondName = "spine";
 let bond;
 
 let swimPhase = 0, breath = 0, swimOn = false, selfOn = true;
+let uiOn = false;   // the set opens clean; H brings the instruments back
 /* BREATH IS THE LIFE-FORCE, so silence must be stillness. `breath` is driven by
    the EWI's breath controller (CC2) and channel aftertouch — the continuous
    signal, not the note-on — and decays to zero when nothing arrives. The wave's
@@ -401,6 +407,19 @@ addEventListener("keydown", (e) => {
   else if (e.code === "ArrowUp")   growNote(+3, 0.7);
   else if (e.code === "ArrowDown") growNote(-3, 0.7);
   else if (e.key === "r" || e.key === "R") reset();
+  else if (e.key === "h" || e.key === "H") setUI(!uiOn);
+  else if (e.key === "f" || e.key === "F") {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => {});
+  }
+  else if (e.key === "d" || e.key === "D") { const m = document.getElementById("mode");
+    m.value = m.value === "draw" ? "swim" : m.value === "swim" ? "shell" : "draw"; }
+  else if (e.key === "s" || e.key === "S") { const st2 = document.getElementById("stones");
+    st2.value = String((+st2.value + 1) % 4); setStones(+st2.value); }
+  else if (e.key === "x" || e.key === "X") { const sp = document.getElementById("span");
+    const opts = ["0","60","30","16"]; sp.value = opts[(opts.indexOf(sp.value) + 1) % 4]; }
+  else if (e.key === "c" || e.key === "C") { const se = document.getElementById("self");
+    se.value = se.value === "1" ? "0" : "1"; }
   else if (e.key >= "1" && e.key <= "5") setBond(["spine", "chain", "stalk", "tether", "eel"][+e.key - 1]);
 });
 addEventListener("pointerdown", () => { breathTarget = 0.8; lastBreathMsg = performance.now(); growNote((Math.random() * 6 - 3) | 0, 0.6); });
@@ -441,7 +460,25 @@ if (navigator.requestMIDIAccess) {
   document.getElementById("probe").innerHTML = `<span class="pill bad">NO MIDI</span> <span class="dim">keyboard works: SPACE · ↑ · ↓</span>`;
 }
 
+/* ---- PERFORMANCE OPEN ------------------------------------------------------
+   A set opens on a clean glass: no HUD, no pickers, no cursor. Everything stays
+   reachable from the keys so nothing needs a mouse mid-phrase. The defaults are
+   the configuration that has read best all day — a TRAVELLING body at span 30,
+   4x detail, self-contact on, drawing rather than swimming. */
+function setUI(on) {
+  uiOn = on;
+  for (const id of ["hud", "panel", "hint"]) document.getElementById(id).classList.toggle("hide", !on);
+  document.body.classList.toggle("showui", on);
+}
+document.getElementById("mode").value = "draw";
+document.getElementById("span").value = "30";
+document.getElementById("detail").value = "4";
+document.getElementById("self").value = "1";
+document.getElementById("stones").value = "0";
+document.getElementById("cur").value = "0.5";
+setStones(0);
 setBond("spine"); reset();          // resolve the bond and clear the body before the first frame
+setUI(false);
 say(`ZigCore ${ZigCore.Structure.VERSION} · Canon ${ZigCore.Canon.count()} laws · structure is CPU (no GPU needed)`);
 requestAnimationFrame(frame);
 </script>

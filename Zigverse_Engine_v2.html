@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ZIGVERSE ENGINE — organisms of the bonded body</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #04060a; overflow: hidden;
+               font: 12px/1.55 "Cascadia Code", "SF Mono", Consolas, monospace; color: #8f9aa4; }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .fade { transition: opacity .35s; }
+  .hide { opacity: 0 !important; pointer-events: none; }
+  body { cursor: none; } body.showui { cursor: default; }
+  #hud { position: fixed; left: 16px; top: 13px; user-select: none; pointer-events: none; text-shadow: 0 1px 4px #000; }
+  #hud .t { color: #b8cfd8; letter-spacing: .2em; font-size: 11px; }
+  #hud .d { color: #4c5761; }
+  #hud div { margin-top: 2px; }
+  .pill { padding: 1px 8px; border-radius: 9px; font-size: 10px; letter-spacing: .1em; }
+  .ok { background: #0f2024; color: #7ae0ff; border: 1px solid #285a5a; }
+  .no { background: #1e1012; color: #d08a80; border: 1px solid #4a2a2a; }
+  #panel { position: fixed; right: 16px; top: 13px; user-select: none; text-align: right; }
+  #panel label { color: #4c5761; margin-left: 11px; }
+  #panel select, #panel input { background: #0a1015; color: #b8cfd8; border: 1px solid #1f2b36;
+                                font: inherit; padding: 1px 4px; }
+  #keys { position: fixed; left: 16px; bottom: 11px; color: #333c45; user-select: none; }
+  #breath { position: fixed; right: 16px; bottom: 11px; width: 150px; height: 3px; background: #101820; }
+  #breathfill { height: 100%; width: 0%; background: #7ae0ff; transition: width .05s linear; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+
+<div id="hud" class="fade">
+  <div class="t">ZIGVERSE ENGINE <span class="d" id="ver"></span></div>
+  <div id="probe"><span class="pill no">MIDI …</span></div>
+  <div id="what" class="d"></div>
+  <div id="read" class="d"></div>
+</div>
+
+<div id="panel" class="fade">
+  <label>organism</label><select id="species">
+    <option value="body" selected>performed body</option>
+    <option value="nautilus">nautilus</option>
+    <option value="ammonite">ammonite</option>
+    <option value="horn">horn</option>
+    <option value="crozier">crozier</option>
+  </select>
+  <label>bond</label><select id="bond">
+    <option value="spine" selected>spine</option><option value="chain">chain</option>
+    <option value="stalk">stalk</option><option value="tether">tether</option><option value="eel">eel</option>
+  </select>
+  <label>span</label><select id="span">
+    <option value="0">unbounded</option><option value="60">60</option>
+    <option value="30" selected>30</option><option value="16">16</option>
+  </select>
+  <label>detail</label><select id="detail">
+    <option value="1">1×</option><option value="2">2×</option>
+    <option value="4" selected>4×</option><option value="8">8×</option>
+  </select>
+  <label>stones</label><select id="stones">
+    <option value="0" selected>none</option><option value="1">sparse</option>
+    <option value="2">reef</option><option value="3">dense</option>
+  </select>
+  <label>swim</label><select id="swim"><option value="0" selected>off</option><option value="1">on</option></select>
+  <label>self</label><select id="self"><option value="1" selected>on</option><option value="0">off</option></select>
+  <label>current</label><input id="cur" type="range" min="0" max="4" step="0.1" value="0.5" style="width:70px">
+</div>
+
+<div id="keys" class="fade">H hud · F fullscreen · O organism · B bond · X span · S stones · W swim · C self · R reset</div>
+<div id="breath"><div id="breathfill"></div></div>
+
+<script src="engine/zigcore.js"></script>
+<script src="species/shell.js"></script>
+<script>
+/* =============================================================================
+   ZIGVERSE ENGINE — a host for the organisms of the BONDED BODY (2026-08-07).
+
+   Everything here is CPU: `ZigCore.Structure`, `ZigCore.Contact` and the shell
+   species, none of which need WebGPU. The GPU splice (`ZigWebGPU 0.37`,
+   `opts.structure`) exists and is parity-verified, but a bonded body renders
+   perfectly well from CPU geometry — which is the same route
+   `ZigWebGPU.createForest` has always used for kelp. That is why this host boots
+   anywhere, including a laptop at a festival.
+
+   TWO ORGANISMS, ONE HOST, and they are genuinely different creatures rather
+   than one creature with a switch:
+
+     PERFORMED BODY   interval bends the growth, breath drives an undulation of
+                      rest curvature, the tail retires so the animal TRAVELS.
+                      Its shape is whatever you played.
+
+     SHELL            `species/shell.js` — constant turn plus constant growth
+                      ratio traces a logarithmic spiral. Interval sets the whorl's
+                      tightness and a LEAP reverses its handedness; breath feeds a
+                      slow `season` that opens it. Its shape is what you played
+                      SUMMED, which is a different relationship to a performance.
+
+   BREATH IS THE LIFE-FORCE throughout. Nothing grows and nothing ripples in
+   silence — the wave's phase does not even advance. Breath comes from the EWI's
+   continuous controller (CC2 / channel aftertouch), never from note-on velocity,
+   because velocity is articulation and articulation is not life.
+   ========================================================================== */
+const $ = (id) => document.getElementById(id);
+const S = ZigCore.Structure, C = ZigCore.Contact;
+const H = 20, CAP = 2400;
+
+$("ver").textContent = `ZigCore ${S.VERSION} · Contact ${C.VERSION} · Canon ${ZigCore.Canon.count()} laws`;
+
+/* ---- canvas ---- */
+const cv = $("stage"), cx = cv.getContext("2d");
+let W = 0, Ht = 0;
+function resize() {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  W = cv.clientWidth; Ht = cv.clientHeight;
+  cv.width = Math.floor(W * dpr); cv.height = Math.floor(Ht * dpr);
+  cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+addEventListener("resize", resize); resize();
+
+/* ---- shared performance state ---- */
+let breath = 0, breathTarget = 0, lastBreathMsg = 0, lastNote = null;
+let uiOn = false, grown = 0;
+
+/* ---- the performed body ---- */
+const B = {
+  st: { n: 1, head: 0, pos: new Float64Array(CAP*3), vel: new Float64Array(CAP*3),
+        par: new Int32Array(CAP).fill(-1), rest: new Float64Array(CAP), kap0: new Float64Array(CAP) },
+  acc: new Float64Array(CAP*3), kap: new Float64Array(CAP), rip: new Float64Array(CAP),
+  heading: [0,1,0], phase: 0, bond: null, bondName: "spine", detail: 4
+};
+function bodyBond() {
+  B.detail = +$("detail").value || 1;
+  B.bondName = $("bond").value;
+  B.bond = S.refine(ZigCore.Env.bond(B.bondName, H), B.detail);
+}
+function bodyReset() {
+  const st = B.st;
+  st.n = 1; st.head = 0; st.pos.fill(0); st.vel.fill(0); st.par.fill(-1);
+  st.rest.fill(0); st.rest[0] = B.bond.rest; st.kap0.fill(0);
+  B.kap.fill(0); B.heading = [0,1,0]; B.phase = 0;
+}
+function bodyPlay(semis, vel) {
+  const st = B.st; if (st.n >= CAP - B.detail - 2) return;
+  const spanSel = +$("span").value || 0, span = spanSel ? spanSel * B.detail : 0;
+  const step = (semis * 0.13) / B.detail;
+  let i = -1;
+  for (let d = 0; d < B.detail; d++) {
+    const c = Math.cos(step), s2 = Math.sin(step);
+    const hx = B.heading[0]*c - B.heading[1]*s2, hy = B.heading[0]*s2 + B.heading[1]*c;
+    const L = Math.hypot(hx, hy) || 1; B.heading = [hx/L, hy/L, 0];
+    i = span ? S.live(st, B.bond, span, B.heading) : S.grow(st, B.bond, B.heading);
+  }
+  const k = 0.6 + (vel || 0.5) * 2.0;
+  st.vel[i*3] = B.heading[0]*k; st.vel[i*3+1] = B.heading[1]*k;
+}
+function bodyStep(dt, stones) {
+  const st = B.st, swimOn = $("swim").value === "1", selfOn = $("self").value === "1";
+  const cur = parseFloat($("cur").value) || 0;
+  const sub = 4 * (B.bond.substeps || 1), h = dt / sub;
+
+  B.kap.set(st.kap0.subarray(st.head, st.n), st.head);
+  if (swimOn && breath > 0.002) {
+    B.phase += breath * 10 * dt;
+    B.rip.fill(0, st.head, st.n);
+    S.undulate(st.par, st.n, st.head, B.rip, { amp: 1.1 * breath, waves: 2.0, taper: 0.6, phase: B.phase });
+    for (let i = st.head; i < st.n; i++) B.kap[i] += B.rip[i];
+  }
+  const r = (st.rest[st.n-1] || B.bond.rest) * 0.5;
+  for (let q = 0; q < sub; q++) {
+    B.acc.fill(0, st.head*3, st.n*3);
+    S.accel(B.bond, st.pos, st.vel, st.par, st.n, B.acc, B.kap, st.rest);
+    for (let i = st.head; i < st.n; i++) B.acc[i*3] += cur;
+    if (selfOn) C.self(st.pos, st.vel, st.par, st.n, st.head, B.acc, { r: r*0.9, skip: Math.max(3, B.detail*2) });
+    if (stones.length) C.exclude(st.pos, st.vel, st.n, st.head, B.acc, stones, { skin: r });
+    if (swimOn) S.slip(st.pos, st.vel, st.par, st.n, st.head, B.acc, { along: 0.1, across: 8.0 });
+    else for (let i = st.head; i < st.n; i++) { B.acc[i*3] -= st.vel[i*3]*0.9; B.acc[i*3+1] -= st.vel[i*3+1]*0.9; }
+    for (let i = st.head; i < st.n; i++) {
+      if (B.bond.anchor && st.par[i] < 0) { st.vel[i*3] = st.vel[i*3+1] = 0; continue; }
+      for (let k = 0; k < 2; k++) { st.vel[i*3+k] += B.acc[i*3+k]*h; st.pos[i*3+k] += st.vel[i*3+k]*h; }
+    }
+  }
+}
+function bodyGeometry() {
+  const st = B.st, live = st.n - st.head, depth = Math.max(1, live-1);
+  const g = { n: live, x: new Float64Array(live), y: new Float64Array(live), w: new Float64Array(live), age: new Float64Array(live) };
+  const wBase = (st.rest[st.n-1] || B.bond.rest) * B.detail * 0.5;
+  for (let i = 0; i < live; i++) {
+    const j = st.head + i;
+    g.x[i] = st.pos[j*3]; g.y[i] = st.pos[j*3+1];
+    g.age[i] = S.age(st.par, j, depth);
+    g.w[i] = wBase * (0.35 + g.age[i] * 0.9);
+  }
+  return g;
+}
+
+/* ---- the shell species ---- */
+let shell = null;
+function shellNew(form) {
+  shell = TheShell.create({ form, frameH: H, cap: CAP,
+    override: { bond: $("bond").value, detail: +$("detail").value || 1 } });
+}
+
+/* ---- which organism is driving ---- */
+let mode = "body";
+function setSpecies(v) {
+  mode = (v === "body") ? "body" : "shell";
+  $("species").value = v;
+  grown = 0; lastNote = null;
+  bodyBond();
+  if (mode === "body") { shell = null; bodyReset(); }
+  else shellNew(v);
+  camInit = false;
+  $("what").textContent = mode === "body"
+    ? "PERFORMED BODY — interval bends the growth · breath undulates · the tail retires, so it travels"
+    : `SHELL · ${v.toUpperCase()} — constant turn × constant ratio = a logarithmic spiral · a LEAP reverses the coil`;
+}
+
+/* ---- stones (deterministic lattice; see growth_bench for the reasoning) ---- */
+let stoneDensity = 0, stones = [];
+const sHash = (i,j) => { let h = (i*374761393 + j*668265263) ^ 0x5bf03635; h = (h ^ (h>>13))*1274126177; return ((h ^ (h>>16))>>>0)/4294967296; };
+function gatherStones(g) {
+  stones.length = 0; if (!stoneDensity || !g.n) return;
+  const cell = H * (2.6 - stoneDensity*0.5);
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+  for (let i=0;i<g.n;i++){ if(g.x[i]<x0)x0=g.x[i]; if(g.x[i]>x1)x1=g.x[i]; if(g.y[i]<y0)y0=g.y[i]; if(g.y[i]>y1)y1=g.y[i]; }
+  for (let ci=Math.floor((x0-cell)/cell); ci<=Math.floor((x1+cell)/cell); ci++)
+    for (let cj=Math.floor((y0-cell)/cell); cj<=Math.floor((y1+cell)/cell); cj++) {
+      const a = sHash(ci,cj); if (a > 0.28 + stoneDensity*0.16) continue;
+      stones.push({ x:(ci+0.2+sHash(ci+991,cj-17)*0.6)*cell, y:(cj+0.2+sHash(ci-53,cj+7)*0.6)*cell, r: cell*(0.10+a*0.5) });
+      if (stones.length > 120) return;
+    }
+}
+
+/* ---- camera: fit the organism, ease toward it ---- */
+let camS = 0, camX = 0, camY = 0, camInit = false;
+function draw(g) {
+  cx.clearRect(0,0,W,Ht);
+  if (!g.n) return;
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+  for (let i=0;i<g.n;i++){ if(g.x[i]<x0)x0=g.x[i]; if(g.x[i]>x1)x1=g.x[i]; if(g.y[i]<y0)y0=g.y[i]; if(g.y[i]>y1)y1=g.y[i]; }
+  let wid = Math.max(g.w[g.n-1]*4, 1);
+  const bw = Math.max(x1-x0 + wid*3, wid*8), bh = Math.max(y1-y0 + wid*3, wid*8);
+  const want = Math.min(W/bw, Ht/bh) * 0.86;
+  const wx = (x0+x1)*0.5, wy = (y0+y1)*0.5;
+  if (!camInit) { camS = want; camX = wx; camY = wy; camInit = true; }
+  const e = 0.055;
+  camS += (want-camS)*e; camX += (wx-camX)*e; camY += (wy-camY)*e;
+  const P = (i) => [W*0.5 + (g.x[i]-camX)*camS, Ht*0.5 - (g.y[i]-camY)*camS];
+
+  for (const sn of stones) {
+    const sx = W*0.5 + (sn.x-camX)*camS, sy = Ht*0.5 - (sn.y-camY)*camS;
+    cx.fillStyle = "#0c1216"; cx.beginPath(); cx.arc(sx, sy, sn.r*camS, 0, 6.2832); cx.fill();
+    cx.strokeStyle = "#1d2b34"; cx.lineWidth = 1; cx.stroke();
+  }
+
+  cx.lineCap = "round"; cx.lineJoin = "round";
+  for (let i = 1; i < g.n; i++) {
+    const a = g.age[i];
+    cx.strokeStyle = `hsla(${190 + a*130}, 74%, ${32 + a*34}%, ${0.5 + a*0.45})`;
+    cx.lineWidth = Math.max(1.2, g.w[i]*camS*1.7);
+    const [xa,ya] = P(Math.max(0,i-2)), [xb,yb] = P(i-1), [xc,yc] = P(i);
+    cx.beginPath(); cx.moveTo(xa,ya); cx.lineTo(xb,yb); cx.lineTo(xc,yc); cx.stroke();
+  }
+}
+
+/* ---- the loop ---- */
+let tPrev = performance.now();
+function frame(now) {
+  const dt = Math.min((now - tPrev)/1000, 0.05); tPrev = now;
+  if (now - lastBreathMsg > 120) breathTarget = 0;
+  breath += (breathTarget - breath) * Math.min(1, dt*7);
+  if (breath < 0.002) breath = 0;
+  $("breathfill").style.width = (breath*100).toFixed(0) + "%";
+
+  let g;
+  if (mode === "body") { bodyStep(dt, stones); g = bodyGeometry(); }
+  else { shell.blow(breath); shell.step(dt, { stones }); g = shell.geometry(); }
+  gatherStones(g);
+  draw(g);
+
+  const n = g.n;
+  $("read").textContent = mode === "body"
+    ? `${n} segments · ${B.bondName} · detail ${B.detail}× · ${$("swim").value==="1"?"SWIM · ":""}${$("self").value==="1"?"self · ":""}grown ${grown}${stones.length?" · "+stones.length+" stones":""}`
+    : `${n} chambers · ${shell.form.bond} · detail ${shell.form.detail}× · season ${shell.season.toFixed(2)} · grown ${shell.grown}`;
+  requestAnimationFrame(frame);
+}
+
+/* ---- input: EWI first ---- */
+function note(n, vel) {
+  grown++;
+  if (mode === "body") { const iv = lastNote === null ? 0 : (n - lastNote); lastNote = n; bodyPlay(iv, vel); }
+  else shell.play(n, vel);
+}
+if (navigator.requestMIDIAccess) {
+  navigator.requestMIDIAccess().then((m) => {
+    let c = 0;
+    for (const inp of m.inputs.values()) { c++; inp.onmidimessage = (ev) => {
+      const [a,b,v] = ev.data, s4 = a & 0xf0;
+      if (s4 === 0xB0 && b === 2) { breathTarget = v/127; lastBreathMsg = performance.now(); }
+      else if (s4 === 0xD0)       { breathTarget = b/127; lastBreathMsg = performance.now(); }
+      else if (s4 === 0x80 || (s4 === 0x90 && v === 0)) { breathTarget = 0; lastBreathMsg = performance.now(); }
+      if (s4 === 0x90 && v > 0) { if (!breathTarget) { breathTarget = v/127; lastBreathMsg = performance.now(); } note(b, v/127); }
+    }; }
+    $("probe").innerHTML = c ? `<span class="pill ok">MIDI ${c}</span>` : `<span class="pill no">NO MIDI — SPACE ↑ ↓</span>`;
+  }).catch(() => { $("probe").innerHTML = `<span class="pill no">NO MIDI — SPACE ↑ ↓</span>`; });
+} else $("probe").innerHTML = `<span class="pill no">NO MIDI — SPACE ↑ ↓</span>`;
+
+let kb = 60;
+addEventListener("keyup", (e) => { if (["Space","ArrowUp","ArrowDown"].includes(e.code)) { breathTarget = 0; lastBreathMsg = performance.now(); } });
+addEventListener("keydown", (e) => {
+  if (["Space","ArrowUp","ArrowDown"].includes(e.code)) { breathTarget = 0.85; lastBreathMsg = performance.now(); e.preventDefault(); }
+  if (e.repeat) return;
+  if (e.code === "Space")          note(kb, 0.7);
+  else if (e.code === "ArrowUp")   note(kb += 3, 0.75);
+  else if (e.code === "ArrowDown") note(kb -= 3, 0.75);
+  else if (e.key === "r" || e.key === "R") setSpecies($("species").value);
+  else if (e.key === "h" || e.key === "H") setUI(!uiOn);
+  else if (e.key === "f" || e.key === "F") { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(()=>{}); }
+  else if (e.key === "o" || e.key === "O") { const s = $("species"); s.selectedIndex = (s.selectedIndex+1) % s.options.length; setSpecies(s.value); }
+  else if (e.key === "b" || e.key === "B") { const s = $("bond"); s.selectedIndex = (s.selectedIndex+1) % s.options.length; setSpecies($("species").value); }
+  else if (e.key === "x" || e.key === "X") { const s = $("span"); s.selectedIndex = (s.selectedIndex+1) % s.options.length; }
+  else if (e.key === "s" || e.key === "S") { const s = $("stones"); s.selectedIndex = (s.selectedIndex+1) % s.options.length; stoneDensity = +s.value; }
+  else if (e.key === "w" || e.key === "W") { const s = $("swim"); s.value = s.value === "1" ? "0" : "1"; }
+  else if (e.key === "c" || e.key === "C") { const s = $("self"); s.value = s.value === "1" ? "0" : "1"; }
+});
+addEventListener("pointerdown", () => { breathTarget = 0.8; lastBreathMsg = performance.now(); note(60 + ((Math.random()*10)|0) - 5, 0.7); });
+addEventListener("pointerup", () => { breathTarget = 0; lastBreathMsg = performance.now(); });
+
+$("species").addEventListener("change", (e) => setSpecies(e.target.value));
+for (const id of ["bond","detail"]) $(id).addEventListener("change", () => setSpecies($("species").value));
+$("stones").addEventListener("change", (e) => { stoneDensity = +e.target.value; });
+
+function setUI(on) {
+  uiOn = on;
+  for (const id of ["hud","panel","keys"]) $(id).classList.toggle("hide", !on);
+  document.body.classList.toggle("showui", on);
+}
+
+setSpecies("body");
+setUI(false);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

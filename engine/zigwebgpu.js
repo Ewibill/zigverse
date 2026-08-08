@@ -27,7 +27,7 @@
 (function (global) {
   "use strict";
   const ZigWebGPU = global.ZigWebGPU || (global.ZigWebGPU = {});
-  ZigWebGPU.VERSION = "0.36.0";   // 0.34: INTERIOR BUFF (back-face relief ×0.35 + specular broadened/dimmed + gem glints ×0.5 on !ff — the mesh facet seams stop catching as hard straight lines on the back; front keeps full crisp relief; byte-identical on the front face) · 0.33: GEM FACE (opts.gemFace — "inside" = the SEASHELL: matte material on the outside, gem nacre in the cupped interior; "outside"/"both" too; guards the gem's c=gc by front_facing; byte-identical at "both") · 0.32: MELODIC STRATA (View.noteBands[6] · view[84..107] — each EWI note blooms a band of light at its pitch-height in its pitch-class colour, fading over time; the melody written onto the body's vertical axis; driven by ZC.NoteField; zero when silent) · 0.31: SILHOUETTE RIM (live V.render5.x/y — a fresnel edge re-draws every letter's outline against the void, legible under any material on either face; face-corrected so the concave back outlines too; zero at render5.x=0; the reusable legibility capability all species inherit) · 0.30: GEM MATERIALS (opts.gem — refraction + dispersion fire + fresnel sky-reflection + facet flash + sparkle, sampling the analytic sky; byte-identical off) · 0.29: FABRIC UNDERSIDE (opts.backFabric — 20 textiles: weave pattern + sheen model + colour lining the concave back; byte-identical off) · 0.28: VELVET UNDERSIDE (opts.backVelvet — a different fabric skin on the back face: deep matte + grazing sheen; byte-identical off) · 0.27: MEMORY UNDERSIDE (opts.memoryBack — the back face glows with a lagging ghost of the recent phrase; the 2nd performance surface; render4.y/z; byte-identical off) · 0.26: CHIAROSCURO (opts.chiaro — back off ambient/fill so only the light-facing side shows, unlit → black; byte-identical at 0) · 0.25: WEB — connective filaments between neighbouring agents (grid-driven K-NN compute + instanced thread render; breath strings the web; byte-identical when opts.web absent) · 0.24: GRAIN THROUGH COLOUR — the skin's grain corrugates the spectrum too, so surface texture survives at full ink (byte-identical without material/spectrum) · 0.22: BOUNDARY · 0.23: COMPOSE — spectrum TINTS the material body (visible on pale skins; ink I/K = solid↔rainbow amount over the pigment) · 0.19: MEDIUM · 0.20: FORCES · 0.21: CURRENT (opts.boundary {shape,r,k,lo?,hi?} — the world's SHAPE: a soft cylinder/sphere that holds matter inside a volume; restoring accel before integrate, composes with all; byte-identical when absent) // 0.35: BOUNDARY AXIS — cylinder law holds along any free axis (capsule = horizontal cigar); byte-identical for axis "y" · 0.35.1: GYRE AXIS — current circulates around any axis (roll a horizontal cigar broadside); byte-identical for gyre axis "y" · 0.36: ELLIPSOID boundary (lens — squashed sphere, per-axis radii; the wide breathing disc); byte-identical for sphere/cylinder
+  ZigWebGPU.VERSION = "0.37.0";   // 0.37: STRUCTURE (opts.structure — matter that is JOINED: spring + damping + momentum-conserving bend, SCATTER rewritten as GATHER so a compute thread only writes its own slot; chains only; parity-checked against ZigCore.Structure.accel by tools/parity_structure.html; byte-identical when absent) ·   // 0.34: INTERIOR BUFF (back-face relief ×0.35 + specular broadened/dimmed + gem glints ×0.5 on !ff — the mesh facet seams stop catching as hard straight lines on the back; front keeps full crisp relief; byte-identical on the front face) · 0.33: GEM FACE (opts.gemFace — "inside" = the SEASHELL: matte material on the outside, gem nacre in the cupped interior; "outside"/"both" too; guards the gem's c=gc by front_facing; byte-identical at "both") · 0.32: MELODIC STRATA (View.noteBands[6] · view[84..107] — each EWI note blooms a band of light at its pitch-height in its pitch-class colour, fading over time; the melody written onto the body's vertical axis; driven by ZC.NoteField; zero when silent) · 0.31: SILHOUETTE RIM (live V.render5.x/y — a fresnel edge re-draws every letter's outline against the void, legible under any material on either face; face-corrected so the concave back outlines too; zero at render5.x=0; the reusable legibility capability all species inherit) · 0.30: GEM MATERIALS (opts.gem — refraction + dispersion fire + fresnel sky-reflection + facet flash + sparkle, sampling the analytic sky; byte-identical off) · 0.29: FABRIC UNDERSIDE (opts.backFabric — 20 textiles: weave pattern + sheen model + colour lining the concave back; byte-identical off) · 0.28: VELVET UNDERSIDE (opts.backVelvet — a different fabric skin on the back face: deep matte + grazing sheen; byte-identical off) · 0.27: MEMORY UNDERSIDE (opts.memoryBack — the back face glows with a lagging ghost of the recent phrase; the 2nd performance surface; render4.y/z; byte-identical off) · 0.26: CHIAROSCURO (opts.chiaro — back off ambient/fill so only the light-facing side shows, unlit → black; byte-identical at 0) · 0.25: WEB — connective filaments between neighbouring agents (grid-driven K-NN compute + instanced thread render; breath strings the web; byte-identical when opts.web absent) · 0.24: GRAIN THROUGH COLOUR — the skin's grain corrugates the spectrum too, so surface texture survives at full ink (byte-identical without material/spectrum) · 0.22: BOUNDARY · 0.23: COMPOSE — spectrum TINTS the material body (visible on pale skins; ink I/K = solid↔rainbow amount over the pigment) · 0.19: MEDIUM · 0.20: FORCES · 0.21: CURRENT (opts.boundary {shape,r,k,lo?,hi?} — the world's SHAPE: a soft cylinder/sphere that holds matter inside a volume; restoring accel before integrate, composes with all; byte-identical when absent) // 0.35: BOUNDARY AXIS — cylinder law holds along any free axis (capsule = horizontal cigar); byte-identical for axis "y" · 0.35.1: GYRE AXIS — current circulates around any axis (roll a horizontal cigar broadside); byte-identical for gyre axis "y" · 0.36: ELLIPSOID boundary (lens — squashed sphere, per-axis radii; the wide breathing disc); byte-identical for sphere/cylinder
 
   /* ---- probe — the gate. Green or it doesn't ship. ---------------------- */
   ZigWebGPU.probe = async function () {
@@ -708,6 +708,15 @@ fn waterColor(dir: vec3f) -> vec3f {
     const STAGE = opts.stage || null;    // EXPERIENCE · STAGE (the vitrine): a floor with a soft pool of light beneath the organism — {x,y,z (pool center on the floor), r (plane half-size), pool (light radius), color[3], gain}. The specimen rests in a lit space in a dark room; the viewer becomes a voyeur looking IN. Byte-identical when absent.
     const BOUNDARY = opts.boundary || null; // ENVIRONMENT · BOUNDARY: the world's SHAPE — {shape "cylinder"|"sphere", r, k, lo?, hi?}. A soft surface that HOLDS matter inside a volume (bowl · chimney · vessel): where forces pull and currents push, a boundary contains. Restoring accel before integrate (composes with all); a world can't drift out of frame. Byte-identical when absent. (Phase 2, pillar 4.)
     const SKIN = opts.skin || null;   // MEMBRANE: this flock inherits the elastic field's local geometry
+    /* STRUCTURE (v0.37): matter that is JOINED. {rest, k, damp, bend, chain:[{from,count}]}
+       Agents in a declared chain span are bonded to their predecessor. The CPU law
+       (ZigCore.Structure.accel) SCATTERS force to i, its parent and its grandparent;
+       a compute thread can only write its own slot, so the kernel GATHERS instead —
+       each agent sums the force on itself from the bond it owns (role i), the bond
+       of its child (role p) and the bond of its grandchild (role g). Exactly
+       equivalent for CHAINS, which is what Rootwhale, Kelp and Zigpede are; general
+       trees would need child lists and are not claimed. Byte-identical when absent. */
+    const STRUCT = opts.structure || null;
     const REST = opts.rest !== undefined && opts.rest !== false && opts.rest !== null;   // ZIGLIFE: per-agent arousal — rest/wake (breath wakes, silence sleeps). The individual-behavior substrate (arousal·fatigue·age·spare)
     const SEEK = opts.seek || null;   // ZIGSEEK: world attractor + repulsor — agents seek toward / avoid away (the base for foraging, attach, flee)
     const ATTACH = !!opts.attach;     // ZIGATTACH: bind-in-place / release — agents freeze into a held pose (bond channel of the life buffer)
@@ -2133,6 +2142,112 @@ struct SkinU { cr: vec4f, dim: vec4f, par: vec4f };
        would break. Ordering is by insertion order below (last spliced sits closest
        to the integrate); the modifiers all *add to* accel, so order is commutative. */
     const K_PREINT = "  /* ---- integrate with speed band ---- */";
+    if (STRUCT) {
+      /* ---- STRUCTURE: matter that is JOINED (ZigCore 0.13+) ------------------
+         SCATTER→GATHER. The CPU reference walks each bond once and writes force to
+         three agents. Here each agent instead asks "which bonds am I in, and in
+         which role?" For a chain with par[i] = i-1 the answer is always: bond i
+         (as the child), bond i+1 (as the parent), bond i+2 (as the grandparent).
+         Three reads, no atomics, no write hazards — and numerically identical to
+         the scatter, which is what the parity harness checks.
+
+         bondForce() returns the three vectors a single bond applies, in the same
+         order and with the same terms as ZigCore.Structure.accel: spring to rest,
+         damping ALONG the link only, and a bending moment projected PERPENDICULAR
+         to the link whose reaction is split between the grandparent (mirrored lever
+         arm about the parent) and the parent (the remainder) so that BOTH linear
+         and angular momentum are conserved. Getting that split wrong on the CPU
+         produced a phantom torque of -208 and a body that swam without a wave;
+         the same mistake here would be invisible on the glass. */
+      const CH = (STRUCT.chain && STRUCT.chain.length) ? STRUCT.chain : [{ from: 0, count: 0 }];
+      const spans = CH.map((c) => `SpanEntry(${(c.from|0)}u, ${((c.from|0) + (c.count|0))}u)`).join(", ");
+      const q1 = "@group(0) @binding(6) var<storage, read_write> velOut: array<vec4f>;";
+      const q2 = K_PREINT;
+      if (STEP_SRC.indexOf(q1) < 0 || STEP_SRC.indexOf(q2) < 0)
+        throw new Error("STRUCTURE splice anchor missing in step kernel");
+      const R = (+STRUCT.rest || 1).toFixed(5);
+      const KK = (+STRUCT.k || 26).toFixed(5);
+      const DP = (+STRUCT.damp === undefined ? 3 : +STRUCT.damp).toFixed(5);
+      const BD = (+STRUCT.bend || 0).toFixed(5);
+      const NS = CH.length;
+      STEP_SRC = STEP_SRC
+        .replace(q1, q1 + `
+struct SpanEntry { lo: u32, hi: u32 };
+const ST_REST: f32 = ${R};
+const ST_K: f32 = ${KK};
+const ST_DAMP: f32 = ${DP};
+const ST_BEND: f32 = ${BD};
+const ST_NSPAN: u32 = ${NS}u;
+const ST_SPANS = array<SpanEntry, ${NS}>(${spans});
+
+/* is agent i inside a declared chain, and does it have a predecessor? */
+fn stParent(i: u32) -> i32 {
+  for (var s: u32 = 0u; s < ST_NSPAN; s = s + 1u) {
+    let e = ST_SPANS[s];
+    if (i > e.lo && i < e.hi) { return i32(i) - 1; }
+  }
+  return -1;
+}
+
+/* the three forces one bond applies: .a on the child, .b on the parent, .c on the
+   grandparent. Mirrors ZigCore.Structure.accel term for term. */
+struct BondF { a: vec3f, b: vec3f, c: vec3f };
+fn bondForce(i: u32) -> BondF {
+  var o: BondF;
+  o.a = vec3f(0.0); o.b = vec3f(0.0); o.c = vec3f(0.0);
+  let p = stParent(i);
+  if (p < 0) { return o; }
+  let pu = u32(p);
+  let pi = posIn[i].xyz;   let pp = posIn[pu].xyz;
+  let vi = velIn[i].xyz;   let vp = velIn[pu].xyz;
+  let d = pi - pp;
+  let L = max(length(d), 1e-6);
+  let u = d / L;
+
+  /* 1 - spring · 2 - damping along the link only */
+  let rv = vi - vp;
+  let alongV = dot(rv, u);
+  let sMag = -(L - ST_REST) * ST_K - alongV * ST_DAMP;
+  var ax = u * sMag;
+
+  /* 3 - bending, if there is a grandparent */
+  if (ST_BEND > 0.0) {
+    let g = stParent(pu);
+    if (g >= 0) {
+      let pg = posIn[u32(g)].xyz;
+      let w = pp - pg;
+      let BL = max(length(w), 1e-6);
+      var e = pp + (w / BL) * ST_REST - pi;
+      e = e - dot(e, u) * u;                       /* strip the radial part */
+      var b = e * (ST_BEND * ST_K);
+      b = b - (rv - alongV * u) * (ST_BEND * ST_DAMP);   /* lateral damping */
+      /* balance the couple: g takes a force perpendicular to the g->p link with
+         the lever arm about p that cancels b's moment; p absorbs the remainder. */
+      let n = cross(u, b);
+      let nl = length(n);
+      var gf = vec3f(0.0);
+      if (nl > 1e-12) {
+        let nh = n / nl;
+        gf = cross(nh, w / BL) * ((L / BL) * length(b));
+      }
+      o.a = o.a + b;
+      o.c = o.c + gf;
+      o.b = o.b - (b + gf);
+    }
+  }
+  o.a = o.a + ax;
+  o.b = o.b - ax;                                  /* Newton's third */
+  return o;
+}`)
+        .replace(q2, `  /* ---- STRUCTURE: matter that is JOINED (gathered, not scattered) ---- */
+  {
+    let f0 = bondForce(i);                         /* this agent's own bond */
+    let f1 = bondForce(i + 1u);                    /* the bond of its child */
+    let f2 = bondForce(i + 2u);                    /* the bond of its grandchild */
+    accel += f0.a + f1.b + f2.c;
+  }
+` + q2);
+    }
     if (SEEK) {
       const q1 = "@group(0) @binding(6) var<storage, read_write> velOut: array<vec4f>;";
       const q2 = K_PREINT;
