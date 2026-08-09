@@ -176,5 +176,103 @@ function drive(shapes, steps, push, release) {
   }
 }
 
+
+// ---------------------------------------------------------------- 8) THE PER-PAIR CEILING
+// A deep overlap produces an unbounded force, and an unbounded force fires ONE agent out of the
+// mass while the rest sit — which reads as popping rather than as a body (Bill's "popcorn",
+// 2026-08-08). The ceiling must go on the PAIR, not the agent: clamping an agent's total makes
+// the two sides clamp by different amounts, forces stop being equal and opposite, and the clump
+// pushes itself. Measured on a 96-agent clump: per-agent clamping gave net force 174; per-pair
+// gives 2e-13.
+{
+  const N = 96, RR = 1.0;
+  let seed = 20260808;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const pos = new Float64Array(N*3), vel = new Float64Array(N*3);
+  for (let i = 0; i < N; i++) {
+    let x, y, z, d;
+    do { x = rnd()*2-1; y = rnd()*2-1; z = rnd()*2-1; d = x*x+y*y+z*z; } while (d > 1);
+    pos[i*3] = x*2.6; pos[i*3+1] = y*2.6; pos[i*3+2] = z*2.6;
+    vel[i*3] = (rnd()*2-1)*1.4; vel[i*3+1] = (rnd()*2-1)*1.4; vel[i*3+2] = (rnd()*2-1)*1.4;
+  }
+  const par = new Int32Array(N).fill(-1);
+  const run = (max) => {
+    const acc = new Float64Array(N*3);
+    C.self(pos, vel, par, N, 0, acc, { r: RR, k: 45, damp: 4, skip: -1, max });
+    let worst = 0, nx = 0, ny = 0, nz = 0;
+    for (let i = 0; i < N; i++) {
+      worst = Math.max(worst, Math.hypot(acc[i*3], acc[i*3+1], acc[i*3+2]));
+      nx += acc[i*3]; ny += acc[i*3+1]; nz += acc[i*3+2];
+    }
+    return { worst, net: Math.hypot(nx, ny, nz) };
+  };
+  const free = run(0), capped = run(12);
+  ok(free.net < 1e-9, `uncapped, the clump conserves momentum (${free.net.toExponential(1)})`);
+  ok(capped.worst < free.worst * 0.5,
+     `the ceiling tames the worst agent (${free.worst.toFixed(0)} → ${capped.worst.toFixed(0)}) — no single collision fires a shard`);
+  ok(capped.net < 1e-9,
+     `and momentum SURVIVES the ceiling (${capped.net.toExponential(1)}) — because the PAIR is clamped, not the agent`);
+  ok(run(0).worst === free.worst, "max 0 means no ceiling — historical behaviour is opt-out");
+}
+
+
+// ---------------------------------------------------------------- 8) THE CELL KEY MUST BE INJECTIVE
+// The broadphase key has to be one-to-one over the neighbourhoods actually walked, or a bucket
+// gets visited twice and every pair inside it is counted TWICE. The obvious `a*P1 ^ b*P2` is
+// not: xor collapses whenever a term is zero, so cell (0,0)'s nine-cell neighbourhood yielded
+// only SEVEN distinct keys — and a clump centred on the origin lands squarely in it. Caught by
+// parity_contact.html on 2026-08-08, which put the CPU law 3.7e+1 from the GPU kernel while
+// both were individually correct. The consequence is silent and position-dependent, which is
+// the worst kind, so it is guarded here rather than trusted.
+{
+  // a) the fix, structurally: every 3x3 neighbourhood yields nine distinct keys
+  const key = (a, b) => a * 4194304 + b;
+  let bad = 0;
+  for (let cx = -600; cx <= 600; cx += 13) for (let cy = -600; cy <= 600; cy += 13) {
+    const ks = new Set();
+    for (let gx = -1; gx <= 1; gx++) for (let gy = -1; gy <= 1; gy++) ks.add(key(cx + gx, cy + gy));
+    if (ks.size !== 9) bad++;
+  }
+  ok(bad === 0, `the cell key is injective over every neighbourhood tested (${bad} collisions)`);
+
+  // b) the fix, behaviourally: a clump ON THE ORIGIN must match brute force exactly.
+  //    This is the case the old key got wrong, so it is the case worth pinning.
+  const N = 96, r = 1.0, k = 45, damp = 4, maxF = 12, DD = r * 2;
+  let seed = 20260808;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const P = new Float64Array(N * 3), V = new Float64Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    let x, y, z, q;
+    do { x = rnd()*2-1; y = rnd()*2-1; z = rnd()*2-1; q = x*x+y*y+z*z; } while (q > 1);
+    P[i*3] = x*2.6; P[i*3+1] = y*2.6; P[i*3+2] = z*2.6;
+    V[i*3] = (rnd()*2-1)*1.4; V[i*3+1] = (rnd()*2-1)*1.4; V[i*3+2] = (rnd()*2-1)*1.4;
+  }
+  const par = new Int32Array(N).fill(-1);
+  const viaGrid = new Float64Array(N * 3);
+  C.self(P, V, par, N, 0, viaGrid, { r, k, damp, skip: -1, max: maxF });
+
+  const brute = new Float64Array(N * 3);
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    if (j === i) continue;
+    const dx = P[i*3]-P[j*3], dy = P[i*3+1]-P[j*3+1], dz = P[i*3+2]-P[j*3+2];
+    const d2 = dx*dx + dy*dy + dz*dz;
+    if (d2 >= DD*DD || d2 < 1e-12) continue;
+    const d = Math.sqrt(d2), nx = dx/d, ny = dy/d, nz = dz/d;
+    let f = (DD - d) * k;
+    const vn = (V[i*3]-V[j*3])*nx + (V[i*3+1]-V[j*3+1])*ny + (V[i*3+2]-V[j*3+2])*nz;
+    if (vn < 0) f -= vn * damp;
+    if (f > maxF) f = maxF;
+    brute[i*3] += nx*f*0.5; brute[i*3+1] += ny*f*0.5; brute[i*3+2] += nz*f*0.5;
+  }
+  let worst = 0;
+  for (let i = 0; i < N; i++) worst = Math.max(worst, Math.hypot(
+    viaGrid[i*3]-brute[i*3], viaGrid[i*3+1]-brute[i*3+1], viaGrid[i*3+2]-brute[i*3+2]));
+  ok(worst < 1e-9, `a 96-agent clump ON THE ORIGIN matches brute force (worst ${worst.toExponential(2)}, was 3.7e+1)`);
+
+  let net = [0, 0, 0];
+  for (let i = 0; i < N; i++) { net[0] += viaGrid[i*3]; net[1] += viaGrid[i*3+1]; net[2] += viaGrid[i*3+2]; }
+  ok(Math.hypot(net[0], net[1], net[2]) < 1e-9, "…and it still cannot push itself");
+}
+
 console.log(fail ? `contact_ref: ${fail} FAIL` : "contact_ref: PASS");
 process.exit(fail ? 1 : 0);

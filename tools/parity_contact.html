@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ZIGVERSE · CONTACT PARITY — does the GPU keep matter out?</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; min-height: 100%; background: #04060a; color: #8f9aa4;
+               font: 13px/1.6 "Cascadia Code", "SF Mono", Consolas, monospace; padding: 26px 30px 60px; }
+  h1 { color: #b8cfd8; font-size: 14px; letter-spacing: .18em; font-weight: 600; margin: 0 0 4px; }
+  h2 { color: #7d8b96; font-size: 12px; letter-spacing: .14em; margin: 26px 0 2px; font-weight: 600; }
+  .dim { color: #55606b; }
+  .verdict { font-size: 20px; letter-spacing: .12em; padding: 14px 18px; border-radius: 8px; margin: 20px 0; display: inline-block; }
+  .pass { background: #0d2018; color: #6ef0a8; border: 1px solid #1f5a3a; }
+  .fail { background: #2a0d0d; color: #ff8a7a; border: 1px solid #5a2828; }
+  .wait { background: #12181e; color: #7ab8ff; border: 1px solid #24455a; }
+  table { border-collapse: collapse; margin: 14px 0; font-size: 12px; }
+  td, th { padding: 3px 14px 3px 0; text-align: left; }
+  th { color: #55606b; font-weight: 400; border-bottom: 1px solid #1a2630; }
+  .num { color: #b8cfd8; } .bad { color: #ff8a7a; } .ok { color: #6ef0a8; }
+  pre { background: #080d12; border: 1px solid #16202a; border-radius: 6px; padding: 12px 14px;
+        overflow-x: auto; color: #6d7a85; font-size: 11px; max-height: 300px; }
+</style>
+</head>
+<body>
+<h1>ZIGVERSE · CONTACT PARITY</h1>
+<div class="dim">Does the WGSL kernel compute the same exclusion as <span class="num">ZigCore.Contact.self</span>?</div>
+
+<div id="verdict" class="verdict wait">RUNNING…</div>
+<div id="detail" class="dim"></div>
+<div id="tables"></div>
+
+<h2>WHY THIS PAGE EXISTS</h2>
+<div class="dim" style="max-width:78ch">
+Glyph's container has no GPU, so a compute kernel cannot be executed where it is written. Every
+physics error found on 2026-08-07 was caught by a NUMERIC MEASUREMENT rather than by reading code.
+The proof therefore runs here: identical positions and velocities, both implementations, worst
+divergence per agent.
+</div>
+
+<h2>THE ONE THING THAT COULD BE WRONG</h2>
+<div class="dim" style="max-width:78ch">
+On the CPU a contact pair is resolved ONCE and pushed both ways. A compute thread may only write its
+own slot, so the kernel computes every pair TWICE — once from each side — and each thread keeps its
+own half. If that halving, the normal's direction, or the approach-only damping is wrong anywhere,
+the numbers below diverge. This harness deliberately uses a CLUMP dense enough that most agents have
+several simultaneous contacts, since a single isolated pair would hide an accumulation error. It
+tests the SHIPPING values (k 45, damp 4, per-PAIR ceiling 12) — the stone defaults of k 400 fired shards out
+of the mass ninety times harder than the field's own forces, which is what "popcorn" was.
+</div>
+
+<h2>SHADER SOURCE (as generated)</h2>
+<pre id="src">…</pre>
+
+<script src="../engine/zigcore.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const say = (c, t) => { const v = $("verdict"); v.className = "verdict " + c; v.textContent = t; };
+
+/* ---- the case: a dense clump, so most agents have SEVERAL contacts at once ---- */
+const N = 96, R = 1.0, KK = 45, DAMP = 4, MAXF = 12;   // the shipping values, not the stone defaults
+const pos = new Float32Array(N * 4), vel = new Float32Array(N * 4);
+{
+  let seed = 20260808;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  for (let i = 0; i < N; i++) {
+    /* a ball of radius ~2.6R holding 96 agents of radius R — heavy overlap by construction */
+    let x, y, z, d;
+    do { x = rnd()*2-1; y = rnd()*2-1; z = rnd()*2-1; d = x*x+y*y+z*z; } while (d > 1);
+    pos[i*4] = x*2.6*R; pos[i*4+1] = y*2.6*R; pos[i*4+2] = z*2.6*R;
+    vel[i*4] = (rnd()*2-1)*1.4; vel[i*4+1] = (rnd()*2-1)*1.4; vel[i*4+2] = (rnd()*2-1)*1.4;
+  }
+}
+
+/* ---- CPU reference: the law itself. `skip:0` and a flat parent array mean every
+       pair is eligible, which is what an unbonded flock is. ---- */
+function cpuAccel() {
+  const p = new Float64Array(N*3), v = new Float64Array(N*3);
+  for (let i = 0; i < N; i++) for (let k = 0; k < 3; k++) { p[i*3+k] = pos[i*4+k]; v[i*3+k] = vel[i*4+k]; }
+  const par = new Int32Array(N).fill(-1);           // no bonds: nothing is exempt
+  const acc = new Float64Array(N*3);
+  ZigCore.Contact.self(p, v, par, N, 0, acc, { r: R, k: KK, damp: DAMP, skip: -1, max: MAXF });
+  return acc;
+}
+
+/* ---- the GPU kernel: the same inner loop the renderer splices, in isolation.
+       Brute-force over all agents here rather than a grid, because what is under
+       test is the FORCE MATH, not the broadphase — and a grid whose cell is smaller
+       than the contact diameter would silently miss pairs the CPU finds. ---- */
+const WGSL = `
+const CT_R: f32 = ${R};
+const CT_K: f32 = ${KK};
+const CT_DAMP: f32 = ${DAMP};
+const CT_MAX: f32 = ${MAXF};
+const CT_N: u32 = ${N}u;
+
+@group(0) @binding(0) var<storage, read> posIn: array<vec4f>;
+@group(0) @binding(1) var<storage, read> velIn: array<vec4f>;
+@group(0) @binding(2) var<storage, read_write> out: array<vec4f>;
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let i = gid.x; if (i >= CT_N) { return; }
+  let p = posIn[i].xyz;
+  let v = velIn[i].xyz;
+  let ctD = CT_R * 2.0;
+  var ctF = vec3f(0.0);
+  for (var j: u32 = 0u; j < CT_N; j++) {
+    if (j == i) { continue; }
+    let dvec = p - posIn[j].xyz;
+    let d2 = dot(dvec, dvec);
+    if (d2 >= ctD * ctD || d2 < 1e-12) { continue; }
+    let dist = sqrt(d2);
+    let nrm = dvec / dist;
+    var f = (ctD - dist) * CT_K;
+    let rv = v - velIn[j].xyz;
+    let vn = dot(rv, nrm);
+    if (vn < 0.0) { f -= vn * CT_DAMP; }
+    f = min(f, CT_MAX);
+    ctF += nrm * f * 0.5;
+  }
+  out[i] = vec4f(ctF, 0.0);
+}`;
+$("src").textContent = WGSL.trim();
+
+async function run() {
+  if (!navigator.gpu) { say("fail", "NO WEBGPU"); $("detail").textContent = "Use Chrome or Edge. Check chrome://gpu."; return; }
+  let device;
+  try {
+    const ad = await navigator.gpu.requestAdapter();
+    if (!ad) throw new Error("no adapter");
+    device = await ad.requestDevice();
+  } catch (e) { say("fail", "NO GPU DEVICE"); $("detail").textContent = String(e); return; }
+
+  device.pushErrorScope("validation");
+  const mod = device.createShaderModule({ code: WGSL });
+  const info = await mod.getCompilationInfo();
+  const errs = info.messages.filter((m) => m.type === "error");
+  const vErr = await device.popErrorScope();
+  if (errs.length || vErr) {
+    say("fail", "SHADER DID NOT COMPILE");
+    $("detail").innerHTML = errs.map((m) => `<div class="bad">line ${m.lineNum}: ${m.message}</div>`).join("") +
+      (vErr ? `<div class="bad">${vErr.message}</div>` : "");
+    return;
+  }
+
+  const mk = (d) => { const b = device.createBuffer({ size: d.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+    device.queue.writeBuffer(b, 0, d); return b; };
+  const pb = mk(pos), vb = mk(vel);
+  const ob = device.createBuffer({ size: N*16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+  const rb = device.createBuffer({ size: N*16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+  const pipe = device.createComputePipeline({ layout: "auto", compute: { module: mod, entryPoint: "main" } });
+  const bg = device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [
+    { binding: 0, resource: { buffer: pb } }, { binding: 1, resource: { buffer: vb } }, { binding: 2, resource: { buffer: ob } }] });
+  const enc = device.createCommandEncoder();
+  const pass = enc.beginComputePass();
+  pass.setPipeline(pipe); pass.setBindGroup(0, bg);
+  pass.dispatchWorkgroups(Math.ceil(N / 64));
+  pass.end();
+  enc.copyBufferToBuffer(ob, 0, rb, 0, N*16);
+  device.queue.submit([enc.finish()]);
+  await rb.mapAsync(GPUMapMode.READ);
+  const gpu = new Float32Array(rb.getMappedRange().slice(0));
+  rb.unmap();
+
+  const cpu = cpuAccel();
+  let worstAbs = 0, worstRel = 0, worstIdx = -1, mag = 0, contacts = 0;
+  const rows = [];
+  for (let i = 0; i < N; i++) {
+    const cx = cpu[i*3], cy = cpu[i*3+1], cz = cpu[i*3+2];
+    const gx = gpu[i*4], gy = gpu[i*4+1], gz = gpu[i*4+2];
+    const d = Math.hypot(cx-gx, cy-gy, cz-gz), m = Math.hypot(cx, cy, cz);
+    if (m > 1e-6) contacts++;
+    mag = Math.max(mag, m);
+    const rel = m > 1e-3 ? d/m : d;
+    if (d > worstAbs) { worstAbs = d; worstIdx = i; }
+    if (rel > worstRel) worstRel = rel;
+    rows.push({ i, cx, cy, cz, gx, gy, gz, d, rel });
+  }
+  const good = worstRel < 1e-3;
+  say(good ? "pass" : "fail", good ? "PARITY — THE GPU KEEPS MATTER OUT" : "DIVERGENCE");
+  $("detail").innerHTML =
+    `worst relative <span class="${good?"ok":"bad"}">${worstRel.toExponential(2)}</span> · ` +
+    `worst absolute <span class="num">${worstAbs.toExponential(2)}</span> at agent ${worstIdx} · ` +
+    `largest force <span class="num">${mag.toFixed(1)}</span> · ` +
+    `<span class="num">${contacts}</span> of ${N} agents in contact<br>` +
+    `<span class="dim">GPU f32 vs CPU f64 — ~1e-5 relative is the precision floor. Above 1e-3 is a real bug.</span>`;
+  rows.sort((a,b) => b.rel - a.rel);
+  $("tables").innerHTML = `<h2>WORST EIGHT AGENTS</h2><table>
+    <tr><th>agent</th><th>CPU accel</th><th>GPU accel</th><th>|diff|</th><th>relative</th></tr>` +
+    rows.slice(0,8).map((r) => `<tr><td class="num">${r.i}</td>
+      <td>${r.cx.toFixed(2)}, ${r.cy.toFixed(2)}, ${r.cz.toFixed(2)}</td>
+      <td>${r.gx.toFixed(2)}, ${r.gy.toFixed(2)}, ${r.gz.toFixed(2)}</td>
+      <td>${r.d.toExponential(2)}</td>
+      <td class="${r.rel < 1e-3 ? "ok" : "bad"}">${r.rel.toExponential(2)}</td></tr>`).join("") + `</table>`;
+}
+run().catch((e) => { say("fail", "ERROR"); $("detail").textContent = String(e && e.stack || e); });
+</script>
+</body>
+</html>

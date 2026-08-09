@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ZIGVERSE ENGINE</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #010204; overflow: hidden;
+               font: 12px/1.5 "Cascadia Code", "SF Mono", Consolas, monospace; color: #a8a89a; }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; left: 14px; top: 12px; user-select: none; pointer-events: none; text-shadow: 0 1px 3px #000; }
+  #hud .title { color: #ded8c8; letter-spacing: 0.18em; font-size: 11px; }
+  #hud .dim { color: #5f5f57; }
+  #hud div { margin-top: 3px; }
+  .pill { padding: 1px 8px; border-radius: 9px; font-size: 11px; letter-spacing: 0.08em; }
+  .pill.ok  { background: #10240f; color: #8aff7a; border: 1px solid #2d5a28; }
+  .pill.bad { background: #2a0d0d; color: #ff8a7a; border: 1px solid #5a2828; }
+  #hint { position: fixed; right: 14px; bottom: 10px; color: #3d3d38; user-select: none; text-align: right; }
+  #picks { position: fixed; right: 14px; top: 12px; user-select: none; z-index: 10; text-align: right;
+           color: #5f5f57; font: 11px/1.7 "Cascadia Code","SF Mono",monospace; }
+  #picks label { letter-spacing: .14em; }
+  #picks select { background: #0c0f13; color: #cdd3c8; border: 1px solid #2a323c; border-radius: 6px;
+                  padding: 2px 7px; font: 11px "Cascadia Code",monospace; margin-left: 6px; cursor: pointer; }
+  #picks .med select { border-color: #2d4a5a; color: #bfe0ea; }
+  #picks .world { margin-bottom: 5px; padding-bottom: 5px; border-bottom: 1px solid #1c2128; }
+  #picks .world label { color: #cdd3c8; }
+  #picks .world select { border-color: #4a3f5a; color: #d8cfea; }
+  #picks .body { margin-top: 6px; padding-top: 5px; border-top: 1px solid #1c2128; }
+  #picks .body select { border-color: #3f4a3a; color: #d6ead0; }
+  #picks .brk { margin-top: 6px; padding-top: 5px; border-top: 1px solid #1c2128; }
+  #picks .brk select { border-color: #4a3a2d; color: #ead8bf; }
+  .fade { transition: opacity .3s; } .hide { opacity: 0 !important; pointer-events: none; }
+  body.clean { cursor: none; }
+  #breath { position: fixed; left: 14px; bottom: 12px; width: 150px; height: 3px; background: #0e1218; }
+  #bfill { height: 100%; width: 0%; background: #8aff7a; transition: width .05s linear; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+
+<div id="hud" class="fade">
+  <div class="title">ZIGVERSE ENGINE <span class="dim">— worlds · bonds · bodies that travel · shells · stones · breath-as-life</span></div>
+  <div id="probe"><span class="pill bad">MIDI …</span> <span class="dim">looking for the EWI</span></div>
+  <div id="status" class="dim">booting…</div>
+  <div id="ecology" class="dim"></div>
+  <div id="engine" class="dim"></div>
+</div>
+
+<div id="picks" class="fade">
+  <div class="world"><label>WORLD</label> <select id="worldpick" title="a whole coherent place — sets medium+forces+current at once"></select></div>
+  <div class="med"><label>MEDIUM</label> <select id="medpick" title="the density of the world — air · water · honey"></select></div>
+  <div class="med"><label>FORCES</label> <select id="forcepick" title="gravity / buoyancy — sink · float · suspend"></select></div>
+  <div class="med"><label>CURRENT</label> <select id="curpick" title="the world's flow — drift · gyre · eddy"></select></div>
+  <div class="med"><label>SHAPE</label> <select id="boundpick" title="the world's shape holds it in — basin · column · capsule · vessel · lens"></select></div>
+  <div class="body"><label>ORGANISM</label> <select id="orgpick" title="the performed body, or a shell that sums what you played"></select></div>
+  <div class="body"><label>BOND</label> <select id="bondpick" title="how matter is JOINED — one number spans rope to spine (chain · spine · stalk · tether · eel)"></select></div>
+  <div class="body"><label>SPAN</label> <select id="spanpick" title="unbounded RECORDS the whole performance · bounded makes the body TRAVEL"></select></div>
+  <div class="body"><label>DETAIL</label> <select id="detailpick" title="the same body at higher resolution — k scales as factor², the camera never pulls back"></select></div>
+  <div class="body"><label>SWIM</label> <select id="swimpick" title="breath drives a travelling wave of rest curvature down the spine"></select></div>
+  <div class="body"><label>SELF</label> <select id="selfpick" title="the body cannot pass through its own coils"></select></div>
+  <div class="brk"><label>STONES</label> <select id="stonepick" title="static objects the body must work around — a world with things IN it"></select></div>
+  <div class="brk"><label>BREATH</label> <select id="breathpick" title="how easily pressure lights it — firm→feather · live, no reload"></select></div>
+</div>
+
+<div id="hint" class="fade">H hud · F fullscreen · R reset · the URL carries the world</div>
+<div id="breath"><div id="bfill"></div></div>
+
+<script src="engine/zigcore.js"></script>
+<script src="species/shell.js"></script>
+<script>
+/* =============================================================================
+   ZIGVERSE ENGINE — the picker host, over the organisms of the BONDED BODY.
+
+   Built in the idiom of Engine v1.5: a WORLD macro above the elemental dials,
+   every vocabulary READ FROM THE ENGINE rather than hardcoded, and the whole
+   state carried in the URL hash so a place can be linked, bookmarked and
+   returned to. That last part is the point of the format — a world you found by
+   turning dials is worth nothing if you cannot get back to it.
+
+   WHAT IS NEW HERE. v1.5 drove a 6000-agent cloud on the GPU. This drives a
+   BONDED BODY on the CPU, so the same environmental vocabulary — medium, forces,
+   current, boundary — now acts on matter that is JOINED rather than on a field of
+   strangers. Watching `honey` + `sink` + `lens` act on a chain is a different
+   thing entirely from watching it act on a swarm, and the BOND picker is the new
+   dial: one number spanning rope to spine.
+
+   NO RELOAD. v1.5 reloaded on most changes because a shader had to recompile.
+   Nothing here compiles, so every dial is live — the hash updates, the world
+   changes under your hands, and a phrase in progress keeps growing.
+   ========================================================================== */
+const $ = (id) => document.getElementById(id);
+const S = ZigCore.Structure, C = ZigCore.Contact, E = ZigCore.Env;
+const H = 20, CAP = 2600;
+const say = (t) => { $("status").textContent = t; };
+addEventListener("error", (e) => say("script error: " + e.message + " @" + e.lineno));
+
+/* ---- state from the hash, exactly as v1.5 did it ---- */
+const hv = (k, d) => { const m = location.hash.match(new RegExp(k + "=([a-z0-9]+)", "i")); return m ? m[1] : d; };
+const ZW = { world: hv("world","custom"), med: hv("med","water"), force: hv("force","neutral"),
+             cur: hv("cur","neutral"), bound: hv("bound","none"), org: hv("org","body"),
+             bond: hv("bond","spine"), span: hv("span","30"), detail: hv("detail","4"),
+             swim: hv("swim","0"), self: hv("self","1"), stones: hv("stones","0"), breath: hv("breath","easy") };
+
+const BREATHFEEL = { firm: 0.55, easy: 1.0, light: 1.5, feather: 2.2 };
+
+/* ---- canvas ---- */
+const cv = $("stage"), cx = cv.getContext("2d");
+let W = 0, Ht = 0;
+function resize() { const d = Math.min(devicePixelRatio || 1, 2);
+  W = cv.clientWidth; Ht = cv.clientHeight; cv.width = Math.floor(W*d); cv.height = Math.floor(Ht*d);
+  cx.setTransform(d,0,0,d,0,0); }
+addEventListener("resize", resize); resize();
+
+/* ---- the WORLD resolves to the three elemental dials, as in v1.5 ---- */
+let med = null, force = null, current = null, bound = null;
+function resolveWorld() {
+  const w = (ZW.world !== "custom" && ZigCore.Worlds && ZigCore.Worlds.places[ZW.world]) || null;
+  if (w) { ZW.med = w.medium; ZW.force = w.force; ZW.cur = w.current;
+           if (ZW.bound === "none" && w.bound) ZW.bound = w.bound; }
+  /* the Env vocabulary uses NULL for the no-op — `none` boundary, `none` bond,
+     and `neutral` force/current all resolve to null rather than to a zeroed
+     object. That is the engine being honest about "this law is not in play";
+     a host has to supply the identity itself. */
+  med     = (E.medium  && E.medium(ZW.med))      || { drag: 1.0, vmax: 0.72 };
+  force   = (E.force   && E.force(ZW.force))     || { g: 0, damp: 1, floor: 0 };
+  current = (E.current && E.current(ZW.cur, H))  || { d: [0,0,0], gyre: 0 };
+  bound = E.boundary(ZW.bound, H);
+  $("ecology").textContent =
+    `${ZW.world === "custom" ? "custom" : ZW.world.toUpperCase()} · ${ZW.med} (drag ${med.drag}) · ${ZW.force}` +
+    ` (g ${force.g}) · ${ZW.cur}${current.gyre ? " (gyre " + current.gyre + ")" : ""} · shape ${ZW.bound}`;
+}
+
+/* ---- the organism ---- */
+let mode = "body", shell = null, bond = null, detail = 4;
+const st = { n: 1, head: 0, pos: new Float64Array(CAP*3), vel: new Float64Array(CAP*3),
+             par: new Int32Array(CAP).fill(-1), rest: new Float64Array(CAP), kap0: new Float64Array(CAP) };
+const acc = new Float64Array(CAP*3), kap = new Float64Array(CAP), rip = new Float64Array(CAP), radii = new Float64Array(CAP);
+let heading = [0,1,0], phase = 0, lastNote = null, grown = 0;
+
+function rebuild() {
+  detail = +ZW.detail || 1;
+  bond = S.refine(E.bond(ZW.bond === "none" ? "chain" : ZW.bond, H), detail);
+  mode = (ZW.org === "body") ? "body" : "shell";
+  grown = 0; lastNote = null; camInit = false;
+  if (mode === "body") {
+    shell = null;
+    st.n = 1; st.head = 0; st.pos.fill(0); st.vel.fill(0); st.par.fill(-1);
+    st.rest.fill(0); st.rest[0] = bond.rest; st.kap0.fill(0); kap.fill(0);
+    heading = [0,1,0]; phase = 0;
+  } else {
+    shell = TheShell.create({ form: ZW.org, frameH: H, cap: CAP,
+      override: { bond: ZW.bond === "none" ? "spine" : ZW.bond, detail } });
+  }
+  $("engine").textContent = `ZigCore ${S.VERSION} · Contact ${C.VERSION} · Canon ${ZigCore.Canon.count()} laws · ` +
+    (mode === "body" ? `bonded body · ${ZW.bond} · span ${ZW.span === "0" ? "unbounded" : ZW.span} · ${detail}×`
+                     : `shell · ${ZW.org} · ${detail}×`);
+}
+
+/* ---- breath is the life-force ---- */
+let breath = 0, bTarget = 0, bLast = 0;
+
+function play(n, vel) {
+  grown++;
+  if (mode === "shell") { shell.play(n, vel); return; }
+  if (st.n >= CAP - detail - 2) return;
+  const iv = lastNote === null ? 0 : (n - lastNote); lastNote = n;
+  const spanSel = +ZW.span || 0, span = spanSel ? spanSel * detail : 0;
+  const step = (iv * 0.13) / detail;
+  let i = -1;
+  for (let d = 0; d < detail; d++) {
+    const c = Math.cos(step), s2 = Math.sin(step);
+    const hx = heading[0]*c - heading[1]*s2, hy = heading[0]*s2 + heading[1]*c;
+    const L = Math.hypot(hx, hy) || 1; heading = [hx/L, hy/L, 0];
+    i = span ? S.live(st, bond, span, heading) : S.grow(st, bond, heading);
+  }
+  const k = 0.6 + (vel || 0.5) * 2.0;
+  st.vel[i*3] = heading[0]*k; st.vel[i*3+1] = heading[1]*k;
+}
+
+/* ---- the world acts on the body -------------------------------------------
+   This is the whole point of the host: `medium`, `forces`, `current` and
+   `boundary` are the SAME Env laws v1.5 applied to a 6000-agent cloud, now
+   acting on matter that is JOINED. A gyre pulls a chain into a coil where it
+   only ever stirred a swarm. */
+function worldAccel(from, to) {
+  for (let i = from; i < to; i++) {
+    const i3 = i*3;
+    acc[i3]   += (current.d[0]||0) + (current.gyre ? -st.pos[i3+1] * current.gyre : 0);
+    acc[i3+1] += (current.d[1]||0) + (current.gyre ?  st.pos[i3]   * current.gyre : 0) + (force.g||0) * 0.14;
+    const dg = med.drag * (force.damp === undefined ? 1 : force.damp);
+    acc[i3]   -= st.vel[i3]   * dg;
+    acc[i3+1] -= st.vel[i3+1] * dg;
+    if (bound) {                                       /* the world's shape holds it in */
+      const x = st.pos[i3], y = st.pos[i3+1];
+      if (bound.shape === "ellipsoid") {
+        const q = (x*x)/(bound.rx*bound.rx) + (y*y)/(bound.ry*bound.ry);
+        if (q > 1) { const s2 = (Math.sqrt(q) - 1) * bound.k;
+          acc[i3] -= x/Math.max(bound.rx,1e-6) * s2; acc[i3+1] -= y/Math.max(bound.ry,1e-6) * s2; }
+      } else {
+        const r = Math.hypot(x, y), R = bound.r || bound.rx || 40;
+        if (r > R) { const s2 = (r - R) * bound.k / Math.max(r,1e-6);
+          acc[i3] -= x*s2; acc[i3+1] -= y*s2; }
+      }
+    }
+  }
+}
+
+function step(dt) {
+  const swimOn = ZW.swim === "1", selfOn = ZW.self === "1";
+  const sub = 4 * (bond.substeps || 1), h = dt / sub;
+  kap.set(st.kap0.subarray(st.head, st.n), st.head);
+  if (swimOn && breath > 0.002) {
+    phase += breath * 10 * dt;
+    rip.fill(0, st.head, st.n);
+    S.undulate(st.par, st.n, st.head, rip, { amp: 1.1*breath, waves: 2.0, taper: 0.6, phase });
+    for (let i = st.head; i < st.n; i++) kap[i] += rip[i];
+  }
+  let rMax = 0;
+  for (let i = st.head; i < st.n; i++) { const r = (st.rest[i] || bond.rest)*0.5; radii[i] = r; if (r > rMax) rMax = r; }
+  for (let q = 0; q < sub; q++) {
+    acc.fill(0, st.head*3, st.n*3);
+    S.accel(bond, st.pos, st.vel, st.par, st.n, acc, kap, st.rest);
+    worldAccel(st.head, st.n);
+    if (selfOn) C.self(st.pos, st.vel, st.par, st.n, st.head, acc, { r: rMax, radii, skip: Math.max(3, detail*2) });
+    if (stones.length) C.exclude(st.pos, st.vel, st.n, st.head, acc, stones, { skin: rMax });
+    if (swimOn) S.slip(st.pos, st.vel, st.par, st.n, st.head, acc, { along: 0.1, across: 8.0 });
+    for (let i = st.head; i < st.n; i++) {
+      if (bond.anchor && st.par[i] < 0) { st.vel[i*3] = st.vel[i*3+1] = 0; continue; }
+      for (let k = 0; k < 2; k++) {
+        st.vel[i*3+k] += acc[i*3+k]*h; st.pos[i*3+k] += st.vel[i*3+k]*h;
+        if (med.vmax) { const v = Math.abs(st.vel[i*3+k]); if (v > med.vmax*40) st.vel[i*3+k] *= (med.vmax*40)/v; }
+      }
+    }
+  }
+}
+
+function geometry() {
+  if (mode === "shell") return shell.geometry();
+  const live = st.n - st.head, depth = Math.max(1, live-1);
+  const g = { n: live, x: new Float64Array(live), y: new Float64Array(live), w: new Float64Array(live), age: new Float64Array(live) };
+  const wB = (st.rest[st.n-1] || bond.rest) * detail * 0.5;
+  for (let i = 0; i < live; i++) { const j = st.head + i;
+    g.x[i] = st.pos[j*3]; g.y[i] = st.pos[j*3+1];
+    g.age[i] = S.age(st.par, j, depth); g.w[i] = wB * (0.35 + g.age[i]*0.9); }
+  return g;
+}
+
+/* ---- stones ---- */
+let stones = [];
+const sH = (i,j) => { let h=(i*374761393+j*668265263)^0x5bf03635; h=(h^(h>>13))*1274126177; return ((h^(h>>16))>>>0)/4294967296; };
+function gatherStones(g) {
+  stones.length = 0; const dens = +ZW.stones || 0; if (!dens || !g.n) return;
+  const cell = H*(2.6 - dens*0.5);
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+  for (let i=0;i<g.n;i++){ if(g.x[i]<x0)x0=g.x[i]; if(g.x[i]>x1)x1=g.x[i]; if(g.y[i]<y0)y0=g.y[i]; if(g.y[i]>y1)y1=g.y[i]; }
+  for (let ci=Math.floor((x0-cell)/cell); ci<=Math.floor((x1+cell)/cell); ci++)
+    for (let cj=Math.floor((y0-cell)/cell); cj<=Math.floor((y1+cell)/cell); cj++) {
+      const a = sH(ci,cj); if (a > 0.28 + dens*0.16) continue;
+      stones.push({ x:(ci+0.2+sH(ci+991,cj-17)*0.6)*cell, y:(cj+0.2+sH(ci-53,cj+7)*0.6)*cell, r: cell*(0.10+a*0.5) });
+      if (stones.length > 120) return;
+    }
+}
+
+/* ---- camera + draw ---- */
+let camS = 0, camX = 0, camY = 0, camInit = false;
+function draw(g) {
+  cx.clearRect(0,0,W,Ht);
+  if (!g.n) return;
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+  for (let i=0;i<g.n;i++){ if(g.x[i]<x0)x0=g.x[i]; if(g.x[i]>x1)x1=g.x[i]; if(g.y[i]<y0)y0=g.y[i]; if(g.y[i]>y1)y1=g.y[i]; }
+  const wid = Math.max(g.w[g.n-1]*4, 1);
+  const want = Math.min(W/Math.max(x1-x0+wid*3, wid*8), Ht/Math.max(y1-y0+wid*3, wid*8)) * 0.86;
+  const wx=(x0+x1)*0.5, wy=(y0+y1)*0.5;
+  if (!camInit) { camS=want; camX=wx; camY=wy; camInit=true; }
+  camS += (want-camS)*0.055; camX += (wx-camX)*0.055; camY += (wy-camY)*0.055;
+  const P = (i) => [W*0.5 + (g.x[i]-camX)*camS, Ht*0.5 - (g.y[i]-camY)*camS];
+
+  if (bound) {   /* the world's shape, drawn faintly — you are inside something */
+    cx.strokeStyle = "#131a20"; cx.lineWidth = 1;
+    cx.beginPath();
+    if (bound.shape === "ellipsoid") cx.ellipse(W*0.5 - camX*camS, Ht*0.5 + camY*camS, bound.rx*camS, bound.ry*camS, 0, 0, 6.2832);
+    else cx.arc(W*0.5 - camX*camS, Ht*0.5 + camY*camS, (bound.r||bound.rx||40)*camS, 0, 6.2832);
+    cx.stroke();
+  }
+  for (const s2 of stones) {
+    const sx = W*0.5 + (s2.x-camX)*camS, sy = Ht*0.5 - (s2.y-camY)*camS;
+    cx.fillStyle = "#0a1014"; cx.beginPath(); cx.arc(sx, sy, s2.r*camS, 0, 6.2832); cx.fill();
+    cx.strokeStyle = "#1a262e"; cx.lineWidth = 1; cx.stroke();
+  }
+  cx.lineCap = "round"; cx.lineJoin = "round";
+  for (let i = 1; i < g.n; i++) {
+    const a = g.age[i];
+    cx.strokeStyle = `hsla(${190 + a*130}, 74%, ${32 + a*34}%, ${0.5 + a*0.45})`;
+    cx.lineWidth = Math.max(1.2, g.w[i]*camS*1.7);
+    const [xa,ya]=P(Math.max(0,i-2)), [xb,yb]=P(i-1), [xc,yc]=P(i);
+    cx.beginPath(); cx.moveTo(xa,ya); cx.lineTo(xb,yb); cx.lineTo(xc,yc); cx.stroke();
+  }
+}
+
+/* ---- loop ---- */
+let tP = performance.now();
+function frame(now) {
+  const dt = Math.min((now-tP)/1000, 0.05); tP = now;
+  if (now - bLast > 120) bTarget = 0;
+  breath += (bTarget - breath) * Math.min(1, dt*7);
+  if (breath < 0.002) breath = 0;
+  $("bfill").style.width = (breath*100).toFixed(0) + "%";
+  let g;
+  if (mode === "shell") { shell.blow(breath); shell.step(dt, { stones }); g = shell.geometry(); }
+  else { step(dt); g = geometry(); }
+  gatherStones(g);
+  draw(g);
+  requestAnimationFrame(frame);
+}
+
+/* ---- pickers: vocabulary READ FROM THE ENGINE, never hardcoded ---- */
+const fill = (sel, names, cur) => { if (!sel) return; sel.innerHTML = "";
+  for (const n of names) { const o = document.createElement("option"); o.value = n; o.textContent = n;
+    if (String(n) === String(cur)) o.selected = true; sel.appendChild(o); } };
+
+fill($("worldpick"), ["custom"].concat(ZigCore.Worlds ? ZigCore.Worlds.names() : []), ZW.world);
+fill($("medpick"), Object.keys(E.media || {air:0,water:0,honey:0}), ZW.med);
+fill($("forcepick"), Object.keys(E.forces || {}), ZW.force);
+fill($("curpick"), Object.keys(E.currents || {}), ZW.cur);
+/* SHAPE and BOND both read the engine's own vocabulary, so a boundary or a bond
+   the core learns tomorrow appears here with no edit to this file. */
+fill($("boundpick"), [...new Set(["none"].concat(Object.keys(E.boundaries || {})))], ZW.bound);
+fill($("bondpick"), [...new Set(["spine"].concat(Object.keys(E.bonds || {}).filter((b) => b !== "none")))], ZW.bond);
+fill($("orgpick"), ["body"].concat(TheShell ? TheShell.formNames() : []), ZW.org);
+fill($("spanpick"), ["0","60","30","16"], ZW.span);
+fill($("detailpick"), ["1","2","4","8"], ZW.detail);
+fill($("swimpick"), ["0","1"], ZW.swim);
+fill($("selfpick"), ["0","1"], ZW.self);
+fill($("stonepick"), ["0","1","2","3"], ZW.stones);
+fill($("breathpick"), Object.keys(BREATHFEEL), ZW.breath);
+
+/* the hash IS the state — a world you turned up by hand can be linked and returned to */
+function writeHash() {
+  const h = `world=${ZW.world}&med=${ZW.med}&force=${ZW.force}&cur=${ZW.cur}&bound=${ZW.bound}` +
+            `&org=${ZW.org}&bond=${ZW.bond}&span=${ZW.span}&detail=${ZW.detail}` +
+            `&swim=${ZW.swim}&self=${ZW.self}&stones=${ZW.stones}&breath=${ZW.breath}`;
+  history.replaceState(null, "", "#" + h);
+}
+const bind = (id, key, rebuilds) => $(id).addEventListener("change", (e) => {
+  ZW[key] = e.target.value;
+  if (key === "world" && ZW.world !== "custom") {                 /* a named world drives its dials */
+    const w = ZigCore.Worlds.places[ZW.world];
+    ZW.med = w.medium; ZW.force = w.force; ZW.cur = w.current; if (w.bound) ZW.bound = w.bound;
+    $("medpick").value = ZW.med; $("forcepick").value = ZW.force;
+    $("curpick").value = ZW.cur; $("boundpick").value = ZW.bound;
+  }
+  if (["med","force","cur","bound"].includes(key)) ZW.world = "custom", $("worldpick").value = "custom";
+  resolveWorld(); if (rebuilds) rebuild(); writeHash();
+});
+bind("worldpick","world",false); bind("medpick","med",false); bind("forcepick","force",false);
+bind("curpick","cur",false); bind("boundpick","bound",false); bind("stonepick","stones",false);
+bind("swimpick","swim",false); bind("selfpick","self",false); bind("spanpick","span",false);
+bind("breathpick","breath",false);
+bind("orgpick","org",true); bind("bondpick","bond",true); bind("detailpick","detail",true);
+
+/* ---- input ---- */
+if (navigator.requestMIDIAccess) {
+  navigator.requestMIDIAccess().then((m) => { let c = 0;
+    for (const inp of m.inputs.values()) { c++; inp.onmidimessage = (ev) => {
+      const [a,b,v] = ev.data, s4 = a & 0xf0, gain = BREATHFEEL[ZW.breath] || 1;
+      if (s4 === 0xB0 && b === 2) { bTarget = Math.min(1, v/127*gain); bLast = performance.now(); }
+      else if (s4 === 0xD0)       { bTarget = Math.min(1, b/127*gain); bLast = performance.now(); }
+      else if (s4 === 0x80 || (s4 === 0x90 && v === 0)) { bTarget = 0; bLast = performance.now(); }
+      if (s4 === 0x90 && v > 0) { if (!bTarget) { bTarget = Math.min(1, v/127*gain); bLast = performance.now(); } play(b, v/127); }
+    }; }
+    $("probe").innerHTML = c ? `<span class="pill ok">MIDI ${c}</span> <span class="dim">play — interval shapes the body</span>`
+                             : `<span class="pill bad">NO MIDI</span> <span class="dim">SPACE ↑ ↓</span>`;
+  }).catch(() => { $("probe").innerHTML = `<span class="pill bad">NO MIDI</span> <span class="dim">SPACE ↑ ↓</span>`; });
+} else $("probe").innerHTML = `<span class="pill bad">NO MIDI</span> <span class="dim">SPACE ↑ ↓</span>`;
+
+let kb = 60, uiOn = true;
+addEventListener("keyup", (e) => { if (["Space","ArrowUp","ArrowDown"].includes(e.code)) { bTarget = 0; bLast = performance.now(); } });
+addEventListener("keydown", (e) => {
+  if (["Space","ArrowUp","ArrowDown"].includes(e.code)) { bTarget = 0.85*(BREATHFEEL[ZW.breath]||1); bLast = performance.now(); e.preventDefault(); }
+  if (e.repeat) return;
+  if (e.code === "Space") play(kb, 0.7);
+  else if (e.code === "ArrowUp") play(kb += 3, 0.75);
+  else if (e.code === "ArrowDown") play(kb -= 3, 0.75);
+  else if (e.key === "r" || e.key === "R") rebuild();
+  else if (e.key === "h" || e.key === "H") { uiOn = !uiOn;
+    for (const id of ["hud","picks","hint"]) $(id).classList.toggle("hide", !uiOn);
+    document.body.classList.toggle("clean", !uiOn); }
+  else if (e.key === "f" || e.key === "F") { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(()=>{}); }
+});
+addEventListener("pointerdown", () => { bTarget = 0.8; bLast = performance.now(); play(60 + ((Math.random()*10)|0) - 5, 0.7); });
+addEventListener("pointerup", () => { bTarget = 0; bLast = performance.now(); });
+
+resolveWorld();
+$("medpick").value = ZW.med; $("forcepick").value = ZW.force;
+$("curpick").value = ZW.cur; $("boundpick").value = ZW.bound;
+rebuild(); writeHash();
+say("no GPU needed — structure, contact and the shell all run on the CPU");
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

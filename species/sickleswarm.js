@@ -159,6 +159,20 @@
     const WEBENERGY_ON = (global.ZIG_WEBENERGY === undefined) ? true : (+global.ZIG_WEBENERGY > 0);   // NOTE→WEB ENERGY (the blast): notes pour energy that conducts through the web. 0 = web stays a calm resting lattice, notes summon shapes only (no blast).
     const MEMBACK_COMPILED = (+global.ZIG_MEMBACK > 0);   // MEMORY UNDERSIDE compiled into the shader (Shift+M toggles it live); ZIG_MEMBACK=0/absent → not compiled (byte-identical)
     const AVATAR_ON = (global.ZIG_AVATAR === undefined) ? true : (global.ZIG_AVATAR === true || +global.ZIG_AVATAR > 0);   // AVATAR / BEACON: the lit lead shape (agent #0) that orbits apart. 0 = no beacon, no lone floating shape — just the field.
+    /* CONTACT (2026-08-08) — matter that OCCUPIES SPACE. `separation` is a
+       preference between neighbours and can be overpowered; where several shards
+       bundle they end up in the same cubic space and smear into one translucent
+       mass. This forbids it. Radius is in world units; keep it at or below the
+       grid cell or the 3x3x3 walk could miss a neighbour. 0 = off, byte-identical. */
+    const CONTACT_R = (+global.ZIG_CONTACT > 0) ? +global.ZIG_CONTACT : 0;
+    /* ONSET (2026-08-08) — seconds for agitation to RISE. Contagion has always
+       risen in one frame (a max()), which with agit driving vmax makes individual
+       shards dart: Bill's "popcorn". Giving the rise a time constant makes the eye
+       read the whole organism instead of the sparks. 0 = instant, historical. */
+    const ONSET_S = (+global.ZIG_ONSET > 0) ? +global.ZIG_ONSET : 0;
+    const VMIN_BASE = 0.35;   // the historical speed floor (knobsA[2]); STILLNESS scales this, so the base must survive the per-frame rewrite
+    const STILLNESS = (global.ZIG_STILLNESS == null) ? 0 : Math.max(0, Math.min(1, +global.ZIG_STILLNESS));   // STILLNESS: how completely the field is allowed to REST when you stop playing. 0 = the historical cloud (a vmin speed floor + a churn field, neither of which ever listened to breath); 1 = both fade to nothing in silence.
+    const SPREAD = (+global.ZIG_SPREAD > 0) ? +global.ZIG_SPREAD : 1;                      // SPREAD: neighbour separation multiplier — 1 is the historical field, higher lets bundled shards read as individual objects
     const FLY = (global.ZIG_FLY != null && global.ZIG_FLY !== false);                       // FLY THE CAMERA: the organism HOLDS at its anchor (stays on the page — no breath jump) and your breath instead dollies you IN and orbits you AROUND it. Breath moves the viewer, not the mass.
     const RIBBON_ON = +global.ZIG_RIBBON > 0;                                                // MELODIC RIBBON (a separate streamer object — shelved by default; ZIG_RIBBON=1 to bring it back). NOTE: numeric check — ZIG_RIBBON=0 now correctly means OFF.
     const NOTEPULSE = +global.ZIG_NOTEPULSE > 0;                                             // NOTE-IMPULSE: each note fires a nerve pulse from a pitch-placed point that travels THROUGH the organism — blades quicken & flare as it passes, then settle. The note's energy INTO the body (not a separate object).
@@ -256,6 +270,7 @@
       ? WNAMES.map((n) => ZM.make(ZM.presets[n], { refine: global.ZIG_MINT || 1, thickness: THICK, hollow: HOLLOW }))
       : ZM.make(PETAL, { refine: global.ZIG_MINT || 1, thickness: THICK, hollow: HOLLOW });
     const flock = ZG.createFlock(gpu, {
+      contact: CONTACT_R > 0 ? { r: CONTACT_R, k: 45, damp: 4, max: 12 } : null,
       max: 20000, count: COUNT, seed: SEED,
       extent: EXT, extentY: EXTY, cell: 12, debris: 0,
       mesh,                                      // ← ZigMesh wears the kernel
@@ -302,6 +317,7 @@
     if (global.ZIG_UNDERROW) {
       scene = ZG.createScene(gpu, { sky: true });
       flockB = ZG.createFlock(gpu, {
+        contact: CONTACT_R > 0 ? { r: CONTACT_R, k: 45, damp: 4, max: 12 } : null,
         max: 8000, count: 2600, seed: SEED ^ 0xB10C,
         extent: EXT, extentY: EXTY, cell: 12, debris: 0,
         mesh: ZM.make(ZM.presets.woodblock),         // no phase — a body, not a voice
@@ -335,11 +351,19 @@
       dt: 0, time: 0, breath: 0, bend: 0, attack: 0, energy: 0,
       waveSpeed: 30, waveWidth: 8,
       agitAmbient: 0.10,
-      cohW: 0.55, sepW: 3.2, aliW: 0.4,
+      /* SPREAD (2026-08-07) — how hard neighbours hold each other off. At the
+         default the shards CROWD, and where several bundle they stop reading as
+         objects and smear into one translucent mass (Bill, 2026-08-07). Raising
+         separation lets each plate keep its own space so edges, orientation and
+         depth stay legible. `ZIG_SPREAD` is a multiplier on the separation weight
+         AND its radius; absent or 1 is byte-identical to every build before this.
+         The real answer is `Contact` in the compute pass — matter that occupies
+         space rather than merely preferring to; this is the dial that exists now. */
+      cohW: 0.55, sepW: 3.2 * SPREAD, aliW: 0.4,
       anchor: [ANCHOR[0], ANCHOR[1], ANCHOR[2], 0],   // breath-lift DISCONNECTED (2026-07-19) — no bouncing; breath speaks as light/form, not altitude
       refpt: [0, ANCHOR[1], 0, 6],
       wind: [0, 0, 0],
-      knobsA: [0.5, 3.6, 0.35, 4.2],     // contagion · sepRadius · vmin · vmaxBase
+      knobsA: [0.5, 3.6 * Math.min(SPREAD, 1.9), 0.35, 4.2],     // contagion · sepRadius (SPREAD-scaled, capped so the grid stays sane) · vmin · vmaxBase
       knobsB: [8, 26, 0.85, 0.9],        // vmaxAgit · waveKick · bankGain↑ (rolls flip the letters) · churn
       impulses, taps, wanderers, wmeta,
       medium: 1,                          // hover — still night air on the water law
@@ -636,6 +660,30 @@
       state.knobsB[3] *= agitF;                          // churn (keeps letters turning)
       state.agitAmbient *= agitF;                        // background restlessness
       state.knobsB[0] = 8 * (0.45 + 0.55 * agitF);       // agit→vmax coupling (from base 8; note/contagion spikes drive speed less)
+      state.knobsA[0] = 0.5 * agitF;                     // CONTAGION — the master never scaled this, so even at agitF 0.2 the social wave still spread at full strength
+      /* STILLNESS (2026-08-08) — let the field be ABLE to rest.
+         Two floors kept this cloud permanently in motion and NEITHER listened to
+         breath: `knobsA[2]` is vmin, a MINIMUM speed the shader clamps every agent
+         up to (`clamp(sp, vmin, vmax)`), so no shard could ever come to rest; and
+         `knobsB[3]` is the churn field, added every frame "so the cloud never
+         crystallizes". Breath only ever raised vmax, so playing softer never
+         reached the floor — there was no lowest setting, it was in the kernel.
+         Measured on Bill's 2026-08-08 capture: motion at ~4 Hz (frame-rate jitter,
+         not sway) and frame-to-frame change never dropping below 79% of its mean.
+
+         Both are PER-FRAME UNIFORMS, so this needs no shader splice at all — which
+         is also why the first attempt was wrong: it rewrote the `let vmin …` line
+         that the MEDIUM capability anchors on, and MEDIUM then failed to find it.
+         Scaling the numbers here cannot collide with anything.
+
+         STILLNESS fades both toward zero AS BREATH FALLS. Full breath is untouched,
+         so nothing is lost at volume; silence is finally silent. 0 = historical. */
+      if (STILLNESS > 0) {
+        const alive = Math.min(1, ZC.Perf.breath * 2.2 + state.agitAmbient * 2.0);
+        const gate = 1 - STILLNESS * (1 - alive);
+        state.knobsA[2] = VMIN_BASE * gate;               // the speed FLOOR yields to silence
+        state.knobsB[3] *= gate;                          // …and so does the churn
+      }
       /* THE HEARTBEAT: breath pulls the strokes into one rhythm (lock ≈ 2.5,
          proven in test/fireflies_sync_ref.mjs) · bend leans the tempo */
       const thr = 0.10 + 0.06 * ZC.Climate.drift(1);

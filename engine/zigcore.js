@@ -1419,12 +1419,22 @@
       const k = (o.k === undefined) ? 6000 : o.k;
       const damp = (o.damp === undefined) ? 50 : o.damp;
       const skip = (o.skip === undefined) ? 4 : o.skip;
+      const maxF = (o.max === undefined) ? 0 : +o.max;   // 0 = no ceiling (historical)
       const h = head || 0, D = R * 2;
       if (n - h < skip + 2) return acc;
 
       /* bucket into a uniform grid at the contact diameter */
       const cells = new Map();
-      const key = (a, b) => a * 73856093 ^ b * 19349663;
+      /* The cell key must be INJECTIVE over the neighbourhoods actually walked,
+         or a bucket is visited twice and every pair inside it counted twice.
+         The obvious `a*P1 ^ b*P2` is NOT: xor collapses whenever a term is zero,
+         so cell (0,0)'s nine-cell neighbourhood yields only SEVEN distinct keys —
+         and a clump centred on the origin lands squarely in it. Found by
+         parity_contact.html on 2026-08-08, where it put the CPU law and the GPU
+         kernel 3.7e+1 apart while both were individually correct.
+         A single multiply-add over a bounded lane is injective for any |b| under
+         the lane width, which no realistic world exceeds. */
+      const key = (a, b) => a * 4194304 + b;
       for (let i = h; i < n; i++) {
         const cx = Math.floor(pos[i*3] / D), cy = Math.floor(pos[i*3+1] / D);
         const kk = key(cx, cy);
@@ -1453,6 +1463,12 @@
               const vn = (vel[i3]-vel[j3])*nx + (vel[i3+1]-vel[j3+1])*ny + (vel[i3+2]-vel[j3+2])*nz;
               if (vn < 0) f -= vn * damp;
             }
+            /* PER-PAIR ceiling (optional). A deep overlap is unbounded, and an
+               unbounded force fires one agent out of the mass while the rest sit —
+               which reads as popping rather than as a body. Clamping the PAIR (not
+               the agent) keeps both sides identical, so forces stay equal and
+               opposite and momentum is still conserved. */
+            if (maxF > 0 && f > maxF) f = maxF;
             f *= 0.5;                                       // shared between the two
             acc[i3] += nx*f; acc[i3+1] += ny*f; acc[i3+2] += nz*f;
             acc[j3] -= nx*f; acc[j3+1] -= ny*f; acc[j3+2] -= nz*f;

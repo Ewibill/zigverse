@@ -27,7 +27,7 @@
 (function (global) {
   "use strict";
   const ZigWebGPU = global.ZigWebGPU || (global.ZigWebGPU = {});
-  ZigWebGPU.VERSION = "0.37.0";   // 0.37: STRUCTURE (opts.structure — matter that is JOINED: spring + damping + momentum-conserving bend, SCATTER rewritten as GATHER so a compute thread only writes its own slot; chains only; parity-checked against ZigCore.Structure.accel by tools/parity_structure.html; byte-identical when absent) ·   // 0.34: INTERIOR BUFF (back-face relief ×0.35 + specular broadened/dimmed + gem glints ×0.5 on !ff — the mesh facet seams stop catching as hard straight lines on the back; front keeps full crisp relief; byte-identical on the front face) · 0.33: GEM FACE (opts.gemFace — "inside" = the SEASHELL: matte material on the outside, gem nacre in the cupped interior; "outside"/"both" too; guards the gem's c=gc by front_facing; byte-identical at "both") · 0.32: MELODIC STRATA (View.noteBands[6] · view[84..107] — each EWI note blooms a band of light at its pitch-height in its pitch-class colour, fading over time; the melody written onto the body's vertical axis; driven by ZC.NoteField; zero when silent) · 0.31: SILHOUETTE RIM (live V.render5.x/y — a fresnel edge re-draws every letter's outline against the void, legible under any material on either face; face-corrected so the concave back outlines too; zero at render5.x=0; the reusable legibility capability all species inherit) · 0.30: GEM MATERIALS (opts.gem — refraction + dispersion fire + fresnel sky-reflection + facet flash + sparkle, sampling the analytic sky; byte-identical off) · 0.29: FABRIC UNDERSIDE (opts.backFabric — 20 textiles: weave pattern + sheen model + colour lining the concave back; byte-identical off) · 0.28: VELVET UNDERSIDE (opts.backVelvet — a different fabric skin on the back face: deep matte + grazing sheen; byte-identical off) · 0.27: MEMORY UNDERSIDE (opts.memoryBack — the back face glows with a lagging ghost of the recent phrase; the 2nd performance surface; render4.y/z; byte-identical off) · 0.26: CHIAROSCURO (opts.chiaro — back off ambient/fill so only the light-facing side shows, unlit → black; byte-identical at 0) · 0.25: WEB — connective filaments between neighbouring agents (grid-driven K-NN compute + instanced thread render; breath strings the web; byte-identical when opts.web absent) · 0.24: GRAIN THROUGH COLOUR — the skin's grain corrugates the spectrum too, so surface texture survives at full ink (byte-identical without material/spectrum) · 0.22: BOUNDARY · 0.23: COMPOSE — spectrum TINTS the material body (visible on pale skins; ink I/K = solid↔rainbow amount over the pigment) · 0.19: MEDIUM · 0.20: FORCES · 0.21: CURRENT (opts.boundary {shape,r,k,lo?,hi?} — the world's SHAPE: a soft cylinder/sphere that holds matter inside a volume; restoring accel before integrate, composes with all; byte-identical when absent) // 0.35: BOUNDARY AXIS — cylinder law holds along any free axis (capsule = horizontal cigar); byte-identical for axis "y" · 0.35.1: GYRE AXIS — current circulates around any axis (roll a horizontal cigar broadside); byte-identical for gyre axis "y" · 0.36: ELLIPSOID boundary (lens — squashed sphere, per-axis radii; the wide breathing disc); byte-identical for sphere/cylinder
+  ZigWebGPU.VERSION = "0.39.0";   // 0.39: ONSET (opts.onset — agitation may only RISE over a time constant instead of snapping to full in one frame; the max() gave contagion an instant attack and a slow release, i.e. a popcorn envelope, and agit drives vmax so a single-frame spike made individual shards DART. Brackets the contagion line rather than replacing it, since VOICE claims that text. Performer strikes stay instant; byte-identical at 0) · 0.38: CONTACT (opts.contact {r,k,damp} — matter that OCCUPIES SPACE, reusing the flock's own spatial grid; separation is a preference and can be overpowered, this cannot; SCATTER rewritten as GATHER so each thread keeps its own half of every pair; parity-checked against ZigCore.Contact.self by tools/parity_contact.html; byte-identical when absent) · 0.37: STRUCTURE (opts.structure — matter that is JOINED: spring + damping + momentum-conserving bend, SCATTER rewritten as GATHER so a compute thread only writes its own slot; chains only; parity-checked against ZigCore.Structure.accel by tools/parity_structure.html; byte-identical when absent) ·   // 0.34: INTERIOR BUFF (back-face relief ×0.35 + specular broadened/dimmed + gem glints ×0.5 on !ff — the mesh facet seams stop catching as hard straight lines on the back; front keeps full crisp relief; byte-identical on the front face) · 0.33: GEM FACE (opts.gemFace — "inside" = the SEASHELL: matte material on the outside, gem nacre in the cupped interior; "outside"/"both" too; guards the gem's c=gc by front_facing; byte-identical at "both") · 0.32: MELODIC STRATA (View.noteBands[6] · view[84..107] — each EWI note blooms a band of light at its pitch-height in its pitch-class colour, fading over time; the melody written onto the body's vertical axis; driven by ZC.NoteField; zero when silent) · 0.31: SILHOUETTE RIM (live V.render5.x/y — a fresnel edge re-draws every letter's outline against the void, legible under any material on either face; face-corrected so the concave back outlines too; zero at render5.x=0; the reusable legibility capability all species inherit) · 0.30: GEM MATERIALS (opts.gem — refraction + dispersion fire + fresnel sky-reflection + facet flash + sparkle, sampling the analytic sky; byte-identical off) · 0.29: FABRIC UNDERSIDE (opts.backFabric — 20 textiles: weave pattern + sheen model + colour lining the concave back; byte-identical off) · 0.28: VELVET UNDERSIDE (opts.backVelvet — a different fabric skin on the back face: deep matte + grazing sheen; byte-identical off) · 0.27: MEMORY UNDERSIDE (opts.memoryBack — the back face glows with a lagging ghost of the recent phrase; the 2nd performance surface; render4.y/z; byte-identical off) · 0.26: CHIAROSCURO (opts.chiaro — back off ambient/fill so only the light-facing side shows, unlit → black; byte-identical at 0) · 0.25: WEB — connective filaments between neighbouring agents (grid-driven K-NN compute + instanced thread render; breath strings the web; byte-identical when opts.web absent) · 0.24: GRAIN THROUGH COLOUR — the skin's grain corrugates the spectrum too, so surface texture survives at full ink (byte-identical without material/spectrum) · 0.22: BOUNDARY · 0.23: COMPOSE — spectrum TINTS the material body (visible on pale skins; ink I/K = solid↔rainbow amount over the pigment) · 0.19: MEDIUM · 0.20: FORCES · 0.21: CURRENT (opts.boundary {shape,r,k,lo?,hi?} — the world's SHAPE: a soft cylinder/sphere that holds matter inside a volume; restoring accel before integrate, composes with all; byte-identical when absent) // 0.35: BOUNDARY AXIS — cylinder law holds along any free axis (capsule = horizontal cigar); byte-identical for axis "y" · 0.35.1: GYRE AXIS — current circulates around any axis (roll a horizontal cigar broadside); byte-identical for gyre axis "y" · 0.36: ELLIPSOID boundary (lens — squashed sphere, per-axis radii; the wide breathing disc); byte-identical for sphere/cylinder
 
   /* ---- probe — the gate. Green or it doesn't ship. ---------------------- */
   ZigWebGPU.probe = async function () {
@@ -717,6 +717,46 @@ fn waterColor(dir: vec3f) -> vec3f {
        equivalent for CHAINS, which is what Rootwhale, Kelp and Zigpede are; general
        trees would need child lists and are not claimed. Byte-identical when absent. */
     const STRUCT = opts.structure || null;
+    /* CONTACT (v0.38) — MATTER THAT OCCUPIES SPACE. {r, k, damp}
+       Flocking's `separation` is a force between strangers: a PREFERENCE, and a
+       preference can always be overpowered. Push density high enough and shards
+       occupy the same cubic space, which is why a dense middle smears into one
+       translucent mass instead of packing. This is the law that forbids it.
+       Reuses the flock's own spatial grid — no second acceleration structure.
+       Byte-identical when absent. */
+    /* ONSET (v0.39) — how fast agitation may RISE, in seconds. 0 = instantly,
+       which is every build before this. Contagion decays smoothly (~0.6s) but has
+       always risen in a SINGLE FRAME, because the update is a max(): instant
+       attack, slow release — a popcorn envelope by construction. And agit drives
+       the speed ceiling (vmax = 4.2 + 8*agit), so a shard whose agitation snaps
+       0→1 triples its top speed in one frame and DARTS. Measured on Bill's
+       2026-08-08 capture: the top 5% of pixels carried 65% of all motion and half
+       of all motion events lasted a single frame. Giving the rise a time constant
+       turns each flash into a swell, so the eye reads the ORGANISM rather than
+       individual sparks. Performer strikes are deliberately left instant. */
+    const ONSET = Math.max(0, +opts.onset || 0);
+    const CONTACT = opts.contact ? {
+      r: Math.max(0.01, +opts.contact.r || 1),
+      /* STIFFNESS MUST MATCH THE FIELD'S OWN FORCE SCALE. 400 is right for a
+         STONE — a wall should be unyielding — and catastrophic for a flock: at
+         radius 0.7 a half-overlapped shard takes ~280 accel while separation runs
+         on ~3.2 and churn on ~0.9. Ninety times everything else. The shard is
+         FIRED, the eye follows the one that moved, and the organism reads as
+         POPCORN rather than as a mass (Bill, 2026-08-08). 45 puts contact in the
+         same register as the forces it has to negotiate with. */
+      k: (opts.contact.k === undefined) ? 45 : +opts.contact.k,
+      damp: (opts.contact.damp === undefined) ? 4 : +opts.contact.damp,
+      /* AND A CEILING, PER PAIR — not per agent. Stiffness alone cannot prevent
+         popcorn, because a deep overlap is unbounded: two shards spawned inside
+         each other produce a large force at any stiffness. But WHERE the ceiling
+         goes matters. Clamping an agent's TOTAL contact force breaks the pair
+         symmetry — the two sides then clamp by different amounts, forces stop
+         being equal and opposite, and the clump can push itself (measured: net
+         force 174 instead of 0). Clamping each PAIR leaves both sides computing
+         the same scalar, so momentum is still conserved and no single collision
+         can fire a shard. Exclusion still wins; it just wins patiently. */
+      max: (opts.contact.max === undefined) ? 12 : +opts.contact.max
+    } : null;
     const REST = opts.rest !== undefined && opts.rest !== false && opts.rest !== null;   // ZIGLIFE: per-agent arousal — rest/wake (breath wakes, silence sleeps). The individual-behavior substrate (arousal·fatigue·age·spare)
     const SEEK = opts.seek || null;   // ZIGSEEK: world attractor + repulsor — agents seek toward / avoid away (the base for foraging, attach, flee)
     const ATTACH = !!opts.attach;     // ZIGATTACH: bind-in-place / release — agents freeze into a held pose (bond channel of the life buffer)
@@ -2142,6 +2182,91 @@ struct SkinU { cr: vec4f, dim: vec4f, par: vec4f };
        would break. Ordering is by insertion order below (last spliced sits closest
        to the integrate); the modifiers all *add to* accel, so order is commutative. */
     const K_PREINT = "  /* ---- integrate with speed band ---- */";
+    if (ONSET > 0) {
+      /* ---- ONSET: agitation swells instead of snapping --------------------
+         BRACKETS the contagion line rather than replacing it, because VOICE
+         already claims that exact text (it swaps the decay constant for a
+         resonator). Two comment anchors nobody else claims: capture agit before,
+         limit its RISE after. Decay is untouched, so a struck body still rings
+         out exactly as before — only the attack is softened, and only for the
+         crowd's contagion. A performer's strike (`agit = max(agit, f)` from an
+         impulse) stays sharp, which is the right distinction: the note is an
+         event, the gossip is a swell. */
+      const g1 = "  /* ---- contagion: agitation spreads one neighbor-hop per step ----";
+      const g2 = "  /* ---- impulse wavefronts (the falcon strike · the thrown stone) ----";
+      if (STEP_SRC.indexOf(g1) < 0 || STEP_SRC.indexOf(g2) < 0)
+        throw new Error("ONSET splice anchors missing in step kernel");
+      const RS = (+ONSET).toFixed(4);
+      STEP_SRC = STEP_SRC
+        .replace(g1, "  let agitPrev = agit;   /* ONSET: remember it before contagion touches it */" + "\n" + g1)
+        .replace(g2, `  /* ONSET: agitation may only RISE this fast — decay is left alone */
+  {
+    let rise = 1.0 - exp(-U.dt / ${RS});
+    if (agit > agitPrev) { agit = agitPrev + (agit - agitPrev) * rise; }
+  }
+` + g2);
+    }
+
+    if (CONTACT) {
+      /* ---- CONTACT: matter that OCCUPIES SPACE (ZigCore.Contact 0.16+) --------
+         PREPEND-ONLY at K_PREINT — never replaces the anchor, and never touches
+         the `let vmin = …` line, which MEDIUM and three other capabilities all
+         claim. (Learned the hard way on 2026-08-08: a splice that rewrote that
+         line made MEDIUM throw at boot.)
+
+         SCATTER → GATHER, as with STRUCTURE. On the CPU a pair is resolved once
+         and pushed both ways. A compute thread may only write its own slot, so
+         every pair is computed TWICE here — once from each side — and each thread
+         keeps its own half. That is why the 0.5 is kept: it makes this numerically
+         identical to `ZigCore.Contact.self`, which is what the parity harness
+         checks.
+
+         Rides the flock's existing 3x3x3 grid walk. Contact radius must be ≤ the
+         cell size or a neighbour could sit outside the searched cells. */
+      const q1 = "@group(0) @binding(6) var<storage, read_write> velOut: array<vec4f>;";
+      if (STEP_SRC.indexOf(q1) < 0 || STEP_SRC.indexOf(K_PREINT) < 0)
+        throw new Error("CONTACT splice anchor missing in step kernel");
+      const CR = (+CONTACT.r).toFixed(4), CK = (+CONTACT.k).toFixed(3),
+            CD = (+CONTACT.damp).toFixed(3), CM = (+CONTACT.max).toFixed(3);
+      STEP_SRC = STEP_SRC
+        .replace(q1, q1 + `
+const CT_R: f32 = ${CR};
+const CT_K: f32 = ${CK};
+const CT_DAMP: f32 = ${CD};
+const CT_MAX: f32 = ${CM};`)
+        .replace(K_PREINT, `  /* ---- CONTACT: no two agents may be in the same place ---- */
+  {
+    let ctD = CT_R * 2.0;
+    var ctF = vec3f(0.0);
+    let cc0 = cellCoord(p);
+    for (var dz = -1; dz <= 1; dz++) {
+    for (var dy = -1; dy <= 1; dy++) {
+    for (var dx = -1; dx <= 1; dx++) {
+      let cc = cc0 + vec3i(dx, dy, dz);
+      if (cc.x < 0 || cc.y < 0 || cc.z < 0 || cc.x >= GX || cc.y >= GY || cc.z >= GZ) { continue; }
+      let ci = cellIndex(cc);
+      let nn = min(gridCount[ci], CAP);
+      for (var s = 0u; s < nn; s++) {
+        let j = gridIdx[ci * CAP + s];
+        if (j == i) { continue; }
+        let dvec = p - posIn[j].xyz;                 /* points from j toward me */
+        let d2 = dot(dvec, dvec);
+        if (d2 >= ctD * ctD || d2 < 1e-12) { continue; }
+        let dist = sqrt(d2);
+        let nrm = dvec / dist;
+        var f = (ctD - dist) * CT_K;
+        let rv = v - velIn[j].xyz;                   /* bleed the approach, not the slide */
+        let vn = dot(rv, nrm);
+        if (vn < 0.0) { f -= vn * CT_DAMP; }
+        f = min(f, CT_MAX);                          /* PER-PAIR ceiling — both sides clamp identically, so the pair stays equal and opposite */
+        ctF += nrm * f * 0.5;                        /* the pair is computed from both sides */
+      }
+    }}}
+    accel += ctF;
+  }
+` + K_PREINT);
+    }
+
     if (STRUCT) {
       /* ---- STRUCTURE: matter that is JOINED (ZigCore 0.13+) ------------------
          SCATTER→GATHER. The CPU reference walks each bond once and writes force to
