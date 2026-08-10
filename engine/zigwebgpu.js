@@ -27,7 +27,7 @@
 (function (global) {
   "use strict";
   const ZigWebGPU = global.ZigWebGPU || (global.ZigWebGPU = {});
-  ZigWebGPU.VERSION = "0.39.0";   // 0.39: ONSET (opts.onset — agitation may only RISE over a time constant instead of snapping to full in one frame; the max() gave contagion an instant attack and a slow release, i.e. a popcorn envelope, and agit drives vmax so a single-frame spike made individual shards DART. Brackets the contagion line rather than replacing it, since VOICE claims that text. Performer strikes stay instant; byte-identical at 0) · 0.38: CONTACT (opts.contact {r,k,damp} — matter that OCCUPIES SPACE, reusing the flock's own spatial grid; separation is a preference and can be overpowered, this cannot; SCATTER rewritten as GATHER so each thread keeps its own half of every pair; parity-checked against ZigCore.Contact.self by tools/parity_contact.html; byte-identical when absent) · 0.37: STRUCTURE (opts.structure — matter that is JOINED: spring + damping + momentum-conserving bend, SCATTER rewritten as GATHER so a compute thread only writes its own slot; chains only; parity-checked against ZigCore.Structure.accel by tools/parity_structure.html; byte-identical when absent) ·   // 0.34: INTERIOR BUFF (back-face relief ×0.35 + specular broadened/dimmed + gem glints ×0.5 on !ff — the mesh facet seams stop catching as hard straight lines on the back; front keeps full crisp relief; byte-identical on the front face) · 0.33: GEM FACE (opts.gemFace — "inside" = the SEASHELL: matte material on the outside, gem nacre in the cupped interior; "outside"/"both" too; guards the gem's c=gc by front_facing; byte-identical at "both") · 0.32: MELODIC STRATA (View.noteBands[6] · view[84..107] — each EWI note blooms a band of light at its pitch-height in its pitch-class colour, fading over time; the melody written onto the body's vertical axis; driven by ZC.NoteField; zero when silent) · 0.31: SILHOUETTE RIM (live V.render5.x/y — a fresnel edge re-draws every letter's outline against the void, legible under any material on either face; face-corrected so the concave back outlines too; zero at render5.x=0; the reusable legibility capability all species inherit) · 0.30: GEM MATERIALS (opts.gem — refraction + dispersion fire + fresnel sky-reflection + facet flash + sparkle, sampling the analytic sky; byte-identical off) · 0.29: FABRIC UNDERSIDE (opts.backFabric — 20 textiles: weave pattern + sheen model + colour lining the concave back; byte-identical off) · 0.28: VELVET UNDERSIDE (opts.backVelvet — a different fabric skin on the back face: deep matte + grazing sheen; byte-identical off) · 0.27: MEMORY UNDERSIDE (opts.memoryBack — the back face glows with a lagging ghost of the recent phrase; the 2nd performance surface; render4.y/z; byte-identical off) · 0.26: CHIAROSCURO (opts.chiaro — back off ambient/fill so only the light-facing side shows, unlit → black; byte-identical at 0) · 0.25: WEB — connective filaments between neighbouring agents (grid-driven K-NN compute + instanced thread render; breath strings the web; byte-identical when opts.web absent) · 0.24: GRAIN THROUGH COLOUR — the skin's grain corrugates the spectrum too, so surface texture survives at full ink (byte-identical without material/spectrum) · 0.22: BOUNDARY · 0.23: COMPOSE — spectrum TINTS the material body (visible on pale skins; ink I/K = solid↔rainbow amount over the pigment) · 0.19: MEDIUM · 0.20: FORCES · 0.21: CURRENT (opts.boundary {shape,r,k,lo?,hi?} — the world's SHAPE: a soft cylinder/sphere that holds matter inside a volume; restoring accel before integrate, composes with all; byte-identical when absent) // 0.35: BOUNDARY AXIS — cylinder law holds along any free axis (capsule = horizontal cigar); byte-identical for axis "y" · 0.35.1: GYRE AXIS — current circulates around any axis (roll a horizontal cigar broadside); byte-identical for gyre axis "y" · 0.36: ELLIPSOID boundary (lens — squashed sphere, per-axis radii; the wide breathing disc); byte-identical for sphere/cylinder
+  ZigWebGPU.VERSION = "0.43.4";   // 0.43.4: the BEE varying is declared for EVERY consumer (BEE or NOTEFLASH) — the flash reads inp.bee, so turning the bee OFF while flash was ON left the fragment stage referencing an undeclared varying; bee-on worked and bee-off went black · 0.43.3:   // 0.43.3: the BEE varying inserts ABOVE the near line, never between it and the closing brace — MATERIAL anchors on "near ... };" as ONE string, so anything placed BETWEEN them destroys that anchor whichever slot it claims; verified order-independent both ways · 0.43.2:   // 0.43.2: the BEE varying is SPLICED at @location(11) instead of written into BirdOut — MATERIAL appends its own @location(10) snw by anchoring on the struct's last line + closing brace, so editing that text both collided on slot 10 and broke the anchor (black canvas) · 0.43.1:   // 0.43.1: the NOTE FLASH is THE BEE ALONE (a bee varying on BirdOut gates it) — lighting every shard's cup made the whole field answer the note and lost her in it; one lit interior among a thousand dark ones is the point · 0.43: NOTE FLASH (opts.noteFlash — the two faces answer a note DIFFERENTLY: the cupped INTERIOR takes the pitch-class hue while the OUTSIDE takes one fixed colour, so a turning field alternates a constant skin with an interior that differs for every pitch; render6 declared LAST in the View struct so nothing already hand-indexed shifts; byte-identical when absent) · 0.42: THE BEE FLASHES THE NOTE (render5.z/w)/12 mapping MELODIC STRATA already uses, so a C is the same colour as a band or as her flash; her lantern is also 2.7x larger because her flash is an EVENT not one firefly among thousands; byte-identical at render5.w = 0) · 0.41: THE BEE (agent #0 drawn at 1.45x and swelling with charisma — the SAME letterform as every shard, only larger and self-lit, so the field turning toward her reads as recognition rather than alarm; never hidden by UNSEEN) · 0.40: UNSEEN (opts.unseen — a fraction of the flock fully PRESENT to the physics and not DRAWN. The crowd and the eye want opposite things: contagion and murmur need numbers, legibility needs room. Render-side splice only, so hidden agents still flock, collide, carry contagion and count as neighbours — the shards you see are moved by neighbours you cannot; byte-identical at 0) · 0.39: ONSET (opts.onset — agitation may only RISE over a time constant instead of snapping to full in one frame; the max() gave contagion an instant attack and a slow release, i.e. a popcorn envelope, and agit drives vmax so a single-frame spike made individual shards DART. Brackets the contagion line rather than replacing it, since VOICE claims that text. Performer strikes stay instant; byte-identical at 0) · 0.38: CONTACT (opts.contact {r,k,damp} — matter that OCCUPIES SPACE, reusing the flock's own spatial grid; separation is a preference and can be overpowered, this cannot; SCATTER rewritten as GATHER so each thread keeps its own half of every pair; parity-checked against ZigCore.Contact.self by tools/parity_contact.html; byte-identical when absent) · 0.37: STRUCTURE (opts.structure — matter that is JOINED: spring + damping + momentum-conserving bend, SCATTER rewritten as GATHER so a compute thread only writes its own slot; chains only; parity-checked against ZigCore.Structure.accel by tools/parity_structure.html; byte-identical when absent) ·   // 0.34: INTERIOR BUFF (back-face relief ×0.35 + specular broadened/dimmed + gem glints ×0.5 on !ff — the mesh facet seams stop catching as hard straight lines on the back; front keeps full crisp relief; byte-identical on the front face) · 0.33: GEM FACE (opts.gemFace — "inside" = the SEASHELL: matte material on the outside, gem nacre in the cupped interior; "outside"/"both" too; guards the gem's c=gc by front_facing; byte-identical at "both") · 0.32: MELODIC STRATA (View.noteBands[6] · view[84..107] — each EWI note blooms a band of light at its pitch-height in its pitch-class colour, fading over time; the melody written onto the body's vertical axis; driven by ZC.NoteField; zero when silent) · 0.31: SILHOUETTE RIM (live V.render5.x/y — a fresnel edge re-draws every letter's outline against the void, legible under any material on either face; face-corrected so the concave back outlines too; zero at render5.x=0; the reusable legibility capability all species inherit) · 0.30: GEM MATERIALS (opts.gem — refraction + dispersion fire + fresnel sky-reflection + facet flash + sparkle, sampling the analytic sky; byte-identical off) · 0.29: FABRIC UNDERSIDE (opts.backFabric — 20 textiles: weave pattern + sheen model + colour lining the concave back; byte-identical off) · 0.28: VELVET UNDERSIDE (opts.backVelvet — a different fabric skin on the back face: deep matte + grazing sheen; byte-identical off) · 0.27: MEMORY UNDERSIDE (opts.memoryBack — the back face glows with a lagging ghost of the recent phrase; the 2nd performance surface; render4.y/z; byte-identical off) · 0.26: CHIAROSCURO (opts.chiaro — back off ambient/fill so only the light-facing side shows, unlit → black; byte-identical at 0) · 0.25: WEB — connective filaments between neighbouring agents (grid-driven K-NN compute + instanced thread render; breath strings the web; byte-identical when opts.web absent) · 0.24: GRAIN THROUGH COLOUR — the skin's grain corrugates the spectrum too, so surface texture survives at full ink (byte-identical without material/spectrum) · 0.22: BOUNDARY · 0.23: COMPOSE — spectrum TINTS the material body (visible on pale skins; ink I/K = solid↔rainbow amount over the pigment) · 0.19: MEDIUM · 0.20: FORCES · 0.21: CURRENT (opts.boundary {shape,r,k,lo?,hi?} — the world's SHAPE: a soft cylinder/sphere that holds matter inside a volume; restoring accel before integrate, composes with all; byte-identical when absent) // 0.35: BOUNDARY AXIS — cylinder law holds along any free axis (capsule = horizontal cigar); byte-identical for axis "y" · 0.35.1: GYRE AXIS — current circulates around any axis (roll a horizontal cigar broadside); byte-identical for gyre axis "y" · 0.36: ELLIPSOID boundary (lens — squashed sphere, per-axis radii; the wide breathing disc); byte-identical for sphere/cylinder
 
   /* ---- probe — the gate. Green or it doesn't ship. ---------------------- */
   ZigWebGPU.probe = async function () {
@@ -541,7 +541,7 @@ fn waterColor(dir: vec3f) -> vec3f {
   ZigWebGPU.createScene = function (gpu, opts) {
     opts = opts || {};
     const device = gpu.device;
-    const viewBuf = device.createBuffer({ size: 108 * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });   // 108: +noteBands[6] melodic strata (v0.32)
+    const viewBuf = device.createBuffer({  size: 112 * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });   // 112: +noteBands[6] strata (v0.32) +render6 note flash (v0.43)
     const drawSky = opts.sky !== false;
     let skyPipe = null, skyBG = null;
     if (drawSky) {
@@ -632,6 +632,9 @@ fn waterColor(dir: vec3f) -> vec3f {
     const WEB = opts.web ? { k: Math.max(1, Math.min(8, (opts.web.k | 0) || 3)), radius: +opts.web.radius || 16, width: +opts.web.width || 0.5 } : null;   // WEB LAW (v0.25): connective filaments between neighbouring agents — a compute pass reads the flock's own spatial grid for each agent's K nearest, then draws a thin camera-facing thread to each. Living connective tissue any species inherits; byte-identical when absent.
     /* CHIAROSCURO (v0.26) is now a LIVE uniform (View.render4.x = view[76]) — the species
        writes it each frame and a key dials it. No baked opt needed; 0 = soft full lighting. */
+    /* NOTE FLASH (v0.43): the cup interior flashes the note's colour, the outside
+       flashes one colour. Byte-identical when absent. */
+    const NOTEFLASH = !!opts.noteFlash;
     const MEMBACK = !!opts.memoryBack;   // MEMORY UNDERSIDE (v0.27): the back face glows with a lagging ghost of the recent phrase (render4.y=hue, render4.z=glow). The 2nd performance surface — front=now, back=recent past. Byte-identical when off.
     const GEM = opts.gem || null;   // GEM MATERIAL (v0.30): the shard is a cut stone — fresnel rim, sky reflection, refraction bent through the body + tinted by the gem colour, DISPERSION (R·G·B split = fire), facet flash, sparkle. Samples the analytic sky (gemSky). Needs a front material (Nr, hvM). Byte-identical when absent.
     /* GEM FACE (v0.33): which face wears the stone — "both" (whole shard, the classic look) ·
@@ -735,6 +738,19 @@ fn waterColor(dir: vec3f) -> vec3f {
        turns each flash into a swell, so the eye reads the ORGANISM rather than
        individual sparks. Performer strikes are deliberately left instant. */
     const ONSET = Math.max(0, +opts.onset || 0);
+    /* UNSEEN (v0.40) — a fraction of the flock fully PRESENT and not DRAWN.
+       The crowd and the eye want opposite things: contagion, flocking and murmur
+       need a large population for a wave to be a wave, while legibility needs few
+       enough shards that each has room to show an edge, a facing and a depth. At
+       6000 on a 2560x1440 glass a shard gets roughly 10x10 pixels — a coloured
+       dot. Hiding a share separates the two: physics keeps its crowd, the eye gets
+       a thinner one, and the shards you DO see are moved by neighbours you cannot.
+       A wave arriving through unseen matter.
+       Uses the per-instance hash already computed for size jitter, so it is
+       deterministic and free. 0 = every agent drawn, byte-identical. */
+    const UNSEEN = Math.max(0, Math.min(0.95, +opts.unseen || 0));
+    /* THE BEE — agent #0's size multiplier. 1 = same as every other shard (byte-identical). */
+    const BEE = Math.max(1, Math.min(4, +opts.bee || 1));
     const CONTACT = opts.contact ? {
       r: Math.max(0.01, +opts.contact.r || 1),
       /* STIFFNESS MUST MATCH THE FIELD'S OWN FORCE SCALE. 400 is right for a
@@ -1046,8 +1062,9 @@ struct View {
   render2: vec4f,     // x flashGain · y godRays · z caustics · w waterDepthShift
   render3: vec4f,     // x surfaceY · y depthRange · (zw free)  — underwater light
   render4: vec4f,     // x = CHIAROSCURO amount (live, view[76]) · y memHue · z memGlow · w memBack
-  render5: vec4f,     // x = RIM strength (live, view[80]) · y = RIM sharpness (view[81]) · zw free
+  render5: vec4f,     // x = RIM strength (live, view[80]) · y = RIM sharpness (view[81]) · z = THE BEE's note hue 0..1 (view[82]) · w = how far her flash is pushed to it (view[83])e
   noteBands: array<vec4f, 6>,   // MELODIC STRATA (view[84..107]): each note = (worldY, hue, energy, 0) — a band of light at the note's pitch-height, its pitch-class colour, fading over time
+  render6: vec4f,     // NOTE FLASH (view[108..111]): x = interior hue · y = exterior hue · z = flash amount · w free. DECLARED LAST so nothing already indexed by hand shifts.
 };
 @group(0) @binding(0) var<uniform> V: View;
 @group(0) @binding(1) var<storage, read> pos: array<vec4f>;
@@ -1330,6 +1347,9 @@ struct BirdOut {
   @location(8) obj: vec3f,     // object-space position (fish eye placement)
   @location(9) near: f32,      // 1 = very close to camera .. 0 = far (eye LOD)
 };
+const UNSEEN_FRAC: f32 = 0.0;   // UNSEEN: replaced by the host when opts.unseen > 0
+const BEE_SIZE: f32 = 1.0;      // THE BEE: agent #0's size multiplier — replaced when opts.bee > 0
+
 @vertex
 fn birdVs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> BirdOut {
   var o: BirdOut;
@@ -1344,9 +1364,24 @@ fn birdVs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> B
   let up = cross(side, fwd);
   let wing = side * cos(bank) + up * sin(bank);
   let nBird = normalize(cross(fwd, wing));
-  let size = V.birdDark.w;
+  var size = V.birdDark.w;
   let h = fract(sin(f32(ii) * 127.1) * 43758.5453);
   let h2 = fract(sin(f32(ii) * 71.7 + 3.1) * 24634.6345);
+  /* UNSEEN: present to the physics, absent to the eye. Collapsing the instance to
+     zero size costs one compare and leaves every force, neighbour count and
+     contagion hop exactly as it was — the shards you see are moved by neighbours
+     you cannot. */
+  if (h < UNSEEN_FRAC) { size = 0.0; }
+  /* THE BEE — agent #0 is the same letterform as every other shard, only LARGER.
+     A queen is the same species as her workers; if she were a different shape she
+     would read as a cursor pointing at the world instead of a visitor in it.
+     Tested on the INSTANCE INDEX rather than a uniform. The compute uniform block
+     does not exist in this shader, and reaching for its avatar field here failed
+     to compile and blanked the ENTIRE render pass while the flock ran on at
+     100fps behind it — a silent, total blackout with a healthy HUD. The avatar is
+     always agent #0, so an index test is both correct and free.
+     Never hidden by UNSEEN. */
+  if (ii == 0u) { size = V.birdDark.w * BEE_SIZE; }
   let t = V.camPos.w;
   let agit = P.w;
   let fish = V.render.x;                 // 0 = bird · 1 = fish
@@ -1551,7 +1586,7 @@ struct DOut { @builtin(position) cp: vec4f, @location(0) uv: vec2f, @location(1)
     const gridCount = device.createBuffer({ size: CELLS * 4, usage: GPUBufferUsage.STORAGE });
     const gridIdx = device.createBuffer({ size: CELLS * CAP * 4, usage: GPUBufferUsage.STORAGE });
     const SIMF = 212;                                    // floats in Sim (+ modes + pace + avatar + morph/wardrobe)
-    const VIEWF = 108;                                   // floats in View (+ render..render5 + noteBands[6]) — render4.x chiaroscuro (v0.26) · render5.x rim (v0.31) · view[84..107] melodic strata (v0.32)
+    const VIEWF = 112;                                   // floats in View (+ render..render5 + noteBands[6] + render6) — render4.x chiaroscuro (v0.26) · render5.x rim (v0.31) · view[84..107] melodic strata (v0.32) · view[108..111] NOTE FLASH (v0.43). MUST match the View struct: the struct is declared in several shaders and the buffer is sized HERE — a mismatch fails the pipeline silently and the canvas goes black.
     const simBuf = device.createBuffer({ size: SIMF * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     const viewBuf = device.createBuffer({ size: VIEWF * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     const simArr = new Float32Array(SIMF);
@@ -1583,6 +1618,44 @@ struct DOut { @builtin(position) cp: vec4f, @location(0) uv: vec2f, @location(1)
        the source below is exactly the golden string — Murmuration and School
        compile the same shaders they always did.                             */
     let RENDER_SRC = RENDER_WGSL;
+    /* The varying must exist whenever ANYTHING references it. NOTE FLASH reads
+       inp.bee to keep the flash hers alone, so turning the BEE off while FLASH
+       was on left the fragment stage referencing a varying that was never
+       declared — compile failure, black canvas. A splice must be conditioned on
+       every consumer, not just its own dial. */
+    if (BEE > 1 || NOTEFLASH) {
+      /* THE BEE varying — declared by SPLICE, not in the struct text, because
+         MATERIAL appends its own @location(10) snw by anchoring on the last
+         struct line plus the closing brace. Writing a varying into that text
+         directly BREAKS that anchor and collides on slot 10 — which is exactly
+         what blanked the canvas. Location 11 leaves the anchor byte-identical. */
+      /* INSERT BEFORE the `near` line, never between it and the closing brace.
+         MATERIAL anchors on `near ... };` as one string, so anything placed
+         BETWEEN them destroys that anchor no matter which slot it claims — that
+         is what blanked the canvas twice. Going in ABOVE `near` leaves
+         MATERIAL's anchor byte-identical whichever splice runs first. */
+      const bA = "  @location(9) near: f32,";
+      const bI = "  o.near = clamp(1.0 - d / 55.0, 0.0, 1.0);";
+      if (RENDER_SRC.indexOf(bA) < 0 || RENDER_SRC.indexOf(bI) < 0)
+        throw new Error("BEE varying anchor missing in render kernel");
+      RENDER_SRC = RENDER_SRC
+        .replace(bA, "  @location(11) bee: f32,      // 1 = THE BEE (agent #0) — the note flash is hers alone\n" + bA)
+        .replace(bI, "  o.bee = select(0.0, 1.0, ii == 0u);\n" + bI);
+    }
+    if (UNSEEN > 0) {
+      /* UNSEEN is a RENDER-side splice only — the compute kernel is untouched, so
+         the hidden agents keep flocking, colliding, carrying contagion and being
+         counted as neighbours exactly as before. Replaces a lone `const` line that
+         nothing else claims. */
+      const u1 = "const UNSEEN_FRAC: f32 = 0.0;";
+      if (RENDER_SRC.indexOf(u1) < 0) throw new Error("UNSEEN splice anchor missing in render kernel");
+      RENDER_SRC = RENDER_SRC.replace(u1, "const UNSEEN_FRAC: f32 = " + (+UNSEEN).toFixed(4) + ";");
+    }
+    if (BEE > 1) {
+      const b1 = "const BEE_SIZE: f32 = 1.0;";
+      if (RENDER_SRC.indexOf(b1) < 0) throw new Error("BEE splice anchor missing in render kernel");
+      RENDER_SRC = RENDER_SRC.replace(b1, "const BEE_SIZE: f32 = " + (+BEE).toFixed(3) + ";");
+    }
     if (MESH) {
       const ZM = global.ZigMesh;
       if (!ZM || !ZM.toWGSL) throw new Error("opts.mesh requires zigmesh.js to be loaded");
@@ -1773,6 +1846,26 @@ ${(SPECTRUM && MAT) ? `    var matGrain = 0.5;                                  
       let lumc = dot(c, vec3f(0.33, 0.5, 0.17));
       let memC = mix(c, mcol * (0.35 + 1.5 * lumc), 0.7) + mcol * V.render4.z * 0.35;
       c = mix(c, memC, V.render4.w);
+    }` : ``}
+    ${NOTEFLASH ? `if (inp.bee > 0.5 && V.render6.z > 0.001) {
+      /* NOTE FLASH (v0.43, Bill) — THE BEE's two faces answer a note DIFFERENTLY.
+         Her cupped INTERIOR takes the pitch-class hue, the same (pitch mod 12)/12
+         wheel MELODIC STRATA already uses; her OUTSIDE takes one fixed colour
+         whatever is played. As she turns she alternates between a constant skin
+         and an interior that is different for every pitch.
+         HERS ALONE (v0.43.1): the first version lit every shard's cup, which made
+         the whole field answer the note and lost her entirely — the point is that
+         SHE is the one carrying it, a single lit interior among a thousand dark
+         ones. The bee varying gates it.
+         render6.x = interior hue · render6.y = exterior hue ·
+         render6.z = flash amount, rising on a note and decaying. Zero = off. */
+      let nf = V.render6.z;
+      let hh = select(V.render6.y, V.render6.x, !ff);        // inside = the note · outside = one colour
+      let ncol = 0.5 + 0.5 * cos(6.2831 * (hh + vec3f(0.0, 0.33, 0.66)));
+      let lumn = dot(c, vec3f(0.33, 0.5, 0.17));
+      /* tint the already-textured face so grain, relief and specular survive,
+         then add a soft inner burn — the flash lights the surface, not over it. */
+      c = mix(c, ncol * (0.30 + 1.6 * lumn), nf * 0.80) + ncol * nf * 0.30;
     }` : ``}
     ${(GEM && MAT) ? gemBlock(GEM, GEMCOND) : ``}
     c *= 0.82 + 0.18 * (1.0 - abs(inp.dv));                 // edge occlusion
@@ -2063,7 +2156,7 @@ struct View {
 @group(0) @binding(0) var<uniform> V: View;
 @group(0) @binding(1) var<storage, read> pos: array<vec4f>;
 @group(0) @binding(2) var<storage, read> ph: array<vec2f>;
-struct LOut { @builtin(position) cp: vec4f, @location(0) uv: vec2f, @location(1) b: f32, @location(2) agit: f32 };
+struct LOut { @builtin(position) cp: vec4f, @location(0) uv: vec2f, @location(1) b: f32, @location(2) agit: f32, @location(3) bee: f32 };
 @vertex
 fn lanternVs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> LOut {
   var corners = array<vec2f, 6>(vec2f(-1.0,-1.0), vec2f(1.0,-1.0), vec2f(1.0,1.0),
@@ -2072,12 +2165,15 @@ fn lanternVs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -
   let s = ph[ii].x / 6.28318;
   let b = smoothstep(0.0, 0.07, s) * exp(-max(s - 0.07, 0.0) * 5.5);   // rise fast, fade slow
   let h = fract(sin(f32(ii) * 127.1) * 43758.5453);
-  let size = V.birdDark.w * (0.7 + 0.5 * h) * (0.75 + 0.9 * b);
+  /* THE BEE's lantern is larger, because her flash is an EVENT in the field
+     rather than one firefly among thousands. */
+  let beeF = select(0.0, 1.0, ii == 0u && BEE_SIZE > 1.0);
+  let size = V.birdDark.w * (0.7 + 0.5 * h) * (0.75 + 0.9 * b) * (1.0 + 1.7 * beeF);
   let c = corners[vi];
   let wp = P.xyz + (V.camRight.xyz * c.x + V.camUp.xyz * c.y) * size;
   var o: LOut;
   o.cp = V.viewProj * vec4f(wp, 1.0);
-  o.uv = c; o.b = b; o.agit = P.w;
+  o.uv = c; o.b = b; o.agit = P.w; o.bee = beeF;
   return o;
 }
 @fragment
@@ -2090,8 +2186,32 @@ fn lanternFs(inp: LOut) -> @location(0) vec4f {
      Low glow = crisp SPECKS in the dark; high glow = the blazing cloud. */
   let glow = select(1.0, V.birdLight.w, V.birdLight.w > 0.001);
   let bb = (0.05 + inp.b * (0.6 + 0.55 * min(inp.agit * 1.5, 1.0))) * glow;   // unlit = barely-there ember
-  var col = V.birdLight.rgb * (core + halo) * bb;
-  col += vec3f(1.0, 1.0, 0.9) * core * inp.b * 0.55;                  // white-hot heart at the flash
+  var lc = V.birdLight.rgb;
+  var heart = vec3f(1.0, 1.0, 0.9);
+  /* THE BEE FLASHES IN THE COLOUR OF THE NOTE. (Bill, 2026-08-09)
+     render5.z carries the pitch-class hue 0..1 — the SAME mapping MELODIC STRATA
+     already uses, (pitch modulo 12) / 12, so a C is always the same colour
+     whether it lands as a band on the body or as her lantern. Twelve pitch
+     classes around the wheel: the melody becomes legible as colour, and a
+     returning note is recognisable before you have named it.
+     render5.w is how far her flash is pushed toward that hue, so the field's own
+     lantern colour is untouched and this is byte-identical when zero. */
+  if (inp.bee > 0.5 && V.render5.w > 0.001) {
+    let hv = V.render5.z * 6.0;
+    let seg = floor(hv);
+    let f = hv - seg;
+    let noteCol = select(
+      select(
+        select(vec3f(0.0, 1.0, f), vec3f(0.0, 1.0 - f, 1.0), seg < 3.5),
+        select(vec3f(f, 0.0, 1.0), vec3f(1.0, 0.0, 1.0 - f), seg < 5.5),
+        seg > 3.5),
+      select(vec3f(1.0, f, 0.0), vec3f(1.0 - f, 1.0, 0.0), seg > 0.5),
+      seg < 1.5);
+    lc = mix(lc, noteCol, V.render5.w);
+    heart = mix(heart, mix(noteCol, vec3f(1.0), 0.45), V.render5.w);
+  }
+  var col = lc * (core + halo) * bb;
+  col += heart * core * inp.b * 0.55;                                 // white-hot heart at the flash
   return vec4f(col, 1.0);
 }`;
 
@@ -3758,7 +3878,7 @@ struct KOut {
     const maxVerts = NP * (STSEG * 6 + 20 * (BLSEG * 6 + 6) + 12 * HFSEG * 6) + 512;
     const vbuf = new Float32Array(maxVerts * 8);
     const vertBuf = device.createBuffer({ size: vbuf.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
-    const viewBuf = device.createBuffer({ size: 108 * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });   // 108: +noteBands[6] strata (v0.32) — a flock may bind this scene's view
+    const viewBuf = device.createBuffer({  size: 112 * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });   // 112: +noteBands[6] strata (v0.32) +render6 note flash (v0.43) — a flock may bind this scene's view
     const forestBuf = device.createBuffer({ size: 16 * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     const fp = new Float32Array(16);
     const mod = device.createShaderModule({ code: FOREST_WGSL });

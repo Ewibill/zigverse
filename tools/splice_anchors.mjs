@@ -34,3 +34,115 @@ for (const [n, a] of ANCH) { const c = count(S, a); if (!c) ok = false;
   console.log(`  ${n.padEnd(26)} ${c}   ${c ? "" : "<-- CONSUMED"}`); }
 console.log("\n" + (ok ? "PASS — no capability consumed an anchor another still needs"
                        : "FAIL — an anchor was eaten"));
+
+/* ---- CROSS-SHADER LEAKS ---------------------------------------------------
+   The compute kernel's uniform block is `U`; the render kernel's is `V`. They are
+   different shaders and neither can see the other's. Reaching for U.* inside the
+   render source compiles to nothing, the whole render module fails, and the result
+   is a TOTALLY BLACK canvas with a perfectly healthy HUD and the flock still
+   running at 100fps behind it — which is exactly what happened on 2026-08-09 and
+   reads like a dead page rather than a shader error. Cheap to check, so check. */
+const rm = src.match(/const RENDER_WGSL = `([\s\S]*?)`;/);
+if (rm) {
+  const R = rm[1];
+  const leaks = (R.match(/\bU\.[a-zA-Z]/g) || []);
+  console.log("\nrender shader referencing the COMPUTE uniform (U.*):", leaks.length);
+  if (leaks.length) console.log("   ", [...new Set(leaks)].join(" "), "  <-- would blank the canvas");
+  console.log(leaks.length ? "FAIL — cross-shader uniform leak" : "PASS — render shader touches no compute uniform");
+} else console.log("\n(could not isolate RENDER_WGSL to check for cross-shader leaks)");
+
+/* ---- VIEW STRUCT vs UNIFORM BUFFER ----------------------------------------
+   The View struct is declared in several shaders and the buffer that backs it is
+   sized separately, by hand, in three places. If any shader declares a struct
+   LARGER than the buffer, the pipeline fails and the canvas goes BLACK with a
+   perfectly healthy HUD — the same silent failure mode as a cross-shader uniform
+   leak. Adding a field to View means updating every size. Twice in one session a
+   field was added and a size was missed. Mechanical from here. */
+{
+  const sizes = [];
+  const re = /struct View \{([\s\S]*?)\};/g;
+  let m;
+  while ((m = re.exec(src))) {
+    const body = m[1].replace(/\/\/[^\n]*/g, "");
+    let f = 16 * ((body.match(/mat4x4f/g) || []).length);
+    const arr = body.match(/array<vec4f,\s*(\d+)>/);
+    if (arr) f += 4 * parseInt(arr[1]);
+    f += 4 * ((body.replace(/array<vec4f,\s*\d+>/, "").match(/vec4f/g) || []).length);
+    sizes.push(f);
+  }
+  /* only the buffers actually named viewBuf back the View struct — other uniform
+     buffers in the file are unrelated and must not drag the budget down. */
+  const bufs = [...src.matchAll(/const viewBuf = device\.createBuffer\(\{\s*size:\s*(\d+)\s*\*\s*4/g)].map((x) => +x[1]);
+  const viewf = (src.match(/const VIEWF = (\d+);/) || [])[1];
+  const budget = Math.min(...bufs.filter((b) => b >= 60), viewf ? +viewf : Infinity);
+  console.log("\nView struct sizes (floats):", sizes.join(", "));
+  console.log("uniform buffers sized (floats):", bufs.join(", "), viewf ? "· VIEWF " + viewf : "");
+  const bad = sizes.filter((f) => f > budget);
+  console.log(bad.length ? `FAIL — a View (${bad.join(", ")}) exceeds the ${budget}-float buffer; the canvas will be BLACK`
+                         : `PASS — every View fits the ${budget}-float buffer`);
+}
+
+/* ---- BACKTICKS INSIDE SHADER SOURCE ---------------------------------------
+   Every WGSL block in this engine lives inside a JS template literal, so a
+   backtick in a shader COMMENT silently terminates the string and the file stops
+   parsing. Hit three times in one session while writing perfectly ordinary prose
+   about a variable name. `node --check` does catch it, but only after the edit is
+   already written; naming it here makes the cause obvious instead of hunting a
+   SyntaxError pointing at a comment. */
+{
+  const shaderBlocks = [...src.matchAll(/const [A-Z_]+_WGSL = (?:COMMON \+ )?`([\s\S]*?)`;/g)];
+  let ticks = 0;
+  for (const b of shaderBlocks) ticks += (b[1].match(/`/g) || []).length;
+  console.log("\nbackticks inside WGSL source blocks:", ticks);
+  console.log(ticks ? "FAIL — a backtick in shader source will close its template literal"
+                    : "PASS — no stray backticks in shader source");
+}
+
+/* ---- BirdOut VARYING SLOTS ------------------------------------------------
+   BirdOut's @location slots are claimed from two places: the struct text and
+   SPLICES that append their own. MATERIAL appends @location(10) snw by anchoring
+   on the struct's last line plus its closing brace, so writing a new varying into
+   that text both COLLIDES on the slot and BREAKS the anchor — which blanked the
+   canvas on 2026-08-09.
+   Scoped to slots >= 7: every other struct in the file is small and reuses the
+   low slots legitimately, so only BirdOut reaches this range. A heuristic, but a
+   stable one, and the alternative is parsing WGSL properly for no extra safety. */
+{
+  const claims = new Map();
+  for (const m of src.matchAll(/@location\((\d+)\)\s*([A-Za-z_][A-Za-z0-9_]*)\s*:/g)) {
+    const slot = +m[1];
+    if (slot < 7) continue;
+    if (!claims.has(slot)) claims.set(slot, new Set());
+    claims.get(slot).add(m[2]);
+  }
+  const dupes = [...claims.entries()].filter(([, n]) => n.size > 1);
+  const listed = [...claims.entries()].sort((a, b) => a[0] - b[0])
+    .map(([k, v]) => k + ":" + [...v].join("/")).join("  ");
+  console.log("\nBirdOut varying slots (>=7):", listed);
+  for (const [slot, names] of dupes) console.log(`   slot ${slot} claimed twice: ${[...names].join(", ")}`);
+  console.log(dupes.length ? "FAIL — a varying slot is claimed twice; the pipeline fails and the canvas goes BLACK"
+                           : "PASS — no BirdOut varying slot is claimed twice");
+}
+
+/* ---- VARYINGS REFERENCED vs VARYINGS DECLARED ------------------------------
+   A varying added by splice exists only when that splice runs. If ANOTHER
+   capability's block reads it, the two must be conditioned together — otherwise
+   the fragment stage references something never declared and the pipeline fails.
+   Turning the BEE off while FLASH was on did exactly that on 2026-08-09: bee ON
+   worked, bee OFF went black, which reads like the opposite of a bug.
+   Checks that every inp.NAME used anywhere has a matching @location declaration. */
+{
+  const used = new Set([...src.matchAll(/\binp\.([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]));
+  const declared = new Set([...src.matchAll(/@location\(\d+\)\s*([A-Za-z_][A-Za-z0-9_]*)\s*:/g)].map((m) => m[1]));
+  /* @builtin members are declared too, just not with @location */
+  for (const m of src.matchAll(/@builtin\([a-z_]+\)\s*([A-Za-z_][A-Za-z0-9_]*)\s*:/g)) declared.add(m[1]);
+  const missing = [...used].filter((n) => !declared.has(n));
+  console.log("\nvaryings read as inp.*:", [...used].sort().join(" "));
+  console.log(missing.length ? "FAIL — read but never declared: " + missing.join(", ") + " (pipeline fails, canvas BLACK)"
+                             : "PASS — every varying read is declared somewhere");
+  /* and the conditioning: bee is spliced, so anything reading it must be gated with it */
+  const beeGate = src.match(/if \(BEE > 1([^)]*)\) \{\s*\n\s*\/\* THE BEE varying/);
+  if (beeGate) console.log(beeGate[1].includes("NOTEFLASH")
+    ? "PASS — the bee varying is declared for every consumer (BEE and NOTEFLASH)"
+    : "FAIL — the bee varying is gated on BEE alone but NOTEFLASH also reads it");
+}

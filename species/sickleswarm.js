@@ -170,6 +170,21 @@
        shards dart: Bill's "popcorn". Giving the rise a time constant makes the eye
        read the whole organism instead of the sparks. 0 = instant, historical. */
     const ONSET_S = (+global.ZIG_ONSET > 0) ? +global.ZIG_ONSET : 0;
+    /* UNSEEN — the share of the flock that is present but not drawn. Keeps the
+       crowd the emergent behaviours need while giving the eye a thinner field. */
+    const UNSEEN_F = (+global.ZIG_UNSEEN > 0) ? Math.min(0.95, +global.ZIG_UNSEEN) : 0;
+    /* THE BEE — peak charisma. 0 = the historical constant-5 avatar (byte-identical).
+       BEE_IGNORE / BEE_FULL are the dwell seconds over which attention is earned. */
+    const BEE = (+global.ZIG_BEE > 0) ? +global.ZIG_BEE : 0;
+    const BEE_IGNORE = (+global.ZIG_BEEIGNORE > 0) ? +global.ZIG_BEEIGNORE : 0.28;
+    const BEE_FULL = (+global.ZIG_BEEFULL > 0) ? +global.ZIG_BEEFULL : 1.9;
+    let beeAttn = 0, beeHue = 0;
+    /* NOTE FLASH — inside takes the note's colour, outside takes one. */
+    const NOTEFLASH_ON  = (+global.ZIG_NOTEFLASH > 0);
+    const NOTEFLASH_AMT = NOTEFLASH_ON ? Math.min(1, +global.ZIG_NOTEFLASH) : 0;
+    const NOTEFLASH_TAU = (+global.ZIG_NOTEFLASHTAU > 0) ? +global.ZIG_NOTEFLASHTAU : 0.55;
+    const NOTEFLASH_OUT = (global.ZIG_NOTEFLASHOUT != null) ? +global.ZIG_NOTEFLASHOUT : 0.58;
+    let noteHue = 0, noteFlash = 0;
     const VMIN_BASE = 0.35;   // the historical speed floor (knobsA[2]); STILLNESS scales this, so the base must survive the per-frame rewrite
     const STILLNESS = (global.ZIG_STILLNESS == null) ? 0 : Math.max(0, Math.min(1, +global.ZIG_STILLNESS));   // STILLNESS: how completely the field is allowed to REST when you stop playing. 0 = the historical cloud (a vmin speed floor + a churn field, neither of which ever listened to breath); 1 = both fade to nothing in silence.
     const SPREAD = (+global.ZIG_SPREAD > 0) ? +global.ZIG_SPREAD : 1;                      // SPREAD: neighbour separation multiplier — 1 is the historical field, higher lets bundled shards read as individual objects
@@ -271,6 +286,10 @@
       : ZM.make(PETAL, { refine: global.ZIG_MINT || 1, thickness: THICK, hollow: HOLLOW });
     const flock = ZG.createFlock(gpu, {
       contact: CONTACT_R > 0 ? { r: CONTACT_R, k: 45, damp: 4, max: 12 } : null,
+      onset: ONSET_S,
+      unseen: UNSEEN_F,
+      noteFlash: NOTEFLASH_ON,
+      bee: BEE > 0 ? 1.45 : 1,   // agent #0 drawn larger when the bee is live
       max: 20000, count: COUNT, seed: SEED,
       extent: EXT, extentY: EXTY, cell: 12, debris: 0,
       mesh,                                      // ← ZigMesh wears the kernel
@@ -318,6 +337,10 @@
       scene = ZG.createScene(gpu, { sky: true });
       flockB = ZG.createFlock(gpu, {
         contact: CONTACT_R > 0 ? { r: CONTACT_R, k: 45, damp: 4, max: 12 } : null,
+        onset: ONSET_S,
+        unseen: UNSEEN_F,
+        noteFlash: NOTEFLASH_ON,
+        bee: BEE > 0 ? 1.45 : 1,   // agent #0 drawn larger when the bee is live
         max: 8000, count: 2600, seed: SEED ^ 0xB10C,
         extent: EXT, extentY: EXTY, cell: 12, debris: 0,
         mesh: ZM.make(ZM.presets.woodblock),         // no phase — a body, not a voice
@@ -423,7 +446,7 @@
 
     /* View — night palette. In shard mode: birdDark = moss dome ·
        birdLight = bone hollow · sunCol = moonlight. */
-    const view = new Float32Array(108);  // +render4 (view[76] chiaroscuro) · +render5 (view[80] rim) · +noteBands[6] (view[84..107] melodic strata)
+    const view = new Float32Array(112);  // +render6 (view[108..111] note flash, v0.43) · +render4 (view[76] chiaroscuro) · +render5 (view[80] rim) · +noteBands[6] (view[84..107] melodic strata)
     const setV4 = (o, a, b, c, d) => { view[o] = a; view[o + 1] = b; view[o + 2] = c; view[o + 3] = d; };
     if (DUSK) {
       /* CALIFORNIA, LATE AFTERNOON: the sun rides LOW, the sky holds warm
@@ -568,6 +591,9 @@
        sources (churn · ambient · agit→speed coupling · note-flare). 1.0 = as-designed
        (byte-identical); lower = calmer letters. Lets Bill dial "too agitated" back at the horn. */
     let agitF = (global.ZIG_AGIT !== undefined ? +global.ZIG_AGIT : 1);
+    /* how long a summoned form must live before another may replace it */
+    const SUMMON_HOLD = (+global.ZIG_SUMMON >= 0) ? +global.ZIG_SUMMON : 0;
+    let summonPitch = 72, summonAt = 0;
     let formLife = 0, noteForm = +global.ZIG_NOTEFORM > 0;   // NOTE→FORM (summon): \ toggles the EWI driving the form · formLife = birth→life→death envelope
     let revealBase = REVEAL0, revealPulse = 0;   // REVEAL composition: manual baseline (5/6) · N-preview pulse (see the letter you pick) · note bloom overrides while summoning
     let memHue = HUEROT0, memGlow = 0;   // MEMORY UNDERSIDE: the back's lagging ghost of the phrase — memHue slow-follows the played hue, memGlow burns as you play & fades in silence
@@ -712,9 +738,25 @@
          letter · reveal/wholeness · hue wheel · the note nerve-pulse); no new geometry. */
       if (noteForm && REGIDX.length) {
         const held = ZC.Perf.held, anyHeld = !!(held && held.size > 0);
-        if (newNote >= 0) {                                   // a fresh onset chooses the form by register
-          const tt = Math.max(0, Math.min(1, (newNote - 48) / 48));
-          state.letter = REGIDX[Math.min(REGIDX.length - 1, Math.floor(tt * REGIDX.length))];
+        /* SUMMON RATE (2026-08-09) — the form follows the PHRASE, not the note.
+           This chose a new letterform on EVERY fresh onset, and since pitch maps
+           to letter by register, each form covers only a few semitones: a phrase
+           spanning an octave re-targeted all 6000 agents through several complete
+           letterforms and the field never settled into any of them. Measured on
+           Bill's take: motion 3.0 while off, climbing to 25.2 with it on, back to
+           2.2 the instant he switched it off. The intent was right and the RATE
+           was wrong.
+           `summonHold` is the seconds a chosen form must live before another may
+           replace it, and the register is read from a SMOOTHED pitch rather than
+           the raw onset, so a run reads as one gesture and a real register change
+           still lands. 0 = every onset, the historical behaviour. */
+        if (newNote >= 0) {
+          summonPitch += (newNote - summonPitch) * (SUMMON_HOLD > 0 ? 0.34 : 1);
+          const tt = Math.max(0, Math.min(1, (summonPitch - 48) / 48));
+          const want = REGIDX[Math.min(REGIDX.length - 1, Math.floor(tt * REGIDX.length))];
+          if (want !== state.letter && (nowMs - summonAt) >= SUMMON_HOLD * 1000) {
+            state.letter = want; summonAt = nowMs;
+          }
         }
         formLife += ((anyHeld ? 1 : 0) - formLife) * Math.min(1, dt * (anyHeld ? 9 : 2.2));   // born fast, dies slower
         const voice = anyHeld ? (held.has(avPitch) ? avPitch : Math.max.apply(null, Array.from(held))) : avPitch;
@@ -747,6 +789,43 @@
       }
       state.avatarB[1] = newNote >= 0 ? 1 : 0;                  // flash NOW on your note
       state.avatarB[2] = 0.12 + 0.85 * ZC.Perf.attack;          // your intention burns
+
+      /* ===== THE BEE (2026-08-09, Bill's idea) ==========================
+         She lands with a note and NOTHING HAPPENS. Only if the note is HELD
+         does the field begin to attend her, and the attention GROWS with the
+         dwell — nearest shards first, then the local cluster, then the whole
+         mass. Release and the attention breaks; her wake keeps moving for a
+         few seconds after, because the medium remembers.
+
+         Why this shape: a field that reacts to everything that touches it is
+         not alive, it is nervous — three days of "popcorn" and "too jumpy"
+         were all the same complaint, that too little earned too much. Making
+         NON-RESPONSE the default and requiring the event to persist inverts
+         that. It also spends SUSTAIN, the one dimension of the EWI that has
+         been carrying nothing while pitch, attack, interval and breath were
+         all in use — and sustain is the parameter a wind player owns most.
+
+         She is not a new creature. She is agent #0: the SAME letterform as
+         every other shard, the same matter, only larger, self-lit and still.
+         A queen is the same species as her workers. If she were a glowing
+         mote she would be a cursor pointing at the world; being one of them
+         makes the field's turn toward her read as recognition, not alarm.
+         Bill: "the bee is always queen, so no consequences other than
+         reaction." She is never at risk, so the field's attention is a
+         welcome and never a threat. */
+      if (BEE > 0) {
+        let dwell = 0;                                          // seconds the longest-held note has been down
+        ZC.Perf.heldT.forEach((t0) => { const d = (nowMs - t0) / 1000; if (d > dwell) dwell = d; });
+        if (!ZC.Perf.heldT.size) dwell = 0;
+        /* attention is EARNED, and it grows rather than switching: a stab is
+           ignored, a breath-length note stirs the nearest, a long one commits
+           the mass. Smoothstep so there is no threshold to feel. */
+        const reach = ZC.util.smoothstep(BEE_IGNORE, BEE_FULL, dwell);
+        beeAttn += (reach - beeAttn) * Math.min(1, dt * (reach > beeAttn ? 2.2 : 9.0));  // rises like a swell, breaks on release
+        state.avatarB[3] = BEE * beeAttn;                        // CHARISMA — how hard the field is drawn to her
+        state.avatarB[0] = 0.85 * (0.25 + 0.75 * beeAttn);       // she steers more surely the more she is attended
+        view[69] = dial.cockpit ? 0 : (0.9 + 2.6 * beeAttn);     // and lights up as the field turns
+      }
       view[68] = 0;                                             // render2.x avatar idx
       view[69] = dial.cockpit ? 0 : [0, 0.9, 3.0][dial.mark];  // beacon off in first person
       /* cockpit proxy — fly the path the melody commands, smoothly */
@@ -796,6 +875,20 @@
       view[76] = dial.chiaro;       // render4.x — CHIAROSCURO: back off ambient so only the lit side shows (1/2 keys)
       view[80] = dial.rim;          // render5.x — SILHOUETTE RIM: fresnel outline strength (↑/↓)
       view[81] = dial.rimSharp;     // render5.y — RIM SHARPNESS: thin↔wide edge (←/→)
+      /* NOTE FLASH (Bill, 2026-08-09) — the two faces answer a note differently.
+         The cupped INTERIOR takes the pitch-class hue, the same (pitch mod 12)/12
+         wheel MELODIC STRATA already uses, so a C is the same colour wherever it
+         appears. The OUTSIDE takes one fixed colour whatever is played. A turning
+         field then reads as two alternating states: a constant skin, and an
+         interior that is different for every pitch. */
+      if (NOTEFLASH_ON) {
+        if (newNote >= 0) { noteHue = (newNote % 12) / 12; noteFlash = 1; }
+        noteFlash *= Math.exp(-dt / NOTEFLASH_TAU);          // rises on the note, decays after
+        if (noteFlash < 0.002) noteFlash = 0;
+        view[108] = noteHue;                                  // render6.x — INSIDE: the note's colour
+        view[109] = NOTEFLASH_OUT;                            // render6.y — OUTSIDE: one colour
+        view[110] = noteFlash * NOTEFLASH_AMT;                // render6.z — how hard it flashes
+      }
       /* MEMORY UNDERSIDE — the back glows with a lagging ghost of the phrase. memGlow burns
          fast as you play, fades slow in silence; memHue slow-follows the played hue (shortest
          way round the wheel). render4.y = remembered hue · render4.z = its burn (with a floor,

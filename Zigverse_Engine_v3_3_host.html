@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ZIGVERSE ENGINE</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #010204; overflow: hidden;
+               font: 12px/1.5 "Cascadia Code", "SF Mono", Consolas, monospace; color: #a8a89a; }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; left: 14px; top: 12px; user-select: none; pointer-events: none; text-shadow: 0 1px 3px #000; }
+  #hud .title { color: #ded8c8; letter-spacing: 0.18em; font-size: 11px; }
+  #hud .dim { color: #5f5f57; }
+  .pill { padding: 1px 8px; border-radius: 9px; font-size: 11px; letter-spacing: 0.08em; }
+  .pill.ok  { background: #10240f; color: #8aff7a; border: 1px solid #2d5a28; }
+  .pill.bad { background: #2a0d0d; color: #ff8a7a; border: 1px solid #5a2828; }
+  #hud div { margin-top: 3px; }
+  #hint { position: fixed; right: 14px; bottom: 10px; color: #3d3d38; user-select: none; text-align: right; }
+  #picks { position: fixed; right: 14px; top: 12px; user-select: none; z-index: 10; text-align: right;
+           color: #5f5f57; font: 11px/1.7 "Cascadia Code","SF Mono",monospace; }
+  #picks label { letter-spacing: .14em; }
+  #picks select { background: #0c0f13; color: #cdd3c8; border: 1px solid #2a323c; border-radius: 6px;
+                  padding: 2px 7px; font: 11px "Cascadia Code",monospace; margin-left: 6px; cursor: pointer; }
+  #picks .med select { border-color: #2d4a5a; color: #bfe0ea; }
+  #picks .world { margin-bottom: 5px; padding-bottom: 5px; border-bottom: 1px solid #1c2128; }
+  #picks .world label { color: #cdd3c8; }
+  #picks .world select { border-color: #4a3f5a; color: #d8cfea; }
+  #picks .brk { margin-top: 6px; padding-top: 5px; border-top: 1px solid #1c2128; }
+  #picks .brk select { border-color: #4a3a2d; color: #ead8bf; }
+  #picks .skin { margin-top: 6px; padding-top: 5px; border-top: 1px solid #1c2128; }
+  #picks .skin select { border-color: #3f4a3a; color: #d6ead0; }
+  #picks .gem select { border-color: #4a3f5a; color: #d8cfea; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div id="hud">
+  <div class="title">ZIGVERSE ENGINE <span class="dim">— worlds · skins · gems · fabrics · cupped shells · silhouette rim · melodic strata · audio-as-life</span></div>
+  <div id="probe"><span class="pill bad">PROBE …</span> <span class="dim">asking the GPU</span></div>
+  <div id="status" class="dim">booting…</div>
+  <div id="ecology" class="dim"></div>
+  <div id="engine" class="dim"></div>
+  <div id="audio" class="dim"></div>
+  <div id="midi" class="dim"></div>
+</div>
+<div id="picks">
+  <div class="world"><label>WORLD</label> <select id="worldpick" title="a whole coherent place — sets medium+forces+current at once (amber · thermal · lakebed · the deep)"></select></div>
+  <div class="med"><label>MEDIUM</label> <select id="medpick" title="the density of the world — switching reloads"></select></div>
+  <div class="med"><label>FORCES</label> <select id="forcepick" title="gravity / buoyancy — sink · float · suspend"></select></div>
+  <div class="med"><label>CURRENT</label> <select id="curpick" title="the world's flow — drift · gyre · eddy"></select></div>
+  <div class="med"><label>FLASH</label> <select id="nfpick" title="Each note flashes the shards. The cupped INSIDE takes the note's own colour — twelve pitch classes around the hue wheel, the same mapping the melodic strata use — while the OUTSIDE flashes one fixed colour. A turning field alternates a constant skin with an interior that is different for every pitch."></select></div>
+  <div class="med"><label>BEE</label> <select id="beepick" title="She lands with a note and NOTHING happens. Only a HELD note earns the field's attention, and it grows with the dwell — nearest shards first, then the cluster, then the mass. Release and it breaks. She is agent #0: the same letterform as every shard, only larger and lit. A queen is the same species as her workers."></select></div>
+  <div class="med"><label>CROWD</label> <select id="cntpick" title="how many shards exist. At 6000 on a 2560x1440 glass each gets roughly 10x10 pixels — a coloured dot, with no room to show an edge, a facing or a depth. Fewer means bigger and legible; more means the murmur has more to travel through."></select></div>
+  <div class="med"><label>UNSEEN</label> <select id="unspick" title="a share of the crowd that is PRESENT but not DRAWN. They still flock, collide, carry contagion and count as neighbours — you just cannot see them. The shards you DO see are moved by neighbours you cannot, so the crowd keeps its numbers while the eye gets a thinner field."></select></div>
+  <div class="med"><label>HEFT</label> <select id="heftpick" title="the shard's cross-section. foil = a single cambered sheet, which is what it has always been. Above that a back centre dips below the edges, closing it into a LENS — thick in the middle, sharp at the rim — so the blade reads as matter. cupped curves the back the same way as the front instead: a concave shell. Baked into the mesh, so this one RELOADS."></select></div>
+  <div class="med"><label>SUMMON</label> <select id="sumpick" title="With EWI ON (the / key), the field re-forms into a letter chosen by pitch register. It re-chose on EVERY onset, so a phrase spanning an octave dragged 6000 agents through several whole forms. This is how long a summoned form must live before another can replace it."></select></div>
+  <div class="med"><label>ONSET</label> <select id="onpick" title="how fast agitation may RISE. It has always risen in a single frame — instant attack, slow release — which is why individual shards pop instead of the whole organism moving. Softening the attack makes the eye read the mass."></select></div>
+  <div class="med"><label>CONTACT</label> <select id="ctpick" title="matter that OCCUPIES SPACE. Separation is a preference between neighbours and can be overpowered — this cannot. Where shards bundle they will PACK instead of smearing into one mass."></select></div>
+  <div class="med"><label>STILLNESS</label> <select id="stillpick" title="whether the field is ALLOWED to rest. The cloud has always carried two floors that never listened to breath — a minimum speed and a churn field — so silence still fidgeted. This lets both fade away when you stop playing."></select></div>
+  <div class="med"><label>SPREAD</label> <select id="spreadpick" title="how hard neighbours hold each other off — where several shards bundle they smear into one mass; opening the spread lets each plate keep its own space and read as an object"></select></div>
+  <div class="med"><label>BOND</label> <select id="bondpick" title="matter that is JOINED — one number spans rope to spine (chain · spine · stalk · tether · eel). Reads ZigCore.Env.bonds, so a bond the core learns appears here automatically."></select></div>
+  <div class="med"><label>SHAPE</label> <select id="boundpick" title="the world's shape holds it in — basin (bowl) · column (the standing spindle) · capsule (the horizontal cigar) · vessel (sphere) · lens (the breathing disc)"></select></div>
+  <div class="skin"><label>SURFACE</label> <select id="matpick" title="the front material skin — switching reloads"></select></div>
+  <div class="gem"><label>GEM</label> <select id="gempick" title="none, or a cut stone (refraction · dispersion · facet flash) — reloads"></select></div>
+  <div class="gem"><label>GEM FACE</label> <select id="gemfacepick" title="where the gem lives — inside (seashell nacre) · outside (gem shell) · both (whole shard) — reloads"></select></div>
+  <div><label>FABRIC</label> <select id="fabpick" title="none, or line the cupped interior in a textile (20 weaves) — reloads"></select></div>
+  <div class="brk"><label>VITRINE</label> <select id="stagepick" title="a floor + pool of light beneath it — the voyeur framing · off/dim/soft/bright"></select></div>
+  <div><label>BREATH</label> <select id="breathpick" title="how easily pressure lights it — firm→feather · live, no reload"></select></div>
+</div>
+<div id="hint"><b>WORLD</b> a whole coherent place (amber · thermal · lakebed · the deep), or set <b>MEDIUM</b> · <b>FORCES</b> · <b>CURRENT</b> · <b>SHAPE</b> (basin/column/capsule/vessel/lens) yourself · honey+gyre = slow rotation, sink+gyre = a whirlpool.<br>
+<b>SURFACE</b> the front skin · <b>GEM</b> makes it a cut stone · <b>FABRIC</b> lines the cupped interior · <b>VITRINE</b> a lit floor · <b>BREATH</b> firm→feather (live).<br>
+<b>breath</b> drives the life (EWI note info is parked for now) · audio → OBS/Logic, not the visuals · <b>↑↓ / ←→</b> silhouette rim · <b>; '</b> calm↔busy · <b>1/2</b> light · <b>Q</b> colour · <b>N</b> letter · B/play · <b>`</b> hides the panel.</div>
+
+<script>
+  window.ZIG_LETTER = "sicklePetal";
+  // THE LIVE WARDROBE — cycled with N. IMPORTANT: every agent's vertex budget = the LARGEST
+  // letter here, paid for ALL 6000 agents each frame regardless of which shape is worn. So the
+  // heavy closed forms (bubble 672 · scallop 588 · orb 504 · chime 312) would tax every frame
+  // ~2.3× and soften the read. This set is the blade/arc forms — same budget as the original
+  // (max 288) — and still includes 5 of the 6 new designs. The 4 heavies live in the Studio/Sheets.
+  // MAXIMALLY-DISTINCT set so every N press is an unmistakable silhouette change:
+  // block → ring → leaf → teardrop → thin-blade → hook. (The full 16-form wardrobe
+  // is mostly leaf/blade variants, which is why N read as "colour only" in the swarm.)
+  window.ZIG_WARDROBE = "woodblock,halo,sicklePetal,drop,ribbon,compass";
+  window.ZIG_SPECTRUM = 1;
+  // HUE SPAN — how much of the colour wheel runs base→tip on EACH letter. 1.0 = the whole
+  // rainbow on every letter (many colours); ~0.35 = only 2–3 neighbouring hues in bigger
+  // bands, so Q shifts the overall mix. Shift+7 / Shift+8 tune it live.
+  window.ZIG_HUESPAN  = 0.35;
+  window.ZIG_HUEROT   = 0.33;
+  // SHAPES FILE — rest with WHOLE letters (not the drift), so every shape reads clearly
+  // and the N switch is instantly visible. Press 5 if you ever want the gauzy fragments.
+  window.ZIG_REVEAL = 1.7;
+  window.ZIG_INK = 0.5;
+  window.ZIG_AGIT = 0.25;
+  // FEWER + BIGGER so each letterform is large enough to actually SEE change on N.
+  // (At 6000 tiny shards the shape swap was real but imperceptible.) Tune to taste.
+  window.ZIG_COUNT = 6000;
+  window.ZIG_AVATAR = 0;   // no beacon / lone lit leaf
+  window.ZIG_SIZE = 1.8;
+  // THICKNESS — 0 = thin foil sheet · up = a solid lens (thick in the middle, sharp at the
+  // edges) so the blades read as matter, not foil. Baked into the mesh (set on load).
+  /* THICKNESS / HOLLOW are now owned by the HEFT picker below (default `cupped`
+     reproduces exactly these two values). */
+  // CUPPED INTERIOR — the letters are a HOLLOW shell: the front bulges out, the back curves IN
+  // like the inside of a bowl (the hollow a fabric can line). 1 = cupped/hollow (a bowl) ·
+  // 0 = a solid biconvex lens (bulges out both sides). Bill wants the cup.
+  window.ZIG_TRANSMIT = 1.6;
+  window.ZIG_SHEEN    = 1;
+  window.ZIG_FLY      = 1;
+  window.ZIG_NOTEPULSE = 0;   // OFF (Bill, 2026-08): EWI NOTE info drives nothing visual for now — no note-pulse shard flare. Breath (CC2) still drives the life. We'll design the note's role later.
+  window.ZIG_NOTEFORM = 0;   // NOTE→FORM (summon): EWI notes re-form the organism into the played letter (register by pitch), bloom while held, dissolve on release. \ toggles.
+  window.ZIG_GLOW     = 1.7;
+  window.ZIG_LUMEN    = 0.15;
+  // SHADOW COMPLEMENT — the dark side falls toward the material's complementary colour instead
+  // of black (a second colour blooms in shadow). 9/0 keys adjust it live · 0 = classic dark.
+  window.ZIG_SHADOWCOMP = 0.55;
+  // CHIAROSCURO — single-direction light: each shape shows only its lit side, the rest
+  // falls to black. Higher = more of the shape in shadow. 0 = soft full lighting.
+  window.ZIG_CONTRAST = 0.72;   // single-direction light, eased slightly from 0.85 so the body reads WITH the strata's light-bands and the rim (1/2 to taste)
+  // WEB — OFF entirely in this file. No connective filaments, no energy blast; just
+  // the letterforms so the shapes are the only thing on screen.
+  window.ZIG_WEB = 0;
+  window.ZIG_WEBENERGY = 0;
+  // MEMORY UNDERSIDE — the 2nd performance surface. Back faces glow with a lagging ghost
+  // of the recent phrase (front = the colour you're playing now, back = where you've been).
+  window.ZIG_MEMBACK  = 1;
+  window.ZIG_GENESIS  = 0;
+  window.ZIG_CAM = 48;
+  // MURMURATION — the field gathers into one folding BODY. Both Signatures set this (H 0.42 ·
+  // V 0.5) and the studio was missing it, which is why the cylinder poses read as a ball here
+  // but as a spindle there: murmur widens each agent's personal space (sepRadius 3.6 → ~4.0),
+  // inflating the mass ~12% so it PRESSES OUT against the wall. A boundary only shapes what it
+  // squeezes, and at CAM 48 the column/capsule wall (13.5) sits right at the un-inflated body
+  // (~13.8) — a 2% graze. Inflated, it bites. The lens never needed it (ry 6.3 = 54% squeeze).
+  // W/S tunes it live; 0 restores the calm field exactly.
+  window.ZIG_MURMUR = 0.42;
+  // THE VITRINE — a floor + pool of light beneath the organism (the voyeur framing). A named
+  // level maps to the pool's gain; "off" removes it. Compiles into the floor shader → reload.
+  window.ZIG_STAGELEVELS = { off: 0, dim: 0.6, soft: 1.1, bright: 1.9 };
+  window.ZIG_VITRINE  = ((location.hash.match(/stage=([a-z]+)/i) || [])[1]) || "soft";
+  window.ZIG_STAGE    = (window.ZIG_STAGELEVELS[window.ZIG_VITRINE] !== undefined) ? window.ZIG_STAGELEVELS[window.ZIG_VITRINE] : 1.1;
+  // ENVIRONMENT · MEDIUM and the SURFACE skin — both picked from the dropdowns
+  // (top-right) and carried across the reload the kernel/shader need, via the URL hash.
+  // FORMATIVE WORLD — a named place (ZigCore.Worlds) that sets medium+forces+current at once.
+  // "custom" = use the three individual dials below. A world takes precedence when named.
+  window.ZIG_WORLD    = ((location.hash.match(/world=([a-z]+)/i) || [])[1]) || "custom";
+  window.ZIG_MEDIUM   = ((location.hash.match(/med=([a-z]+)/i) || [])[1]) || "water";
+  window.ZIG_FORCES   = ((location.hash.match(/force=([a-z]+)/i) || [])[1]) || "neutral";
+  window.ZIG_CURRENT  = ((location.hash.match(/cur=([a-z]+)/i) || [])[1]) || "neutral";
+  // SHAPE — the world's boundary. custom default "none" (open); a named world defers to its
+  // native shape unless bound= overrides. "none" explicitly strips a world's walls.
+  window.ZIG_BOUNDARY = (window.ZIG_WORLD === "custom")
+    ? (((location.hash.match(/bound=([a-z]+)/i) || [])[1]) || "none")
+    : (((location.hash.match(/bound=([a-z]+)/i) || [])[1]) || null);
+  // SURFACE — an explicit mat= always wins. In CUSTOM the demo default is nacre; under a
+  // NAMED world we leave it null so the world's native skin applies (unless mat= overrides).
+  window.ZIG_MATERIAL = (window.ZIG_WORLD === "custom")
+    ? (((location.hash.match(/mat=([a-z]+)/i) || [])[1]) || "nacre")
+    : (((location.hash.match(/mat=([a-z]+)/i) || [])[1]) || null);
+  // BREATH RESPONSE — how easily pressure lights the field, firm→feather. gain/curve are
+  // runtime opts (NOT compiled into the shader), so the picker applies this LIVE with no
+  // reload. firm = the old linear feel (most pressure) · feather = lights on a whisper.
+  window.ZIG_BREATHFEEL = { firm: [1.0, 1.0], even: [1.3, 0.82], easy: [1.6, 0.65], feather: [2.0, 0.5] };
+  window.ZIG_BREATH   = ((location.hash.match(/breath=([a-z]+)/i) || [])[1]) || "easy";
+  { const _bf = window.ZIG_BREATHFEEL[window.ZIG_BREATH] || window.ZIG_BREATHFEEL.easy;
+    window.ZIG_BREATHGAIN = _bf[0]; window.ZIG_BREATHCURVE = _bf[1]; }
+  // SKINS — GEM (front cut stone) and FABRIC (textile lining the cupped interior), from the dropdowns via hash.
+  /* BOND — matter that is JOINED (ZigCore 0.13+). Default "none" keeps this build
+     byte-identical to v1.5.2: the structure law is opt-in and an absent bond means
+     the flock is exactly the cloud it always was. */
+  /* SPREAD — neighbour separation. "field" (1) is every build before 2026-08-07. */
+  /* STILLNESS — "restless" (0) is every build before 2026-08-08. */
+  /* CONTACT — "off" (0) is every build before 2026-08-08. Radius in world units. */
+  /* ONSET — "snap" (0) is every build before 2026-08-08. Seconds for agit to rise. */
+  /* SUMMON — "note" (0) re-chooses the form on every onset: the historical behaviour. */
+  /* HEFT — the shard's CROSS-SECTION. (2026-08-09)
+     The host has always asked for THICKNESS 0.5 with HOLLOW on — but a cupped
+     shell's back offset is clamped to `camber * 0.9`, so across the presets it
+     actually received 0.09–0.27. The request was being quietly cut to a third or
+     a fifth, which is why the blades read as foil. A SOLID lens uses the full
+     -TH unclamped and is the only way to get real weight.
+       cupped  — the historical shell: hollow, clamped by camber. Byte-identical.
+       leaf/blade/stone — solid biconvex lenses of increasing depth. Thick in the
+       middle, sharp at the rim: "matter, not foil", which is what the mesh
+       comment always promised.
+       foil    — the original single cambered sheet, no back centre at all.
+     Baked into the mesh at load, so this dial RELOADS. */
+  /* CROWD — population. 6000 is every build before 2026-08-09. */
+  /* THE BEE — peak charisma once a note is held. "off" is the historical
+     constant-charisma avatar. Bill, 2026-08-09. */
+  /* NOTE FLASH — inside takes the note's colour, outside takes one. "off" is
+     every build before 2026-08-09. Bill's idea. */
+  window.ZIG_FLASHNAME = (function () { var v = (location.hash.match(/flash=([a-z]+)/i) || [])[1];
+    return ["off","hint","lit","vivid"].includes(v) ? v : "off"; })();
+  window.ZIG_NOTEFLASH = ({ off: 0, hint: 0.30, lit: 0.62, vivid: 1.0 })[window.ZIG_FLASHNAME];
+  window.ZIG_NOTEFLASHTAU = 0.55;   // seconds the flash takes to fade
+  window.ZIG_NOTEFLASHOUT = 0.58;   // the OUTSIDE's one colour (hue 0..1) — azure
+  window.ZIG_BEENAME = (function () { var v = (location.hash.match(/bee=([a-z]+)/i) || [])[1];
+    return ["off","shy","curious","magnetic"].includes(v) ? v : "off"; })();
+  window.ZIG_BEE = ({ off: 0, shy: 3, curious: 6, magnetic: 11 })[window.ZIG_BEENAME];
+  window.ZIG_BEEIGNORE = 0.28;   // seconds below which a note is simply ignored
+  window.ZIG_BEEFULL   = 1.9;    // seconds at which the whole field has committed
+  window.ZIG_AVATAR = (window.ZIG_BEE > 0) ? 1 : 0;
+  window.ZIG_CROWDNAME = (function () { var v = (location.hash.match(/crowd=([a-z0-9]+)/i) || [])[1];
+    return ["600","1500","3000","6000","12000"].includes(v) ? v : "6000"; })();
+  window.ZIG_COUNT = +window.ZIG_CROWDNAME;
+  /* UNSEEN — present to the physics, absent to the eye. "all" (0) draws everyone. */
+  window.ZIG_UNSEENNAME = (function () { var v = (location.hash.match(/unseen=([a-z]+)/i) || [])[1];
+    return ["all","third","half","most"].includes(v) ? v : "all"; })();
+  window.ZIG_UNSEEN = ({ all: 0, third: 0.33, half: 0.5, most: 0.72 })[window.ZIG_UNSEENNAME];
+  window.ZIG_HEFTNAME = (function () { var v = (location.hash.match(/heft=([a-z]+)/i) || [])[1];
+    return ["foil","cupped","leaf","blade","stone"].includes(v) ? v : "cupped"; })();
+  window.ZIG_THICKNESS = ({ foil: 0, cupped: 0.5, leaf: 0.16, blade: 0.30, stone: 0.55 })[window.ZIG_HEFTNAME];
+  window.ZIG_HOLLOW = (window.ZIG_HEFTNAME === "cupped") ? 1 : 0;
+  window.ZIG_SUMMON = (function () { var m = { note: 0, phrase: 0.9, breath: 2.0, section: 5.0 };
+    var v = (location.hash.match(/summon=([a-z]+)/i) || [])[1]; return (v in m) ? m[v] : 0; })();
+  window.ZIG_SUMMONNAME = (function () { var v = (location.hash.match(/summon=([a-z]+)/i) || [])[1];
+    return ["note","phrase","breath","section"].includes(v) ? v : "note"; })();
+  window.ZIG_ONSET = (function () { var m = { snap: 0, quick: 0.10, swell: 0.28, tide: 0.70 };
+    var v = (location.hash.match(/onset=([a-z]+)/i) || [])[1]; return (v in m) ? m[v] : 0; })();
+  window.ZIG_ONSETNAME = (function () { var v = (location.hash.match(/onset=([a-z]+)/i) || [])[1];
+    return ["snap","quick","swell","tide"].includes(v) ? v : "snap"; })();
+  window.ZIG_CONTACT = (function () { var m = { off: 0, touch: 0.7, pack: 1.3, jam: 2.1 };
+    var v = (location.hash.match(/contact=([a-z]+)/i) || [])[1]; return (v in m) ? m[v] : 0; })();
+  window.ZIG_CONTACTNAME = (function () { var v = (location.hash.match(/contact=([a-z]+)/i) || [])[1];
+    return ["off","touch","pack","jam"].includes(v) ? v : "off"; })();
+  window.ZIG_STILLNESS = (function () { var m = { restless: 0, settling: 0.5, calm: 0.8, glass: 1 };
+    var v = (location.hash.match(/still=([a-z]+)/i) || [])[1]; return (v in m) ? m[v] : 0; })();
+  window.ZIG_STILLNAME = (function () { var v = (location.hash.match(/still=([a-z]+)/i) || [])[1];
+    return ["restless","settling","calm","glass"].includes(v) ? v : "restless"; })();
+  window.ZIG_SPREAD = (function () { var m = { field: 1, open: 1.7, wide: 2.6, scattered: 3.8 };
+    var v = (location.hash.match(/spread=([a-z]+)/i) || [])[1]; return m[v] || 1; })();
+  window.ZIG_SPREADNAME = (function () { var v = (location.hash.match(/spread=([a-z]+)/i) || [])[1];
+    return ["field","open","wide","scattered"].includes(v) ? v : "field"; })();
+  window.ZIG_BOND = (function () { var b = (location.hash.match(/bond=([a-z]+)/i) || [])[1]; return (b && b !== "none") ? b : "none"; })();
+  window.ZIG_GEM     = (function () { var g = (location.hash.match(/gem=([a-z]+)/i) || [])[1]; return (g && g !== "none") ? g : undefined; })();
+  window.ZIG_BACKMAT = (function () { var f = (location.hash.match(/fab=([a-z]+)/i) || [])[1]; return (f && f !== "none") ? f : undefined; })();
+  window.ZIG_GEMFACE = ((location.hash.match(/gface=([a-z]+)/i) || [])[1]) || "both";   // SEASHELL: inside = gem lines the cupped interior · outside = gem shell · both = whole shard
+  // SILHOUETTE RIM — a fresnel outline so shapes stay legible under any skin/light (↑/↓ strength · ←/→ edge).
+  window.ZIG_RIM = 0.4;
+  // AUDIO-AS-LIFE — the horn / RC-600 loop feeds the ORGANISM as vitality (glow · shine · pulse ·
+  // lingering tail); the void stays black, the FORM stays MIDI's. Boots on a synthetic phrase;
+  // press A to open the M2 input and go live. ZIG_VOICE pins the capture device.
+  // AUDIO-AS-LIFE — OFF. Bill's call (2026-08-03): the audio driving the body's LIGHT was
+  // too much (and freed the M2 for OBS to record cleanly). The audio goes to OBS/Logic only,
+  // not the visuals. The capability remains in the engine — set = 1 to bring it back.
+  window.ZIG_AMBIENCE = 0;
+  window.ZIG_VOICE = "Motu M|M2|MOTU";
+  // MELODIC STRATA — OFF (Bill, 2026-08): the EWI note→light was too much for now. The
+  // capability remains (set = 1 to bring it back); we'll design the note's role fresh later.
+  window.ZIG_STRATA = 0;
+</script>
+<script src="engine/zigcore.js"></script>
+<script src="engine/zigmesh.js"></script>
+<script src="engine/zigmidi.js"></script>
+<script src="engine/zigwebgpu.js"></script>
+<script src="species/sickleswarm.js"></script>
+<script>
+  const say = (t) => { const n = document.getElementById("status"); if (n) n.textContent = t; };
+  addEventListener("error", (e) => say("script error: " + e.message + " — " +
+    ((e.filename || "").split(/[\\/]/).pop() || "?") + ":" + e.lineno));
+  addEventListener("unhandledrejection", (e) => say("async error: " + ((e.reason && e.reason.message) || e.reason)));
+
+  addEventListener("load", () => {
+    if (!window.SickleField || !window.ZigWebGPU || !window.ZigCore || !window.ZigMesh) {
+      say("script load failed — missing " + ["ZigCore","ZigMesh","ZigMidi","ZigWebGPU","SickleField"]
+        .filter((n) => !window[n]).join(", ") + ". Open the single-file build instead.");
+      return;
+    }
+    SickleField.boot(document.getElementById("stage"), document.getElementById("hud"))
+      .catch((e) => { say("boot error: " + (e && e.message || e)); console.error("[zigmedium]", e); });
+
+    /* ENVIRONMENT pickers — a WORLD macro (a coherent place) over the three elemental
+       dials MEDIUM × FORCES × CURRENT, plus SURFACE. Each recompiles the shader → reload,
+       carrying the state in the URL hash. WORLD takes precedence when it names a place. */
+    const wsel = document.getElementById("worldpick"), msel = document.getElementById("medpick"), fsel = document.getElementById("forcepick"), csel = document.getElementById("curpick"), bnsel = document.getElementById("boundpick"), bdsel = document.getElementById("bondpick"), spsel = document.getElementById("spreadpick"), stsel = document.getElementById("stillpick"), ctsel = document.getElementById("ctpick"), onsel = document.getElementById("onpick"), susel = document.getElementById("sumpick"), hfsel = document.getElementById("heftpick"), cnsel = document.getElementById("cntpick"), besel = document.getElementById("beepick"), nfsel = document.getElementById("nfpick"), unsel = document.getElementById("unspick"), ssel = document.getElementById("matpick"), bsel = document.getElementById("breathpick"), vsel = document.getElementById("stagepick");
+    const gsel = document.getElementById("gempick"), fbsel = document.getElementById("fabpick"), gfsel = document.getElementById("gemfacepick");
+    const fill = (sel, names, cur) => { if (!sel) return; for (const n of names) { const o = document.createElement("option"); o.value = n; o.textContent = n; if (n === cur) o.selected = true; sel.appendChild(o); } };
+    const skinTail = () => "&gem=" + (gsel ? gsel.value : "none") + "&fab=" + (fbsel ? fbsel.value : "none") + "&gface=" + (gfsel ? gfsel.value : "both");   // GEM · GEM FACE · FABRIC persist across every reload
+    const bondTail = () => "&bond=" + (bdsel ? bdsel.value : "none") + "&spread=" + (spsel ? spsel.value : "field") + "&still=" + (stsel ? stsel.value : "restless") + "&contact=" + (ctsel ? ctsel.value : "off") + "&onset=" + (onsel ? onsel.value : "snap") + "&summon=" + (susel ? susel.value : "note") + "&heft=" + (hfsel ? hfsel.value : "cupped") + "&crowd=" + (cnsel ? cnsel.value : "6000") + "&unseen=" + (unsel ? unsel.value : "all") + "&bee=" + (besel ? besel.value : "off") + "&flash=" + (nfsel ? nfsel.value : "off");   // BOND rides along in either mode
+    const btail = () => bondTail() + "&breath=" + (bsel ? bsel.value : "easy") + "&stage=" + (vsel ? vsel.value : "soft") + skinTail();   // presentation + skins ride along in either mode
+    const dialsHash = () => "world=custom&med=" + msel.value + "&force=" + fsel.value + "&cur=" + csel.value + "&bound=" + (bnsel ? bnsel.value : "none") + "&mat=" + ssel.value + btail();
+    /* a named world reloads BARE unless a sub-dial deviates from the world's NATIVE value — then
+       only the deviating override rides in the hash (native skin & shape keep following the world). */
+    const worldHash = () => { const w = (ZigCore.Worlds && ZigCore.Worlds.places[wsel.value]) || {}; let h = "world=" + wsel.value;
+      if (bnsel && (w.bound || "none") !== bnsel.value) h += "&bound=" + bnsel.value;
+      if (ssel && w.skin && w.skin !== ssel.value) h += "&mat=" + ssel.value;
+      return h + btail(); };
+    const inWorld = () => !!(wsel && wsel.value !== "custom");
+    const curHash = () => inWorld() ? worldHash() : dialsHash();                           // breath persistence pins whatever is showing
+    fill(wsel, ["custom"].concat(ZigCore.Worlds ? ZigCore.Worlds.names() : []), window.ZIG_WORLD);
+    fill(msel, ["air", "water", "honey"], window.ZIG_MEDIUM);
+    fill(fsel, ["neutral", "sink", "float", "suspend"], window.ZIG_FORCES);
+    fill(csel, ["neutral", "drift", "gyre", "eddy"], window.ZIG_CURRENT);
+    // SHAPE — read the vocabulary from the engine rather than hardcoding it, so every
+    // boundary the core learns (capsule v0.11 · lens v0.12 · whatever comes next) shows up
+    // in the picker automatically. Falls back to the old list on an older core.
+    fill(bnsel, [...new Set(["none"].concat(
+      (ZigCore.Env && ZigCore.Env.boundaries) ? Object.keys(ZigCore.Env.boundaries)
+                                              : ["basin", "column", "vessel"]
+    ))], window.ZIG_BOUNDARY || "none");
+    // BOND — read from the engine like SHAPE does, so chain · spine · stalk · tether ·
+    // eel (and whatever the core learns next) show up here with no edit to this host.
+    fill(nfsel, ["off", "hint", "lit", "vivid"], window.ZIG_FLASHNAME);
+    fill(besel, ["off", "shy", "curious", "magnetic"], window.ZIG_BEENAME);
+    fill(cnsel, ["600", "1500", "3000", "6000", "12000"], window.ZIG_CROWDNAME);
+    fill(unsel, ["all", "third", "half", "most"], window.ZIG_UNSEENNAME);
+    fill(hfsel, ["foil", "cupped", "leaf", "blade", "stone"], window.ZIG_HEFTNAME);
+    fill(susel, ["note", "phrase", "breath", "section"], window.ZIG_SUMMONNAME);
+    fill(onsel, ["snap", "quick", "swell", "tide"], window.ZIG_ONSETNAME);
+    fill(ctsel, ["off", "touch", "pack", "jam"], window.ZIG_CONTACTNAME);
+    fill(stsel, ["restless", "settling", "calm", "glass"], window.ZIG_STILLNAME);
+    fill(spsel, ["field", "open", "wide", "scattered"], window.ZIG_SPREADNAME);
+    fill(bdsel, [...new Set(["none"].concat(
+      (ZigCore.Env && ZigCore.Env.bonds) ? Object.keys(ZigCore.Env.bonds) : []
+    ))], window.ZIG_BOND || "none");
+    fill(ssel, ZigCore.Materials ? Object.keys(ZigCore.Materials) : [], window.ZIG_MATERIAL || "");
+    fill(bsel, Object.keys(window.ZIG_BREATHFEEL), window.ZIG_BREATH);
+    fill(vsel, Object.keys(window.ZIG_STAGELEVELS), window.ZIG_VITRINE);
+    fill(gsel, ["none"].concat(ZigCore.Gems ? Object.keys(ZigCore.Gems) : []), (location.hash.match(/gem=([a-z]+)/i) || [])[1] || "none");
+    fill(fbsel, ["none"].concat(ZigCore.Fabrics ? Object.keys(ZigCore.Fabrics) : []), (location.hash.match(/fab=([a-z]+)/i) || [])[1] || "none");
+    fill(gfsel, ["both", "inside", "outside"], window.ZIG_GEMFACE);
+    /* When a named world is active, reflect its triple + native (or overridden) skin & shape
+       so every sub-dial SHOWS the place. */
+    if (window.ZIG_WORLD !== "custom" && ZigCore.Worlds && ZigCore.Worlds.places[window.ZIG_WORLD]) {
+      const w = ZigCore.Worlds.places[window.ZIG_WORLD];
+      if (msel) msel.value = w.medium; if (fsel) fsel.value = w.force; if (csel) csel.value = w.current;
+      if (bnsel) bnsel.value = window.ZIG_BOUNDARY || w.bound || "none";   // override if set, else native shape
+      if (ssel) ssel.value = window.ZIG_MATERIAL || w.skin;                // override if set, else native skin
+    }
+    /* Physics dials (MEDIUM/FORCES/CURRENT) → touching one leaves any named world → custom. */
+    for (const s of [msel, fsel, csel]) if (s) s.addEventListener("change", () => { location.hash = dialsHash(); location.reload(); });
+    /* SHAPE + SURFACE → overrides: stay in the current world (else they're custom dials). */
+    for (const s of [bnsel, ssel]) if (s) s.addEventListener("change", () => { location.hash = inWorld() ? worldHash() : dialsHash(); location.reload(); });
+    /* GEM (front stone) + FABRIC (back textile) recompile the shader → reload, staying in the current world/dials. */
+    for (const s of [gsel, fbsel, gfsel]) if (s) s.addEventListener("change", () => { location.hash = curHash(); location.reload(); });
+    /* WORLD is a MACRO — a named place reloads BARE (no overrides → its NATIVE skin + shape apply);
+       "custom" hands control back to the dials. */
+    if (wsel) wsel.addEventListener("change", () => {
+      location.hash = (wsel.value === "custom") ? dialsHash() : ("world=" + wsel.value + btail());
+      location.reload();
+    });
+    /* ---- the 2026-08-07/09 dials ---------------------------------------------
+       Every one of these wrote itself into the hash correctly and had NO change
+       handler, so a URL worked and the dropdown did nothing. Fixed in one place,
+       split by what each actually needs:
+
+       RELOAD — HEFT bakes into the mesh at load, and BOND/CONTACT/ONSET are
+       compiled into the step kernel as splices. Changing any of them has to
+       rebuild, so they reload preserving the current world and dials.
+
+       LIVE — SPREAD, STILLNESS and SUMMON are per-frame numbers or a species-side
+       rate. They cannot be applied to a running flock from here (the species reads
+       its globals at boot), so for honesty they reload too rather than pretending
+       to take effect. Better a visible reload than a dial that lies. */
+    for (const s of [hfsel, bdsel, ctsel, onsel, spsel, stsel, susel, cnsel, unsel, besel, nfsel])
+      if (s) s.addEventListener("change", () => { location.hash = curHash(); location.reload(); });
+
+    /* VITRINE compiles into the floor shader → reload, preserving the current world/dials. */
+    if (vsel) vsel.addEventListener("change", () => { location.hash = curHash(); location.reload(); });
+    /* BREATH is a LIVE dial — gain/curve are runtime opts (no recompile), so apply on the
+       spot and only record it in the hash for persistence; never force a reload mid-phrase. */
+    if (bsel) bsel.addEventListener("change", () => {
+      const f = window.ZIG_BREATHFEEL[bsel.value] || window.ZIG_BREATHFEEL.easy;
+      if (window.ZigCore && ZigCore.Perf && ZigCore.Perf._opts) { ZigCore.Perf._opts.gain = f[0]; ZigCore.Perf._opts.curve = f[1]; }
+      history.replaceState(null, "", "#" + curHash());
+    });
+    /* CLEAN FRAME for recording — the backtick/tilde key ( ` ) hides all overlay chrome
+       (pickers · HUD · hint) so the capture is pure field; press again to bring it back. */
+    const chrome = ["picks", "hud", "hint"].map((id) => document.getElementById(id)).filter(Boolean);
+    let chromeHidden = false;
+    /* SAFE RESET — Shift+0 clears the hash and reloads with every dial at its
+   default. A picker that fails to build a pipeline leaves a BLACK canvas, and
+   because the hash persists across the reload the bad setting comes straight
+   back: without this the page is bricked and the only way out is downloading the
+   file again. The HUD and key handlers survive a dead render pass, so a keyboard
+   escape always works even when nothing is drawn. (Bill, 2026-08-09.) */
+addEventListener("keydown", (e) => {
+  if (e.shiftKey && (e.key === "0" || e.code === "Digit0")) {
+    location.hash = "";
+    location.replace(location.pathname);
+  }
+});
+addEventListener("keydown", (e) => { if (e.code === "Backquote") { chromeHidden = !chromeHidden; for (const el of chrome) el.style.display = chromeHidden ? "none" : ""; } });
+  });
+</script>
+</body>
+</html>
