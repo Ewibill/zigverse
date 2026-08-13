@@ -165,6 +165,12 @@
        mass. This forbids it. Radius is in world units; keep it at or below the
        grid cell or the 3x3x3 walk could miss a neighbour. 0 = off, byte-identical. */
     const CONTACT_R = (+global.ZIG_CONTACT > 0) ? +global.ZIG_CONTACT : 0;
+    /* CROWDING — how hard embedded shards are allowed to shove each other.
+       The overlap force is unbounded and SUMS over neighbours, so a shard buried
+       in twenty others was being kicked ten to fifty times harder than anything
+       else in the world. Bill: "groups of shards embedded in each other deliver
+       the most agitation." 0 = unbounded, the historical behaviour. */
+    const CROWD_CAP = (+global.ZIG_SEPCAP > 0) ? +global.ZIG_SEPCAP : 0;
     /* ONSET (2026-08-08) — seconds for agitation to RISE. Contagion has always
        risen in one frame (a max()), which with agit driving vmax makes individual
        shards dart: Bill's "popcorn". Giving the rise a time constant makes the eye
@@ -287,6 +293,7 @@
     const flock = ZG.createFlock(gpu, {
       contact: CONTACT_R > 0 ? { r: CONTACT_R, k: 45, damp: 4, max: 12 } : null,
       onset: ONSET_S,
+      sepCap: CROWD_CAP > 0 ? { pair: 0.55, total: CROWD_CAP } : null,
       unseen: UNSEEN_F,
       noteFlash: NOTEFLASH_ON,
       bee: BEE > 0 ? 1.45 : 1,   // agent #0 drawn larger when the bee is live
@@ -338,6 +345,8 @@
       flockB = ZG.createFlock(gpu, {
         contact: CONTACT_R > 0 ? { r: CONTACT_R, k: 45, damp: 4, max: 12 } : null,
         onset: ONSET_S,
+        sepCap: CROWD_CAP > 0 ? { pair: 0.55, total: CROWD_CAP } : null,
+      sepCap: CROWD_CAP > 0 ? { pair: 0.55, total: CROWD_CAP } : null,
         unseen: UNSEEN_F,
         noteFlash: NOTEFLASH_ON,
         bee: BEE > 0 ? 1.45 : 1,   // agent #0 drawn larger when the bee is live
@@ -466,6 +475,27 @@
     /* LIVE DIALS — start hot (the extremes hunt), tune with keys, read the
        numbers off the HUD when a sweet spot lands */
     const CAM0 = global.ZIG_CAM || 54;
+    /* AUTO-FRAME (2026-08-10). A fixed camera distance is a promise about one
+       screen. Measured on a 2560x1440 capture, the field was cropped on ALL FOUR
+       EDGES while filling only 26% of the frame — badly placed AND too close, at
+       the same time, which is what a fixed distance eventually gives you.
+       The flock is measured occasionally and asynchronously (subsampled, never
+       blocking), and `ZigCore.Frame.fit` turns its radius plus the CURRENT aspect
+       into the distance that holds it. Aspect matters more than expected: a
+       vertical fov means a wide window is generous horizontally and a tall one is
+       not, so the binding axis SWAPS with the shape of the glass — which is
+       exactly why a piece composed on one monitor is cropped on the next.
+       ZIG_AUTOFRAME = 0 restores the hand-set camera. */
+    const AUTOFRAME = (global.ZIG_AUTOFRAME === undefined) ? 1 : +global.ZIG_AUTOFRAME;
+    const FRAME_MARGIN = (+global.ZIG_FRAMEMARGIN > 0) ? +global.ZIG_FRAMEMARGIN : 1.20;
+    let measured = null, measureAcc = 0, autoRad = CAM0;
+    /* + and - still work, but they now mean something better: a zoom RELATIVE to
+       the frame the camera has chosen. The piece keeps composing itself and you
+       keep the last word on how tight it sits. Replacing camRad with autoRad
+       without this silently broke both keys — they went on adjusting a number
+       nothing read any more, which is the same failure as a method on the wrong
+       object: correct code, never consulted. */
+    let frameZoom = 1.0;
     const dial = { ink: (global.ZIG_INK !== undefined ? +global.ZIG_INK : 1.8), moon: 1.6, camRad: CAM0, fov: 1.02, spectral: false, Kmax: 3.0, paceGain: 2.2, time: 0.55,
                    hueRot: HUEROT0, hueSpan: HUESPAN0,   // ZIGSPECTRUM: rotation around the wheel (Q) · base→tip span
                    shadowComp: (global.ZIG_SHADOWCOMP !== undefined ? +global.ZIG_SHADOWCOMP : 0),   // SHADOW COMPLEMENT (9/0): dark side → the material's complementary colour instead of black
@@ -568,7 +598,26 @@
       aimP[0] += sx; aimP[1] += sy; aimP[2] += sz;
       flyOrbit += flyDolly * dt * 0.6;                                // orbit rides the SMOOTHED envelope (walks you around, persists — no jitter)
       const ang = t * (FLY ? 0.006 : 0.021) + camPhase + flyOrbit;    // FLY: near-still at rest, the phrase orbits you
-      const rad = Math.max(11, dial.camRad * (1 - 0.55 * flyDolly));  // SMOOTHED dolly — glides IN over a phrase, eases out on real rest (no yo-yo)
+      /* ---- AUTO-FRAME: measure occasionally, ease continuously ---- */
+      if (AUTOFRAME && flock && flock.measure) {
+        measureAcc += dt;
+        if (measureAcc > 0.25) {                       // four times a second is plenty
+          measureAcc = 0;
+          flock.measure((m) => { if (m.n > 8 && isFinite(m.r)) measured = m; }, 7);
+        }
+        if (measured && measured.r > 1) {
+          const aspect2 = gpu.canvas.clientWidth / Math.max(1, gpu.canvas.clientHeight);
+          const want = ZC.Frame.fit(measured.r, dial.fov, aspect2, FRAME_MARGIN) * frameZoom;
+          autoRad = ZC.Frame.ease(autoRad, Math.max(14, Math.min(400, want)), dt, 0.9);
+          /* AIM AT THE FLOCK, not at a drifting target. Being off-centre cost as
+             much of the frame as being too close did. */
+          aimP[0] += (measured.cx - aimP[0]) * Math.min(1, dt * 0.8);
+          aimP[1] += (measured.cy - aimP[1]) * Math.min(1, dt * 0.8);
+          aimP[2] += (measured.cz - aimP[2]) * Math.min(1, dt * 0.8);
+        }
+      }
+      const baseRad = AUTOFRAME ? autoRad : dial.camRad;
+      const rad = Math.max(11, baseRad * (1 - 0.55 * flyDolly));  // SMOOTHED dolly — glides IN over a phrase, eases out on real rest (no yo-yo)
       const eye = [aimP[0] + Math.cos(ang) * rad,
                    aimP[1] + 8 + 5 * Math.sin(t * 0.05 + hPhase),
                    aimP[2] + Math.sin(ang) * rad];
@@ -1195,7 +1244,7 @@
           " · EWI " + (noteForm ? "ON" + (formLife > 0.05 ? " ▮" + (WNAMES.length ? WNAMES[state.letter].toUpperCase() : "") : "") : "off") +
           (dial.murmur > 0.001 ? " · MURMUR " + Math.round(dial.murmur * 100) + "%" : "") +
           (MAT ? " · " + matName + (WORLD && !global.ZIG_MATERIAL ? " (native)" : "") : "") +
-          " · cam " + dial.camRad.toFixed(0) + " · fov " + dial.fov.toFixed(2) +
+          " · cam " + (AUTOFRAME ? autoRad.toFixed(0) + (measured ? "\u2194" + measured.r.toFixed(0) : "") + (Math.abs(frameZoom-1) > 0.01 ? " \u00d7" + frameZoom.toFixed(2) : "") : dial.camRad.toFixed(0)) + " · fov " + dial.fov.toFixed(2) +
           " · " + (WNAMES.length > 1
             ? "wardrobe " + WNAMES[state.letter] + (state.mix > 0.05 ? " ⟶ " + WNAMES[state.letterB] + " " + Math.round(state.mix * 100) + "%" : "") + " (N steps)"
             : LETTER + (PETAL.gen === "arc" ? "[sweep " + PETAL.sweep + " twist " + PETAL.twist + "]" : "[curve " + PETAL.curve + " twist " + PETAL.twist + " taper " + PETAL.taper + "]")));
@@ -1232,8 +1281,12 @@
       if (e.code === "KeyK") dial.ink = clamp(dial.ink - 0.15, 0, 3);
       if (e.code === "KeyO") dial.moon = clamp(dial.moon + 0.2, 0.2, 3.5);
       if (e.code === "KeyL") dial.moon = clamp(dial.moon - 0.2, 0.2, 3.5);
-      if (e.code === "Equal") dial.camRad = clamp(dial.camRad - 5, 22, 170);   // + zooms IN
-      if (e.code === "Minus") dial.camRad = clamp(dial.camRad + 5, 22, 170);
+      /* + zooms IN. Under auto-framing this scales the CHOSEN frame rather than
+         setting an absolute distance, so it survives the organism changing size. */
+      if (e.code === "Equal") { if (AUTOFRAME) frameZoom = clamp(frameZoom - 0.07, 0.35, 2.6);
+                                else dial.camRad = clamp(dial.camRad - 5, 22, 170); }
+      if (e.code === "Minus") { if (AUTOFRAME) frameZoom = clamp(frameZoom + 0.07, 0.35, 2.6);
+                                else dial.camRad = clamp(dial.camRad + 5, 22, 170); }
       if (e.code === "BracketRight") dial.fov = clamp(dial.fov + 0.05, 0.5, 1.4);
       if (e.code === "BracketLeft") dial.fov = clamp(dial.fov - 0.05, 0.5, 1.4);
       if (e.code === "KeyP") dial.spectral = !dial.spectral;   // P — spectral ink toggle
@@ -1281,7 +1334,7 @@
       if (e.code === "Comma") dial.time = clamp(dial.time / 1.15, 0.15, 1.6);   // , slower
       if (e.code === "Period") dial.time = clamp(dial.time * 1.15, 0.15, 1.6);  // . faster
       if (e.code === "KeyC") {                                 // C — center: reset the view
-        dial.camRad = CAM0; dial.fov = 1.02;
+        dial.camRad = CAM0; dial.fov = 1.02; frameZoom = 1.0;
         camPhase = -t * 0.021; hPhase = -t * 0.05;             // square to the anchor, level the bob
       }
       if (e.code === "Semicolon") agitF = Math.max(0.2, agitF - 0.1);   // ; — calmer letters (live)

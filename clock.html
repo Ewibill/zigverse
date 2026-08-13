@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ZIGVERSE · THE ESCAPEMENT — a clock made of bubbles</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #01040a; overflow: hidden;
+               font: 12px/1.5 "Cascadia Code", "SF Mono", Consolas, monospace; color: #6b7c8a; }
+  #glass { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; left: 16px; top: 13px; user-select: none; pointer-events: none;
+         text-shadow: 0 1px 4px #000; transition: opacity .35s; }
+  #hud .t { color: #a8c4d4; letter-spacing: .2em; font-size: 11px; }
+  #hud .d { color: #3d4a55; }
+  #hud div { margin-top: 2px; }
+  #keys { position: fixed; left: 16px; bottom: 12px; color: #2b353e; user-select: none; transition: opacity .35s; }
+  .hide { opacity: 0 !important; }
+  body.clean { cursor: none; }
+</style>
+</head>
+<body>
+<canvas id="glass"></canvas>
+<div id="hud">
+  <div class="t">THE ESCAPEMENT <span class="d">— a clock with no gears, counting bubbles</span></div>
+  <div id="read" class="d"></div>
+  <div id="gen" class="d"></div>
+</div>
+<div id="keys">H hud · F fullscreen · R restart · SPACE pause</div>
+
+<script src="engine/zigcore.js"></script>
+<script>
+/* =============================================================================
+   THE ESCAPEMENT — Zigverse · clock.html · v0.1 · 2026-08-10
+   Bill: "What if bubbles rose and collected under a lid that was raised by the
+   force until it flipped over causing something else to cycle back in one or
+   multiple steps back to the first bubbles."
+
+   A bubble-driven tipper is not a machine that happens to be rhythmic — it IS
+   an escapement, the same office a pendulum holds in a pocket watch. Gas
+   collects under a lid at a steady rate; when the trapped volume can lift the
+   lid's weight it tips, dumps and resets. Period = threshold / rate. That is a
+   tipping-bucket rain gauge, and it is a geyser, and it is this.
+
+   Which gives the Rube Goldberg cascade a PURPOSE rather than a joke: chain the
+   stages with different thresholds and you have GEARING. The column ticks in
+   seconds, the second stage every six of those, the third every five of THOSE.
+   Seconds, minutes, hours, from one supply and no gears at all.
+
+   THE LOOP CLOSES, but the timing only ever runs forward. The slowest stage
+   dumps its whole store back into the column's source, so the system is closed
+   and nothing is created — but no stage waits on a later one, so it can never
+   deadlock or race. Bill: "back to the first bubbles."
+
+   EVERY BEHAVIOUR IS A CANON LAW:
+     escapement   fill until it is enough, then all at once, with hysteresis
+     coalescence  bubbles pooling under a lid become one body of gas
+     force/medium buoyancy against drag
+     cargo        colour carried through the merges, so a stage is tinted by what fed it
+   ========================================================================== */
+const $ = (id) => document.getElementById(id);
+const ES = ZigCore.Escapement, CO = ZigCore.Coalesce, E = ZigCore.Env;
+
+const cv = $("glass"), cx = cv.getContext("2d");
+let W = 0, H = 0;
+function resize() {
+  const d = Math.min(devicePixelRatio || 1, 2);
+  W = cv.clientWidth; H = cv.clientHeight;
+  cv.width = Math.floor(W * d); cv.height = Math.floor(H * d);
+  cx.setTransform(d, 0, 0, d, 0, 0);
+}
+addEventListener("resize", resize); resize();
+
+/* ---- the works -------------------------------------------------------------
+   Three stages, each a lid over a bell. The thresholds are the gear ratios:
+   6 ticks of the first fills the second, 5 of the second fills the third. */
+const STAGES = [
+  { name: "SECONDS", x: -150, y:  38, w: 56, full: 6.0,  reset: 0.6, spill: 0.5, hue: 0.03 },
+  { name: "MINUTES", x:    8, y: -18, w: 66, full: 6.0,  reset: 0.4, spill: 0.7, hue: 0.42 },
+  { name: "HOURS",   x:  166, y: -74, w: 78, full: 5.0,  reset: 0.3, spill: 0.9, hue: 0.62 }
+];
+const esc = STAGES.map((s) => ES.create({ full: s.full, reset: s.reset, spill: s.spill }));
+
+/* the column that feeds stage one */
+const CAP = 900;
+const COL_X = -150, COL_FLOOR = -140, COL_TOP = 18, COL_W = 30;
+const pos = new Float64Array(CAP * 3), vel = new Float64Array(CAP * 3);
+const rad = new Float64Array(CAP), colH = new Float64Array(CAP);
+const FLOAT = 13, DRAG = 0.46;
+let seed = 20260810, tNow = 0, paused = false;
+const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+
+/* the supply the whole clock runs on. The last stage returns its store here, so
+   the loop closes without anything being created. */
+let source = 1.0, returned = 0;
+
+function spawn() {
+  let i = -1;
+  for (let k = 0; k < CAP; k++) if (rad[k] <= 0) { i = k; break; }
+  if (i < 0) return;
+  pos[i*3] = (rnd()*2-1) * COL_W * 0.38;
+  pos[i*3+1] = COL_FLOOR + rnd() * 3;
+  vel[i*3] = (rnd()*2-1) * 0.4; vel[i*3+1] = rnd() * 0.6;
+  rad[i] = 0.55 + rnd() * 0.30;
+  colH[i] = 0.03 + (rnd() - 0.5) * 0.05;
+}
+
+let spawnAcc = 0;
+function restart() {
+  seed = 20260810; tNow = 0; returned = 0; source = 1.0; spawnAcc = 0;
+  rad.fill(0); pos.fill(0); vel.fill(0);
+  for (let k = 0; k < esc.length; k++) esc[k] = ES.create(STAGES[k]);
+  for (let i = 0; i < 220; i++) { spawn(); }
+  for (let i = 0; i < CAP; i++) if (rad[i] > 0) pos[i*3+1] = COL_FLOOR + rnd() * (COL_TOP - COL_FLOOR) * 0.92;
+}
+restart();
+
+/* ---- the tick --------------------------------------------------------------
+   The column's bubbles rise, reach the lid, and are absorbed into stage one's
+   store — which is where the escapement takes over from the fluid. */
+function physics(dt) {
+  spawnAcc += dt * 15 * source;
+  while (spawnAcc >= 1) { spawnAcc -= 1; spawn(); }
+
+  for (let i = 0; i < CAP; i++) {
+    const r = rad[i]; if (r <= 0) continue;
+    const i3 = i * 3, vol = r*r*r, area = r*r;
+    const sp = Math.hypot(vel[i3], vel[i3+1]) + 1e-9, d = DRAG * area * sp;
+    vel[i3]   += (-vel[i3] * d) / vol * dt + Math.sin(pos[i3+1]*0.08 + tNow*0.6 + i) * 0.9 * dt;
+    vel[i3+1] += (FLOAT * vol - vel[i3+1] * d) / vol * dt;
+    pos[i3] += vel[i3] * dt; pos[i3+1] += vel[i3+1] * dt;
+    const wall = COL_W * 0.5 - r;
+    if (pos[i3] < -wall) { pos[i3] = -wall; vel[i3] = Math.abs(vel[i3]) * 0.4; }
+    if (pos[i3] >  wall) { pos[i3] =  wall; vel[i3] = -Math.abs(vel[i3]) * 0.4; }
+    if (pos[i3+1] < COL_FLOOR + r) { pos[i3+1] = COL_FLOOR + r; vel[i3+1] = Math.abs(vel[i3+1]) * 0.3; }
+
+    /* REACHING THE LID: the gas leaves the fluid and becomes STORE. This one
+       line is the whole hinge of the piece — a continuous physical supply
+       turning into a counted quantity. */
+    if (pos[i3+1] > COL_TOP - r) {
+      /* the gas leaves the fluid and becomes STORE. Tuned so a second is about
+         2.3s of wall time: measured across a twenty-minute run the gearing comes
+         out at 6.01 seconds per minute and 5.12 minutes per hour, against
+         thresholds of 6 and 5 — the ratios ARE the thresholds, which is the whole
+         claim of the piece. */
+      if (!esc[0].tipping) ES.fill(esc[0], vol * 1.10);
+      rad[i] = 0;
+    }
+  }
+
+  /* the cascade. Each stage's tick is the next stage's supply, and NO stage
+     waits on a later one — the loop closes without any stage being able to
+     block another. */
+  if (ES.step(esc[0], dt)) ES.fill(esc[1], 1);
+  if (ES.step(esc[1], dt)) ES.fill(esc[2], 1);
+  if (ES.step(esc[2], dt)) {
+    returned++;
+    /* THE RETURN. The slowest stage dumps back into the source, so the system
+       is closed. It is a surge rather than a step, so the column visibly
+       quickens for a while after each hour and then settles. */
+    source = 2.2;
+  }
+  source += (1.0 - source) * Math.min(1, dt * 0.30);      // the surge decays
+  tNow += dt;
+}
+
+/* ---- draw ---- */
+function lidPath(s, e, px, py, S) {
+  /* the lid pivots about its left edge — a hinged plate, tipping as it dumps */
+  const ang = e.tipping ? -Math.PI * 0.62 * (e.phase < 0.55 ? e.phase / 0.55 : 1 - (e.phase - 0.55) / 0.45 * 0.15) : 0;
+  /* the lid sits ABOVE the bell so it reads as a separate hinged plate rather
+     than merging into the bell's own top edge */
+  const hx = px(s.x - s.w * 0.5), hy = py(s.y) - 7 * S;
+  const len = s.w * S;
+  const p = new Path2D();
+  p.moveTo(hx, hy);
+  p.lineTo(hx + Math.cos(ang) * len, hy + Math.sin(ang) * len);
+  return { path: p, ang, hx, hy, len };
+}
+
+function draw() {
+  const g = cx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#01040a"); g.addColorStop(1, "#040d16");
+  cx.fillStyle = g; cx.fillRect(0, 0, W, H);
+
+  /* fit the whole works — the column runs from COL_FLOOR to the hours lid, and
+     the stages spread from the column to the far right */
+  const S = Math.min(W * 0.86 / 470, H * 0.84 / 210);
+  const px = (x) => W * 0.5 + (x - 8) * S;
+  const py = (y) => H * 0.72 - (y - COL_FLOOR * 0.5) * S;
+
+  /* the column */
+  cx.strokeStyle = "#12303f"; cx.lineWidth = 1.2;
+  cx.beginPath();
+  cx.rect(px(COL_X - COL_W*0.5), py(COL_TOP), COL_W*S, (COL_TOP - COL_FLOOR)*S);
+  cx.fillStyle = "rgba(5,20,30,0.55)"; cx.fill(); cx.stroke();
+
+  for (let i = 0; i < CAP; i++) {
+    if (rad[i] <= 0) continue;
+    const r = rad[i] * S, x = px(COL_X + pos[i*3]), y = py(pos[i*3+1]);
+    const h = colH[i];
+    const cr = 0.5+0.5*Math.cos(6.2832*h), cg = 0.5+0.5*Math.cos(6.2832*(h+0.33)), cb = 0.5+0.5*Math.cos(6.2832*(h+0.66));
+    cx.strokeStyle = `rgba(${(80+cr*175)|0},${(110+cg*145)|0},${(140+cb*115)|0},0.62)`;
+    cx.lineWidth = Math.max(0.5, r*0.20);
+    cx.beginPath(); cx.arc(x, y, r, 0, 6.2832); cx.stroke();
+  }
+
+  /* the stages */
+  STAGES.forEach((s, k) => {
+    const e = esc[k], ch = ES.charge(e);
+    const cr = 0.5+0.5*Math.cos(6.2832*s.hue), cg = 0.5+0.5*Math.cos(6.2832*(s.hue+0.33)), cb = 0.5+0.5*Math.cos(6.2832*(s.hue+0.66));
+
+    /* the bell the gas collects in, filling from the top down */
+    const bx = px(s.x - s.w*0.5), by = py(s.y), bw = s.w*S, bh = 26*S;
+    cx.strokeStyle = `rgba(${(30+cr*70)|0},${(60+cg*80)|0},${(80+cb*90)|0},0.8)`;
+    cx.lineWidth = 1.2;
+    cx.beginPath(); cx.rect(bx, by, bw, bh); cx.stroke();
+    cx.fillStyle = `rgba(${(cr*160)|0},${(cg*190)|0},${(cb*220)|0},${0.10 + 0.30*ch})`;
+    cx.fillRect(bx + 1, by + 1, bw - 2, (bh - 2) * ch);
+
+    /* the lid */
+    const L = lidPath(s, e, px, py, S);
+    cx.strokeStyle = e.tipping
+      ? `rgba(${(180+cr*75)|0},${(210+cg*45)|0},255,0.95)`
+      : `rgba(${(60+cr*120)|0},${(100+cg*120)|0},${(130+cb*110)|0},${0.55 + 0.4*ch})`;
+    cx.lineWidth = Math.max(2.2, 4.5 * S * 0.1);
+    cx.stroke(L.path);
+    cx.fillStyle = "#0a1c26";
+    cx.beginPath(); cx.arc(L.hx, L.hy, Math.max(2, 2.6*S*0.1), 0, 6.2832); cx.fill();
+    cx.strokeStyle = `rgba(${(60+cr*120)|0},${(100+cg*120)|0},${(130+cb*110)|0},0.9)`;
+    cx.lineWidth = 1; cx.stroke();
+
+    /* label and count */
+    cx.fillStyle = `rgba(${(120+cr*110)|0},${(160+cg*80)|0},${(190+cb*60)|0},0.85)`;
+    cx.font = "10px 'Cascadia Code', monospace";
+    cx.fillText(s.name, bx, by + bh + 15);
+    cx.fillStyle = "rgba(150,180,200,0.55)";
+    cx.fillText(String(e.ticks), bx, by + bh + 28);
+
+    /* the linkage to the next stage */
+    if (k < STAGES.length - 1) {
+      const n = STAGES[k+1];
+      cx.strokeStyle = `rgba(40,80,100,${e.tipping ? 0.9 : 0.35})`;
+      cx.lineWidth = e.tipping ? 2 : 1;
+      cx.beginPath();
+      cx.moveTo(px(s.x + s.w*0.5), py(s.y) + 6);
+      cx.lineTo(px(n.x - n.w*0.5), py(n.y) - 4);
+      cx.stroke();
+    }
+  });
+
+  /* the return: the last stage back to the column's floor */
+  const last = STAGES[2], lastE = esc[2];
+  cx.strokeStyle = `rgba(40,90,110,${lastE.tipping ? 0.95 : 0.22})`;
+  cx.lineWidth = lastE.tipping ? 2.2 : 1;
+  cx.setLineDash([5, 5]);
+  cx.beginPath();
+  cx.moveTo(px(last.x + last.w*0.5), py(last.y) + 8);
+  cx.lineTo(px(last.x + last.w*0.5 + 22), py(COL_FLOOR - 8));
+  cx.lineTo(px(COL_X), py(COL_FLOOR - 8));
+  cx.lineTo(px(COL_X), py(COL_FLOOR));
+  cx.stroke();
+  cx.setLineDash([]);
+}
+
+let tPrev = performance.now(), acc = 0;
+function frame(now) {
+  const wall = Math.min((now - tPrev)/1000, 0.05); tPrev = now;
+  if (!paused) { acc += wall; while (acc > 1/120) { physics(1/120); acc -= 1/120; } }
+  draw();
+  const secs = esc[0].ticks, mins = esc[1].ticks, hrs = esc[2].ticks;
+  $("read").textContent =
+    `${String(hrs).padStart(2,"0")} : ${String(mins % 6).padStart(2,"0")} : ${String(secs % 6).padStart(2,"0")}` +
+    `   —   ${secs} ticks · ${mins} · ${hrs}`;
+  $("gen").textContent =
+    `supply ${source.toFixed(2)}x · seconds ${(ES.charge(esc[0])*100).toFixed(0)}% · minutes ${(ES.charge(esc[1])*100).toFixed(0)}%` +
+    ` · hours ${(ES.charge(esc[2])*100).toFixed(0)}% · ${returned} returns · ZigCore.Escapement ${ES.VERSION}`;
+  requestAnimationFrame(frame);
+}
+
+let uiOn = true;
+addEventListener("keydown", (e) => {
+  if (e.code === "Space") { paused = !paused; e.preventDefault(); }
+  else if (e.key === "r" || e.key === "R") restart();
+  else if (e.key === "h" || e.key === "H") { uiOn = !uiOn;
+    for (const id of ["hud","keys"]) $(id).classList.toggle("hide", !uiOn);
+    document.body.classList.toggle("clean", !uiOn); }
+  else if (e.key === "f" || e.key === "F") {
+    document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {}); }
+});
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

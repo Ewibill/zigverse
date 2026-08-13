@@ -969,6 +969,9 @@
       { id: "membrane",     pillar: "physics", since: "0.10",   enables: "elastic space + topological memory — the surface remembers what it lived", proof: "membrane_ref" },
       { id: "reciprocity", pillar: "habitat", since: "0.18(core)", enables: "THE MEDIUM REMEMBERS BEING MOVED - a momentum field agents stir and are carried by, so a body finally leaves a mark on what it moves through. Every medium law before this was one-way. Momentum is conserved between body and medium (deposit is an IMPULSE, push x dt, shed BEHIND the body or a swimmer drowns in its own backwash); the wake fades and spreads; one body passage measurably changes the water another is in; and INDUCED DRAG emerges unasked - shedding a wake costs speed. NO VORTICITY, therefore no drafting: a follower directly behind is pushed BACKWARD, which is why real fish school offset", proof: "wake_ref" },
       { id: "shape-memory", pillar: "physics", since: "0.17(core)", enables: "a body REMEMBERS the angle it grew at - per-joint rest curvature recorded at growth (state.kap0), so a spiral holds its spiral instead of straining to unwind. Without it a shell creeps forever (motion still 5.6/s after 1500 frames of silence); with it, 0.4. This is what lets a performed shape persist rather than relaxing away", proof: "shell_species_ref" },
+      { id: "framing", pillar: "experience", since: "0.21(core)", enables: "A CAMERA THAT HOLDS ITS SUBJECT - the distance at which a body of known radius is exactly TANGENT to the view frustum, for the current field of view and ASPECT. A fixed distance is a promise about one screen: measured on a 2560x1440 capture the field was cropped on all four edges while filling 26% of the frame. Aspect is the crux - a vertical fov means the binding axis SWAPS between wide and tall windows, which is why a piece composed on one monitor is cropped on the next. Pure arithmetic, no readback", proof: "frame_ref" },
+      { id: "escapement", pillar: "physics", since: "0.20(core)", enables: "FILL UNTIL IT IS ENOUGH, THEN ALL AT ONCE - a store, a threshold, a release, a reset. The pattern behind a tipping-bucket gauge, a geyser, a seed pod, a heart, a neuron reaching action potential and the escapement in a clock. Turns a CONTINUOUS supply into a COUNTABLE event, so period = threshold / rate and a chain of stages with different thresholds gives seconds, minutes and hours from one supply. HYSTERESIS is the law, not a detail: without a reset level the store chatters at the frame rate instead of ticking", proof: "escapement_ref" },
+      { id: "coalescence", pillar: "physics", since: "0.19(core)", enables: "WHEN TWO TOUCH THEY BECOME ONE - the exact counterpart to contact, sharing its broadphase and pair test with the opposite resolution. VOLUME is conserved (r = cbrt(r1^3+r2^3)), not radius, which is what makes a merged body rise FASTER than either parent while the event rate collapses: motion accelerating as events decelerate. Momentum conserved with volume as mass. Absorbed agents are PARKED at radius 0 rather than deleted, so a fixed agent count needs no allocation. Lower index survives, so a run is deterministic", proof: "coalesce_ref" },
       { id: "contact", pillar: "physics", since: "0.16(core)", enables: "MATTER THAT OCCUPIES SPACE - static exclusion AND a body that cannot pass through ITSELF (uniform-grid broadphase, bonded near-neighbours exempt, every pair resolved once so a body cannot push itself; coils PACK instead of interpenetrating - measured overlap 0.84 -> 0.03). Flocking separation is a force between strangers, a preference that can be overpowered; this is a body that cannot be entered. A stone, a pillar, a reef: something a creature must go AROUND, which turns a drawing into a creature in a PLACE. The general case (a body against itself) is the same mathematics with both sides moving", proof: "contact_ref" },
       { id: "allometry", pillar: "physics", since: "0.15(core)", enables: "per-segment REST LENGTH - one body whose segments differ in size. A kelp frond tapers, a whale tapers, and a SHELL is a body whose every segment slightly outgrows the last", proof: "structure_ref" },
       { id: "shell", pillar: "life", since: "0.15(core)", enables: "GROWTH WITH ROTATION - constant turn plus constant growth ratio traces a logarithmic spiral: nautilus, ammonite, ram horn, fern crozier. One of the commonest forms in biology because it is simply what steady growth plus steady turning draws, and it is self-similar so the animal never changes proportion. Interval sets the whorl tightness and handedness; attack opens the ratio", proof: "structure_ref" },
@@ -1138,6 +1141,298 @@
       };
     },
     names() { return Object.keys(this.places); }
+  };
+
+  /* ==========================================================================
+     ZigCore.Frame — WHAT THE CAMERA MUST DO TO HOLD THE SUBJECT. (v0.21)
+
+     A fixed camera distance is a promise about a screen. Change the monitor,
+     the window, or the size of the organism and the promise breaks: measured on
+     a 2560x1440 capture, the field was cropped on ALL FOUR EDGES while filling
+     only 26% of the frame — badly placed and too close at the same time, which
+     is what a fixed distance always eventually gives you.
+
+     This is the arithmetic that fixes it, and it is deliberately PURE: no GPU
+     readback, no per-frame stall, no knowledge of where the agents actually are.
+     A world already declares how big it is — its extent, its boundary — and that
+     is enough. Give it the subject's radius and the camera's field of view and
+     aspect, and it returns the distance at which the subject exactly fills the
+     frame, times whatever margin you want to leave.
+
+     THE ASPECT MATTERS MORE THAN PEOPLE EXPECT. A vertical field of view means a
+     WIDE window is generous horizontally and a TALL one is not — so the binding
+     constraint swaps depending on the shape of the glass. Fitting to the vertical
+     alone is why a piece composed on one monitor is cropped on the next.
+     ====================================================================== */
+  ZigCore.Frame = {
+    VERSION: "0.21.0",
+
+    /* the distance at which a sphere of radius R exactly fills the frame.
+       `fov` is the VERTICAL field of view in radians. */
+    fit(R, fov, aspect, margin) {
+      const m = (margin === undefined) ? 1.12 : margin;
+      const halfV = Math.max(1e-3, fov * 0.5);
+      const halfH = Math.atan(Math.tan(halfV) * Math.max(0.05, aspect));
+      /* the tighter of the two axes decides — this is the line that makes a
+         piece survive being moved to a different screen */
+      const need = Math.max(R / Math.sin(halfV), R / Math.sin(halfH));
+      return need * m;
+    },
+
+    /* the radius a world of this extent and boundary actually occupies */
+    radius(extent, bound) {
+      let r = extent;
+      if (bound) {
+        if (bound.shape === "ellipsoid") r = Math.min(r, Math.hypot(bound.rx || r, bound.ry || r, bound.rz || r));
+        else if (bound.r) r = Math.min(r, bound.r);
+      }
+      return r;
+    },
+
+    /* ease a camera distance toward its target — a camera that SNAPS reads as a
+       cut, and a piece that recomposes itself should breathe rather than jump */
+    ease(current, target, dt, rate) {
+      const k = 1 - Math.exp(-dt * ((rate === undefined) ? 1.6 : rate));
+      return current + (target - current) * k;
+    }
+  };
+
+  /* ==========================================================================
+     ZigCore.Escapement — FILL UNTIL IT IS ENOUGH, THEN ALL AT ONCE. (v0.20)
+
+     The Canon has laws for things that flow and things that touch, but none for
+     the pattern where something ACCUMULATES QUIETLY AND THEN DISCHARGES. That
+     pattern is everywhere: a tipping-bucket rain gauge, a geyser, a seed pod, a
+     heart filling and emptying, a neuron reaching its action potential, and the
+     escapement in a clock. All the same shape — a store, a threshold, a release,
+     a reset — and all of them turn a CONTINUOUS supply into a COUNTABLE event.
+
+     That last part is why this is a clock rather than a valve. If the fill rate
+     is steady the period is threshold divided by rate, so a chain of stages with
+     different thresholds gives seconds, minutes and hours from one supply. Rube
+     Goldberg as GEARING.
+
+     HYSTERESIS is not a detail. A store that discharges the instant it is full
+     and refills the instant it is empty will chatter at the frame rate rather
+     than tick; `reset` is the level it must fall BELOW before it can arm again,
+     and it is what makes the beat discrete. A real tipping bucket has it as
+     geometry: once tipped past centre it must swing right back before it can
+     catch again.
+
+     `phase` runs 0..1 through the discharge so a body can be drawn mid-tip —
+     a lid halfway over is the most legible moment in the whole cycle.
+     ====================================================================== */
+  ZigCore.Escapement = {
+    VERSION: "0.20.0",
+
+    /* `full` is the level that trips it · `reset` the level it must fall below
+       to arm again · `spill` seconds the discharge takes (the tip itself). */
+    create(opts) {
+      const o = opts || {};
+      return {
+        level: +o.level || 0,
+        full: (o.full === undefined) ? 1 : +o.full,
+        reset: (o.reset === undefined) ? 0.12 : +o.reset,
+        spill: (o.spill === undefined) ? 0.6 : +o.spill,
+        armed: true,          // able to trip
+        tipping: false,       // mid-discharge
+        phase: 0,             // 0..1 through the tip
+        ticks: 0,             // how many times it has fired
+        last: -1              // seconds since the last fire, -1 = never
+      };
+    },
+
+    /* add to the store — whatever the supply is, in whatever units */
+    fill(e, amount) { if (!e.tipping) e.level += amount; return e; },
+
+    /* advance. Returns TRUE on the frame it fires, so a caller can drive the
+       next stage from the return value and nothing else. */
+    step(e, dt) {
+      let fired = false;
+      if (e.last >= 0) e.last += dt;
+      if (e.tipping) {
+        /* re-arm the MOMENT the tip empties it, not on a later frame. Waiting
+           until the next step lets a fast supply refill past the reset level in
+           the gap — and then the arming branch never runs and the store is
+           deadlocked, disarmed and filling forever. Found by tracing: level
+           jumped 0 to 5 in one frame with reset at 4.9 and it never ticked
+           again. An escapement must arm on the way DOWN, which is where a real
+           tipping bucket arms too: as it swings back through centre. */
+        e.phase += dt / Math.max(1e-4, e.spill);
+        /* the store empties as it tips, so a body drawn from `level` visibly
+           pours rather than vanishing */
+        e.level *= Math.max(0, 1 - dt / Math.max(1e-4, e.spill) * 1.6);
+        if (e.level <= e.reset) e.armed = true;
+        if (e.phase >= 1) { e.phase = 0; e.tipping = false; e.level = 0; e.armed = true; }
+      } else if (e.armed && e.level >= e.full) {
+        e.tipping = true; e.armed = false; e.phase = 0;
+        e.ticks++; e.last = 0; fired = true;
+      } else if (!e.armed && e.level <= e.reset) {
+        e.armed = true;                       /* hysteresis: it must fall first */
+      }
+      return fired;
+    },
+
+    /* 0..1 — how full, for drawing */
+    charge(e) { return Math.max(0, Math.min(1, e.level / Math.max(1e-9, e.full))); }
+  };
+
+  /* ==========================================================================
+     ZigCore.Coalesce — WHEN TWO TOUCH, THEY BECOME ONE. (v0.19)
+
+     The exact counterpart to `Contact`, and deliberately built on the same
+     detection: contact says TWO CANNOT BE IN THE SAME PLACE, coalescence says
+     WHEN THEY TOUCH THEY BECOME ONE. Same broadphase, same pair test, opposite
+     resolution. Any world that can exclude can also merge.
+
+     VOLUME IS THE CONSERVED QUANTITY, not radius — r = (r1^3 + r2^3)^(1/3).
+     That single choice gives the piece its shape for free. Buoyancy scales with
+     VOLUME and drag with AREA, so a merged bubble rises FASTER than either
+     parent: the motion accelerates. Meanwhile each merge halves the population,
+     so the EVENT RATE collapses — thousands of collisions in the first seconds,
+     then a long patient drift of four huge bubbles toward each other. Motion
+     speeding up while events slow down is a tension nothing had to be told to do.
+
+     MOMENTUM IS CONSERVED with volume as mass, so a big slow bubble absorbing a
+     small fast one barely changes course — which is what makes the survivor feel
+     heavy rather than merely large.
+
+     NO DELETION. The flock has a fixed agent count, so an absorbed bubble is not
+     removed: its radius goes to zero and it is parked. `UNSEEN` already proved an
+     agent can be fully present and not drawn; this is the same idea with the
+     physics switched off too. No allocation, and the burst simply wakes them all.
+
+     The LOWER index always survives, so a run is deterministic and repeatable —
+     the same seed gives the same collapse every time, which a piece that runs
+     unattended needs.
+     ====================================================================== */
+  ZigCore.Coalesce = {
+    VERSION: "0.19.0",
+
+    /* merge every touching pair. `r` is per-agent radius; a radius of 0 is a
+       parked agent and is skipped. Returns the number of merges performed. */
+    step(pos, vel, r, n, opts) {
+      const o = opts || {};
+      const touch = (o.touch === undefined) ? 1 : o.touch;   // how close counts as contact
+      /* GROUPS — bubbles only merge with their own kind. A piece with several
+         populations (in a vessel · held at a nozzle · released and free) needs
+         them kept apart, or a departing bubble swallows the field it just left.
+         `keep` names one index that must SURVIVE every merge it takes part in,
+         which is what lets a bubble held at a nozzle absorb arrivals without
+         ever being absorbed itself. */
+      const grp = o.group || null;
+      /* `keep` may name SEVERAL protected indices — a world with six nozzles has
+         six bubbles that must each survive every merge they take part in, and
+         protecting only one leaves the other five to be absorbed by their own
+         arrivals. */
+      const keepList = (o.keep === undefined || o.keep === null) ? null
+                     : (Array.isArray(o.keep) ? o.keep : [o.keep]);
+      const isKeep = keepList ? ((x) => keepList.indexOf(x) >= 0) : (() => false);
+      /* CARGO — any per-agent quantity that must be CONSERVED through a merge,
+         summed rather than averaged. Volume is conserved by construction; this
+         lets a world conserve what a body is CARRYING as well. A bubble that
+         accretes material from the water it passes through becomes heavier with
+         age, and a bubble that has absorbed a hundred others carries all their
+         cargo — so weight becomes the sum of many histories, while size is only
+         the sum of many volumes. That difference is what lets a large old body
+         hang in equilibrium while a large young one still rises. */
+      let cargo = o.cargo || null;
+      /* one array or several — colour needs three channels, and a world that
+         conserves colour as VOLUME-WEIGHTED cargo gets the mix for free: store
+         channel x volume, sum through the merge, divide by volume to read it
+         back. The blend is then exactly proportional to what each body brought. */
+      if (cargo && !Array.isArray(cargo)) cargo = [cargo];
+      /* FILM DRAINAGE — two bodies that touch do not merge at once. The film
+         between them has to thin and break first, which for real bubbles takes
+         anywhere from an instant to several seconds, and is why they visibly
+         PRESS against each other and hesitate before becoming one. `delay` is
+         that dwell in seconds and `dwell` is the per-agent accumulator; pair a
+         delay with `ZigCore.Contact` and the two bodies genuinely lean on one
+         another for the duration instead of vanishing into each other on the
+         frame they meet. Delay 0 restores the instantaneous behaviour. */
+      const delay = (o.delay === undefined) ? 0 : o.delay;
+      const dwell = o.dwell || null;
+      const dt = (o.dt === undefined) ? 0 : o.dt;
+      const touching = (delay > 0 && dwell) ? new Uint8Array(n) : null;
+      /* a world that wants to ANIMATE the merge needs to know what just happened
+         and where both parents were — the survivor's own position is already the
+         volume-weighted centroid by the time the caller sees it. */
+      const onMerge = o.onMerge || null;
+      let rMax = 0;
+      for (let i = 0; i < n; i++) if (r[i] > rMax) rMax = r[i];
+      if (rMax <= 0) return 0;
+
+      /* same uniform grid as Contact, and the same INJECTIVE key — the obvious
+         a*P1 ^ b*P2 collapses at the origin and double-visits buckets. */
+      const D = rMax * 2 * touch;
+      const cells = new Map();
+      const key = (a, b) => a * 4194304 + b;
+      for (let i = 0; i < n; i++) {
+        if (r[i] <= 0) continue;
+        const kk = key(Math.floor(pos[i*3] / D), Math.floor(pos[i*3+1] / D));
+        let arr = cells.get(kk); if (!arr) { arr = []; cells.set(kk, arr); }
+        arr.push(i);
+      }
+
+      let merges = 0;
+      for (let i = 0; i < n; i++) {
+        if (r[i] <= 0) continue;
+        const cx = Math.floor(pos[i*3] / D), cy = Math.floor(pos[i*3+1] / D);
+        for (let gx = -1; gx <= 1; gx++) for (let gy = -1; gy <= 1; gy++) {
+          const arr = cells.get(key(cx + gx, cy + gy)); if (!arr) continue;
+          for (let a = 0; a < arr.length; a++) {
+            const j = arr[a];
+            if (j <= i || r[j] <= 0 || r[i] <= 0) continue;
+            if (grp && grp[i] !== grp[j]) continue;         // different kinds do not merge
+            const dx = pos[i*3] - pos[j*3], dy = pos[i*3+1] - pos[j*3+1], dz = pos[i*3+2] - pos[j*3+2];
+            const reach = (r[i] + r[j]) * touch;
+            if (dx*dx + dy*dy + dz*dz >= reach * reach) continue;
+
+            /* in contact — but the film has to drain before they are one */
+            if (touching) {
+              touching[i] = 1; touching[j] = 1;
+              const ready = Math.min(dwell[i], dwell[j]) + dt;
+              if (ready < delay) continue;                 // still pressing
+            }
+
+            /* VOLUME conserved; mass IS volume, so the centroid and the velocity
+               are both volume-weighted and momentum survives the merge. */
+            /* the survivor is the lower index, unless `keep` names the other —
+               a bubble held at a nozzle must never be the one absorbed. */
+            const A = isKeep(j) ? j : i, B = isKeep(j) ? i : j;
+            /* reported BEFORE anything is modified — by the time the survivor's
+               position is the volume-weighted centroid, both originals are gone */
+            if (onMerge) onMerge(A, B,
+              pos[A*3], pos[A*3+1], pos[A*3+2], r[A],
+              pos[B*3], pos[B*3+1], pos[B*3+2], r[B]);
+            const va = r[A]*r[A]*r[A], vb = r[B]*r[B]*r[B], vt = va + vb;
+            for (let k = 0; k < 3; k++) {
+              pos[A*3+k] = (pos[A*3+k]*va + pos[B*3+k]*vb) / vt;
+              vel[A*3+k] = (vel[A*3+k]*va + vel[B*3+k]*vb) / vt;
+              pos[B*3+k] = 0; vel[B*3+k] = 0;
+            }
+            if (cargo) for (const c of cargo) { c[A] += c[B]; c[B] = 0; }   // summed, never averaged
+            r[A] = Math.cbrt(vt);
+            r[B] = 0;                                  // parked, not deleted
+            merges++;
+          }
+        }
+      }
+      /* advance the dwell of everything still in contact, clear the rest */
+      if (touching) {
+        for (let i = 0; i < n; i++) {
+          if (r[i] <= 0) { dwell[i] = 0; continue; }
+          dwell[i] = touching[i] ? dwell[i] + dt : 0;
+        }
+      }
+      return merges;
+    },
+
+    /* how many bubbles are still alive */
+    alive(r, n) { let c = 0; for (let i = 0; i < n; i++) if (r[i] > 0) c++; return c; },
+
+    /* total volume — the invariant. A run that loses volume has a bug. */
+    volume(r, n) { let v = 0; for (let i = 0; i < n; i++) v += r[i]*r[i]*r[i]; return v; }
   };
 
   /* ==========================================================================

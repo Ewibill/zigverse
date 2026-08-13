@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ZIGVERSE · THE WORKS — a skyline of bubble towers</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #01040a; overflow: hidden;
+               font: 12px/1.5 "Cascadia Code", "SF Mono", Consolas, monospace; color: #6b7c8a; }
+  #glass { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; left: 16px; top: 13px; user-select: none; pointer-events: none;
+         text-shadow: 0 1px 4px #000; transition: opacity .35s; }
+  #hud .t { color: #a8c4d4; letter-spacing: .2em; font-size: 11px; }
+  #hud .d { color: #3d4a55; }
+  #hud div { margin-top: 2px; }
+  #keys { position: fixed; left: 16px; bottom: 12px; color: #2b353e; user-select: none; transition: opacity .35s; }
+  .hide { opacity: 0 !important; }
+  body.clean { cursor: none; }
+</style>
+</head>
+<body>
+<canvas id="glass"></canvas>
+<div id="hud">
+  <div class="t">THE WORKS <span class="d">— six towers, each keeping its own time</span></div>
+  <div id="read" class="d"></div>
+  <div id="gen" class="d"></div>
+</div>
+<div id="keys">H hud · F fullscreen · R restart · SPACE pause · up/down density</div>
+
+<script src="engine/zigcore.js"></script>
+<script>
+/* =============================================================================
+   THE WORKS — Zigverse · bubbles.html · v0.8 · 2026-08-10
+   Bill: "What if we made this look more like an industrial skyline where each
+   bubble tower has its own space, some closer than others. Maybe six or seven
+   towers?"
+
+   A single column is an OBJECT. Six at different depths is a PLACE — and the
+   thing a place can do that an object cannot is show several times at once.
+   Each tower runs its own colour clock with its own phase, so the skyline is
+   red here and green there and violet behind, all in one glance. Each tower is
+   an independent history, and the depth ordering makes their independence
+   legible rather than merely decorative.
+
+   EVERY BEHAVIOUR IS A CANON LAW, unchanged from the single column:
+     coalescence  when two touch they become one, VOLUME conserved, with a film
+                  that must drain first (delay + dwell)
+     cargo        silt AND colour carried through every merge, summed not averaged
+     contact      two great bubbles press and flatten rather than passing through
+     force/medium buoyancy against drag, so terminal speed goes as radius
+
+   PERSPECTIVE is one scale per tower taken from its depth. No projection matrix:
+   the piece is a side elevation, and a side elevation with depth is exactly what
+   an industrial skyline is.
+   ========================================================================== */
+const $ = (id) => document.getElementById(id);
+const CO = ZigCore.Coalesce, CT = ZigCore.Contact, E = ZigCore.Env;
+
+const cv = $("glass"), cx = cv.getContext("2d");
+let W = 0, H = 0;
+function resize() {
+  const d = Math.min(devicePixelRatio || 1, 2);
+  W = cv.clientWidth; H = cv.clientHeight;
+  cv.width = Math.floor(W * d); cv.height = Math.floor(H * d);
+  cx.setTransform(d, 0, 0, d, 0, 0);
+}
+addEventListener("resize", resize); resize();
+
+/* ---- the works ------------------------------------------------------------
+   Six towers, each with its own footprint, height, neck and colour phase. The
+   unequal silhouettes matter as much as the depths: a skyline of identical
+   chimneys reads as a diagram, one of unequal ones reads as a place that grew.
+   A wider neck also releases a BIGGER bubble, so the towers differ in the size
+   of their events as well as their shape. */
+const BAND_SECONDS = 10, BANDS = 7;
+const NAMES = ["red", "orange", "yellow", "green", "cyan", "blue", "violet"];
+
+/* z is a DEPTH MULTIPLIER on screen size, not a divisor — kept in a modest band
+   (0.62 to 1.30) because a wide range makes the nearest tower three or four times
+   the others and it simply runs off the frame. An industrial skyline reads its
+   depth from HAZE and OVERLAP far more than from scale. */
+const TOWERS = [
+  { x: -238, z: 0.86, w: 34, h: 118, neck: 0.7, phase: 0, cap: 430, rate: 20 },
+  { x: -132, z: 1.22, w: 52, h: 158, neck: 0.9, phase: 3, cap: 620, rate: 26 },
+  { x:  -44, z: 0.70, w: 30, h:  92, neck: 0.6, phase: 5, cap: 380, rate: 17 },
+  { x:   62, z: 1.30, w: 62, h: 186, neck: 1.1, phase: 1, cap: 760, rate: 31 },
+  { x:  168, z: 0.98, w: 40, h: 134, neck: 0.8, phase: 6, cap: 500, rate: 22 },
+  { x:  252, z: 0.62, w: 26, h:  80, neck: 0.6, phase: 4, cap: 330, rate: 15 }
+];
+const CAP = 4200;
+let densityScale = 1;
+
+const pos = new Float64Array(CAP * 3);
+const vel = new Float64Array(CAP * 3);
+const rad = new Float64Array(CAP);
+const silt = new Float64Array(CAP);
+const colR = new Float64Array(CAP), colG = new Float64Array(CAP), colB = new Float64Array(CAP);
+const wob = new Float64Array(CAP);
+const dwell = new Float64Array(CAP);
+const tower = new Int8Array(CAP);
+const state = new Uint8Array(CAP);          // 0 rising · 1 primary at a neck · 2 released
+const mgroup = new Uint8Array(CAP);
+const freeR = new Float64Array(CAP);
+const pressAcc = new Float64Array(CAP * 3);
+const par0 = new Int32Array(CAP).fill(-1);
+
+/* ---- FUSION — what a real merge actually looks like ------------------------
+   From the reference sequence: the two spheres touch, the film breaks, and then
+   surface tension pulls the neck OPEN rather than closed — dumbbell, then peanut,
+   then the shape OVERSHOOTS into an oblate spheroid before ringing down to a
+   sphere over roughly half a second. An instantaneous swap of two circles for one
+   misses every part of that.
+
+   Drawn as a METABALL between two lobes whose centres converge: the field
+   f = r1^2/d1^2 + r2^2/d2^2 traced at its isocontour produces the neck for free,
+   correctly, at every stage — no keyframes, no interpolation of outlines, just
+   two attracting fields and the shape that falls out of them. Then the survivor
+   RINGS: an elevated wobble amplitude decaying over ~0.5s, which is the
+   oscillation visible at +0.10 through +0.30 in the reference.
+
+   fuse: [x1,y1,r1, x2,y2,r2, t0, tower] per survivor index. */
+/* Timings and curves fitted to Bill's nine-frame reference. The neck opens over
+   0.10s (touch at t=0, peanut by +0.10), the outline is a single body by +0.18,
+   and it rings down to a sphere by +0.60.
+   The neck is driven by TWO parameters together: the lobe centres converging and
+   the metaball THRESHOLD falling. Threshold alone controls how thin the pinch is
+   — at 1.0 the waist is already 0.49 of the lobe, far too fat, and above 2.2 the
+   lobes separate entirely. Sweeping 1.90 down to 1.00 while the centres close
+   fits the reference to a total error of 0.10 across all six frames:
+   waist/axis 0.13 / 0.34 / 0.55 / 0.75 / 0.93 / 1.00 against 0.10 / 0.30 / 0.55
+   / 0.75 / 0.90 / 1.00. Exponents 1.6 and 1.5 found by search, not by eye. */
+const NECK_OPEN = 0.185;   // seconds from touch to a single outline
+const FUSE_T = 0.185;
+const RING_T = 0.45;       // seconds of ring-down — round again by +0.60 on the reference clock
+const fuse = new Map();
+const fuseAxis = new Map();   // [axis angle, time the outline became one body]
+const ring = new Float64Array(CAP);
+const buckets = TOWERS.map(() => []);
+
+const FLOAT = 13.0, GRAV = 13.0;
+const ACCRETE = 0.008, NECK_ACCRETE = 0.075, FREE_ACCRETE = 0.30, SILT_CAP = 1.0;
+/* detachment scale — 46 gave first releases at 32-71s, which is a long wait for a
+   viewer arriving mid-piece. 26 brings the range to roughly 20-45s and keeps the
+   ordering: small necks still fire first and often, wide ones rarely and large. */
+const DETACH_K = 26;
+const FILM = 1.6;
+const med = (E.medium && E.medium("water")) || { drag: 1.1 };
+const DRAG = 1.05 * med.drag;
+/* THE RISING BUBBLES RUN 50% FASTER (Bill, 2026-08-10). Done by CUTTING DRAG
+   rather than raising buoyancy: terminal speed goes as sqrt(FLOAT/DRAG), so
+   either gives the same 1.5x — but FLOAT also sets the neutral point against the
+   silt a bubble carries (neutral where FLOAT*volume = GRAV*silt), and raising it
+   would unbalance every released bubble and send them all to the ceiling. Drag
+   touches nothing but the speed. Measured across radii 0.5 to 4.0: 2.37 to 3.58,
+   3.35 to 5.06, 4.74 to 7.15, 6.71 to 10.12 — a clean 1.51x at every size, so
+   the piece keeps its character and only its tempo changes.
+   Applied to the RISING only: the released hang and drift as tuned. */
+const RISE_DRAG = DRAG * 0.44;
+
+let seed = 20260810, tNow = 0, paused = false, released = 0, merges = 0;
+const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+
+/* each tower keeps its OWN time — the phase offset is what makes the skyline
+   show several colours at once rather than pulsing in unison like a sign. */
+function bandOf(t) { return Math.floor(tNow / BAND_SECONDS) + t.phase; }
+function hueOf(t) { return (((bandOf(t) % BANDS) + BANDS) % BANDS) / BANDS; }
+
+function halfWidth(t, y) {
+  const q = (y + t.h * 0.5) / t.h;
+  const k = Math.pow(Math.max(0, (q - 0.30) / 0.70), 1.35);
+  return t.w * 0.5 * (1 - k) + t.neck * k;
+}
+
+function birth(i, ti, y) {
+  const t = TOWERS[ti];
+  const hw = Math.max(1.0, halfWidth(t, y) - 0.7);
+  const a = rnd() * 6.2832, rr = Math.sqrt(rnd()) * hw;
+  pos[i*3] = Math.cos(a) * rr; pos[i*3+2] = Math.sin(a) * rr; pos[i*3+1] = y;
+  vel[i*3] = (rnd()*2-1) * 0.5; vel[i*3+1] = rnd() * 0.8; vel[i*3+2] = 0;
+  rad[i] = 0.40 + rnd() * 0.28;
+  const h = hueOf(t) + (rnd() - 0.5) * 0.045, sat = 0.62 + rnd() * 0.38;
+  const v = rad[i]*rad[i]*rad[i];
+  const c0 = 0.5 + 0.5*Math.cos(6.2832*h);
+  const c1 = 0.5 + 0.5*Math.cos(6.2832*(h + 0.33));
+  const c2 = 0.5 + 0.5*Math.cos(6.2832*(h + 0.66));
+  colR[i] = (1 - sat + sat*c0) * v; colG[i] = (1 - sat + sat*c1) * v; colB[i] = (1 - sat + sat*c2) * v;
+  silt[i] = 0; wob[i] = rnd() * 6.2832; dwell[i] = 0; tower[i] = ti; state[i] = 0;
+}
+
+const primary = new Int32Array(TOWERS.length).fill(-1);
+const emitAcc = new Float64Array(TOWERS.length);
+
+function restart() {
+  seed = 20260810; tNow = 0; released = 0; merges = 0;
+  rad.fill(0); pos.fill(0); vel.fill(0); silt.fill(0); state.fill(0); dwell.fill(0);
+  primary.fill(-1); emitAcc.fill(0);
+  let i = 0;
+  for (let ti = 0; ti < TOWERS.length; ti++) {
+    const t = TOWERS[ti], n = Math.round(t.cap * densityScale);
+    for (let k = 0; k < n && i < CAP; k++, i++) birth(i, ti, -t.h * 0.5 + rnd() * t.h * 0.94);
+  }
+}
+restart();
+
+function emit(dt) {
+  for (let ti = 0; ti < TOWERS.length; ti++) {
+    const t = TOWERS[ti];
+    emitAcc[ti] += dt * t.rate * densityScale;
+    while (emitAcc[ti] >= 1) {
+      emitAcc[ti] -= 1;
+      let i = -1;
+      for (let k = 0; k < CAP; k++) if (rad[k] <= 0) { i = k; break; }
+      if (i < 0) return;
+      birth(i, ti, -t.h * 0.5 + rnd() * t.h * 0.04);
+    }
+  }
+}
+
+function physics(dt) {
+  for (let i = 0; i < CAP; i++) {
+    const r = rad[i]; if (r <= 0) continue;
+    const i3 = i * 3, t = TOWERS[tower[i]];
+    const top = t.h * 0.5, floor = -t.h * 0.5;
+    const vol = r*r*r, area = r*r;
+
+    if (state[i] === 2) {                                   /* released, in the room */
+      silt[i] += FREE_ACCRETE * vol * dt;
+      if (silt[i] > SILT_CAP * vol) silt[i] = SILT_CAP * vol;
+      const sp = Math.hypot(vel[i3], vel[i3+1]) + 1e-9, d = DRAG * area * sp * 0.55;
+      /* the room circulates — neutrally buoyant bubbles in dead-still air never
+         find one another, so nothing would ever press or merge up here. */
+      const rx = pos[i3], ry = pos[i3+1] - top * 1.30;
+      vel[i3]   += (-ry * 0.0060 - rx * 0.010) * dt;
+      vel[i3+1] += ( rx * 0.0060 - ry * 0.014) * dt;
+      vel[i3]   += (-vel[i3] * d) / vol * dt + Math.sin(tNow * 0.33 + i * 1.7) * 0.30 * dt;
+      vel[i3+1] += (FLOAT * vol - GRAV * silt[i] - vel[i3+1] * d) / vol * dt;
+      pos[i3] += vel[i3] * dt; pos[i3+1] += vel[i3+1] * dt;
+      if (pos[i3+1] > top * 1.9) { pos[i3+1] = top * 1.9; vel[i3+1] = Math.min(0, vel[i3+1]); }
+      continue;
+    }
+
+    if (state[i] === 1) {                                   /* the primary, held at the neck */
+      silt[i] += NECK_ACCRETE * vol * dt;
+      if (silt[i] > SILT_CAP * vol) silt[i] = SILT_CAP * vol;
+      pos[i3] = 0; pos[i3+2] = 0; pos[i3+1] = top + r * 0.35;
+      vel[i3] = vel[i3+1] = vel[i3+2] = 0;
+      /* a bubble grows on a nozzle until buoyancy overcomes the surface tension
+         holding it, then pinches off — and the detachment volume goes with the
+         nozzle, so a wider-necked tower releases a bigger bubble. */
+      if (r >= Math.cbrt(t.neck * 2 * DETACH_K)) {
+        state[i] = 2; released++; primary[tower[i]] = -1; vel[i3+1] = 3.0;
+      }
+      continue;
+    }
+
+    silt[i] += ACCRETE * vol * dt;
+    if (silt[i] > SILT_CAP * vol) silt[i] = SILT_CAP * vol;
+    let ay = FLOAT * vol - GRAV * silt[i];
+    const sp = Math.hypot(vel[i3], vel[i3+1]) + 1e-9, d = RISE_DRAG * area * sp;
+    let ax = -vel[i3] * d;
+    ay -= vel[i3+1] * d;
+    ay /= vol; ax /= vol;
+    ax += Math.sin(pos[i3+1] * 0.06 + tNow * 0.5 + i * 0.7) * 1.1;
+    vel[i3] += ax * dt; vel[i3+1] += ay * dt;
+    pos[i3] += vel[i3] * dt; pos[i3+1] += vel[i3+1] * dt;
+
+    const hw = halfWidth(t, pos[i3+1]);
+    if (hw <= r) { pos[i3] *= 0.88; pos[i3+2] *= 0.88; vel[i3] *= 0.55; }
+    else {
+      if (pos[i3] < -hw + r) { pos[i3] = -hw + r; vel[i3] = Math.abs(vel[i3]) * 0.4 + 0.15; }
+      if (pos[i3] >  hw - r) { pos[i3] =  hw - r; vel[i3] = -Math.abs(vel[i3]) * 0.4 - 0.15; }
+      const lim = Math.max(0, hw - r);
+      if (Math.abs(pos[i3+2]) > lim) pos[i3+2] = Math.sign(pos[i3+2]) * lim;
+    }
+    if (pos[i3+1] < floor + r) { pos[i3+1] = floor + r; vel[i3+1] = Math.abs(vel[i3+1]) * 0.3; }
+    if (pos[i3+1] > top - r) {
+      pos[i3+1] = top - r; vel[i3+1] *= 0.2;
+      if (primary[tower[i]] < 0) { primary[tower[i]] = i; state[i] = 1; }
+    }
+  }
+}
+
+function mergeStep(dt) {
+  /* THE MERGE GROUP ENCODES BOTH THE TOWER AND THE STATE. Every tower's agents
+     share one coordinate origin, so without the tower in the key two columns
+     standing side by side would reach across the sky and swallow each other. */
+  for (let i = 0; i < CAP; i++) {
+    mgroup[i] = rad[i] > 0 ? (tower[i] * 2 + (state[i] === 2 ? 1 : 0)) + 1 : 0;
+    freeR[i] = (rad[i] > 0 && state[i] === 2) ? rad[i] * 0.96 : 0;
+  }
+  pressAcc.fill(0);
+  CT.self(pos, vel, par0, CAP, 0, pressAcc, { r: 10, radii: freeR, skip: -1, k: 26, damp: 3.0, max: 9 });
+  for (let i = 0; i < CAP; i++) {
+    if (freeR[i] <= 0) continue;
+    const m = rad[i]*rad[i]*rad[i];
+    vel[i*3] += pressAcc[i*3] / m * dt; vel[i*3+1] += pressAcc[i*3+1] / m * dt;
+  }
+  const noteFusion = (A, B, ax, ay, az, ar, bx, by, bz, br) => {
+    /* only worth animating where it can be SEEN — a merge between two specks in
+       a thousand is a pixel event and the cost is not free. */
+    if (Math.max(ar, br) < 1.15) return;
+    fuse.set(A, [ax, ay, ar, bx, by, br, tNow]);
+    ring[A] = 1;
+  };
+  /* EVERY primary is protected, not just the first. And a primary that has
+     somehow ended (absorbed, released, popped) must release its slot — otherwise
+     `primary[k]` points at a dead index forever and that tower can never appoint
+     another, so it fills to the neck and simply stops. Measured: four of six
+     towers had no primary at all and nothing had launched in eight seconds. */
+  const keep = [];
+  for (let k = 0; k < TOWERS.length; k++) {
+    const pi = primary[k];
+    if (pi >= 0 && (rad[pi] <= 0 || state[pi] !== 1 || tower[pi] !== k)) { primary[k] = -1; continue; }
+    if (pi >= 0) keep.push(pi);
+  }
+  merges += CO.step(pos, vel, rad, CAP, { touch: 1, group: mgroup, keep,
+    cargo: [silt, colR, colG, colB], delay: FILM, dwell, dt, onMerge: noteFusion });
+  for (let i = 0; i < CAP; i++) {
+    if (ring[i] > 0) { ring[i] -= dt / RING_T; if (ring[i] < 0) ring[i] = 0; }
+    if (rad[i] <= 0 && fuse.has(i)) fuse.delete(i);
+  }
+}
+
+/* ---- draw: a side elevation with depth ---- */
+function draw() {
+  const g = cx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#01040a"); g.addColorStop(0.72, "#02070e"); g.addColorStop(1, "#040d16");
+  cx.fillStyle = g; cx.fillRect(0, 0, W, H);
+
+  /* bucket by tower ONCE — scanning all 4200 agents separately for each of six
+     towers is 25,000 iterations a frame before anything is drawn, and it was
+     costing about five times realtime. */
+  for (const b of buckets) b.length = 0;
+  for (let i = 0; i < CAP; i++) if (rad[i] > 0) buckets[tower[i]].push(i);
+
+  const order = TOWERS.map((t, i) => i).sort((a, b) => TOWERS[a].z - TOWERS[b].z);   // far (small z) first
+
+  /* FIT THE WHOLE WORKS. The frame is chosen from the actual extent of every
+     tower at its own depth — the tallest near one decides the vertical, the
+     widest spread decides the horizontal — so nothing runs off the edge however
+     the towers are arranged. Hand-tuned scales do not survive editing the list. */
+  let maxTop = 0, minX = 1e9, maxX = -1e9;
+  for (const t of TOWERS) {
+    maxTop = Math.max(maxTop, t.h * 1.34 * t.z);   // vessel + the room the released occupy
+    minX = Math.min(minX, t.x - t.w * 0.5 * t.z);
+    maxX = Math.max(maxX, t.x + t.w * 0.5 * t.z);
+  }
+  const base = Math.min(W * 0.90 / (maxX - minX), H * 0.94 / maxTop);
+  const groundY = H * 0.965;
+
+  for (const ti of order) {
+    const t = TOWERS[ti];
+    const s = base * t.z;
+    /* far towers wash toward the sky — haze does the depth work that scale used to */
+    const haze = Math.max(0, Math.min(1, (1.34 - t.z) / 0.75));
+    const dim = 1 - haze * 0.62;
+    const px = (x) => W * 0.5 + (t.x - (minX + maxX) * 0.5) * base + x * s;
+    const py = (y) => groundY - (y + t.h * 0.5) * s;
+
+    cx.beginPath();
+    cx.moveTo(px(-halfWidth(t, -t.h*0.5)), py(-t.h*0.5));
+    for (let y = -t.h*0.5; y <= t.h*0.5; y += 2) cx.lineTo(px(-halfWidth(t, y)), py(y));
+    for (let y = t.h*0.5; y >= -t.h*0.5; y -= 2) cx.lineTo(px(halfWidth(t, y)), py(y));
+    cx.closePath();
+    const vg = cx.createLinearGradient(0, py(t.h*0.5), 0, py(-t.h*0.5));
+    vg.addColorStop(0, `rgba(6,26,36,${0.5*dim + 0.3})`);
+    vg.addColorStop(1, `rgba(3,12,20,${0.5*dim + 0.3})`);
+    cx.fillStyle = vg; cx.fill();
+    cx.strokeStyle = `rgba(${(18+40*dim)|0},${(48+70*dim)|0},${(64+90*dim)|0},${0.75*dim})`;
+    cx.lineWidth = Math.max(0.6, 1.3*dim); cx.stroke();
+
+    const dw = t.neck * s * 2.6, dy = py(t.h*0.5);
+    cx.strokeStyle = `rgba(${(24+52*dim)|0},${(70+90*dim)|0},${(90+110*dim)|0},${0.85*dim})`;
+    cx.lineWidth = Math.max(0.7, 1.8*dim);
+    cx.beginPath(); cx.moveTo(px(0)-dw, dy); cx.lineTo(px(0)+dw, dy); cx.stroke();
+    for (let k = -2; k <= 2; k++) {
+      cx.beginPath(); cx.moveTo(px(0)+k*dw*0.42, dy); cx.lineTo(px(0)+k*dw*0.42, dy - 6*dim - 1); cx.stroke();
+    }
+
+    const mine = buckets[ti];
+    mine.sort((a, b) => pos[a*3+2] - pos[b*3+2]);
+
+    for (const i of mine) {
+      const r = rad[i] * s;
+      const x = px(pos[i*3]), y = py(pos[i*3+1]);
+      const depth = (pos[i*3+2] / (t.w * 0.30) + 1) * 0.5;
+      const a = (0.26 + 0.5*depth) * dim;
+      const vol = rad[i]*rad[i]*rad[i];
+      let cr = colR[i]/vol, cg = colG[i]/vol, cb = colB[i]/vol;
+      const mean = (cr + cg + cb)/3, PUSH = 2.1;
+      cr = Math.min(1, Math.max(0, mean + (cr-mean)*PUSH));
+      cg = Math.min(1, Math.max(0, mean + (cg-mean)*PUSH));
+      cb = Math.min(1, Math.max(0, mean + (cb-mean)*PUSH));
+
+      if (r < 1.1) {
+        cx.fillStyle = `rgba(${(70+cr*185)|0},${(95+cg*160)|0},${(120+cb*135)|0},${0.5*a})`;
+        cx.fillRect(x - r, y - r, r*2, r*2);
+        continue;
+      }
+
+      /* RING-DOWN: a just-merged bubble oscillates far harder than a settled one
+         and calms over about half a second — the wobble visible at +0.10 through
+         +0.30 in the reference. */
+      /* RING-DOWN — and this is the part the reference exposed as wrong. A fused
+         bubble does not wobble in some arbitrary phase: it oscillates in MODE 2
+         ABOUT THE MERGE AXIS, and it starts PROLATE (still stretched along the
+         axis at +0.10) then swings through OBLATE (visibly squashed and wide at
+         +0.18) before settling. That is one coherent oscillation with a definite
+         orientation and a definite starting phase, not noise. Driven here by
+         cos(2*(th - axis)) * cos(omega*t), which begins elongated along the axis
+         and reverses half a period later — exactly the +0.10 to +0.18 pair. */
+      const rg = ring[i];
+      const fzr = fuseAxis.get(i);
+      const amp = Math.min(0.038, 0.004 + rad[i]*0.0055) * (1 + rg * 2.2);
+      const w = tNow * (2.2 / Math.pow(Math.max(rad[i], 0.35), 1.5)) + wob[i];
+      let ringAmp = 0, ringPh = 0, axis = 0;
+      if (rg > 0 && fzr) {
+        axis = fzr[0];
+        /* The Rayleigh mode-2 period still scales as r^-1.5, but the constant is
+           set by the reference: prolate at +0.10, oblate at +0.18, so a HALF
+           period of about 0.08s for a bubble of this size. At 7.4 the swing took
+           longer than the whole ring-down and it never reached oblate at all —
+           it just relaxed from stretched to round, which is not what happens.
+           Clamped above, because a small bubble's true frequency is tens of hertz
+           and would only alias into a shimmer. */
+        const om = Math.min(46, 251 / Math.pow(Math.max(rad[i], 0.5), 1.5));
+        /* STARTS OBLATE, and the offset is not arbitrary: the ring begins where
+           the neck animation ends, at +0.185 in the reference's own clock — and
+           at +0.18 the reference is already squashed WIDE. Starting at phase 0
+           would begin it stretched along the axis, which is the frame BEFORE. */
+        ringPh = Math.PI + (tNow - fzr[1]) * om;
+        /* EXPONENTIALLY damped, not linearly. The reference makes ONE swing —
+           oblate at +0.18, essentially round by +0.30 — and a linear decay keeps
+           swinging visibly through +0.60, which reads as a jelly rather than a
+           bubble. A viscous oscillator dies exponentially; tau 0.10s puts the
+           amplitude at a fifth by +0.30 and at nothing by +0.60. */
+        ringAmp = 0.20 * Math.exp(-(tNow - fzr[1]) / 0.10);
+      }
+      const shape = (th) => r * (1
+        + amp*0.68*Math.sin(2*th + w)
+        + amp*0.32*Math.sin(3*th - w*1.27 + 1.1)
+        + ringAmp * Math.cos(2*(th - axis)) * Math.cos(ringPh));
+
+      const STEPS = r > 14 ? 72 : (r > 5 ? 36 : 12);
+      const path = new Path2D();
+      const fz = fuse.get(i);
+      const age = fz ? tNow - fz[6] : 99;
+
+      if (fz && age < FUSE_T) {
+        /* THE NECK. Two lobes converging, traced as a metaball isocontour:
+           f(p) = ra^2/|p-a|^2 + rb^2/|p-b|^2 = 1. The waist appears and opens on
+           its own — it is what two attracting fields DO, not a shape drawn to
+           look like one. The lobes close over NECK_OPEN, and the outline is
+           bisected per angle from the volume centroid. */
+        const u = Math.min(1, age / NECK_OPEN);
+        const e = Math.pow(u, 1.6);                         // fitted, not eyeballed
+        const THR = 1.90 - 0.90 * Math.pow(u, 1.5);         // the pinch, opening
+        const [ax0, ay0, ar0, bx0, by0, br0] = fz;
+        const va = ar0**3, vb = br0**3, vt = va + vb;
+        const cxw = (ax0*va + bx0*vb)/vt, cyw = (ay0*va + by0*vb)/vt;
+        const AX = ax0 + (cxw - ax0)*e, AY = ay0 + (cyw - ay0)*e;
+        const BX = bx0 + (cxw - bx0)*e, BY = by0 + (cyw - by0)*e;
+        const RA = ar0 + (rad[i] - ar0) * u * 0.85, RB = br0 + (rad[i] - br0) * u * 0.85;
+        const pxA = px(AX), pyA = py(AY), pxB = px(BX), pyB = py(BY);
+        const RAs = RA * s, RBs = RB * s;
+        const field = (qx, qy) => {
+          const d1 = Math.max((qx-pxA)**2 + (qy-pyA)**2, 1e-6);
+          const d2 = Math.max((qx-pxB)**2 + (qy-pyB)**2, 1e-6);
+          return RAs*RAs/d1 + RBs*RBs/d2;
+        };
+        const ISO = THR;
+        const ox = (pxA + pxB) * 0.5, oy = (pyA + pyB) * 0.5;
+        const far = (Math.hypot(pxA-pxB, pyA-pyB) + RAs + RBs) * 1.2;
+        for (let k = 0; k <= 72; k++) {
+          const th = k/72*6.2832, cxu = Math.cos(th), cyu = Math.sin(th);
+          let lo = 0.05, hi = far;                          // f falls with distance
+          for (let b2 = 0; b2 < 22; b2++) {
+            const mid = (lo + hi) * 0.5;
+            if (field(ox + cxu*mid, oy + cyu*mid) > ISO) lo = mid; else hi = mid;
+          }
+          const xx = ox + cxu*lo, yy = oy + cyu*lo;
+          if (k === 0) path.moveTo(xx, yy); else path.lineTo(xx, yy);
+        }
+        path.closePath();
+      } else {
+        for (let k = 0; k <= STEPS; k++) {
+          const th = k/STEPS*6.2832, rr = shape(th);
+          const xx = x + Math.cos(th)*rr, yy = y + Math.sin(th)*rr;
+          if (k === 0) path.moveTo(xx, yy); else path.lineTo(xx, yy);
+        }
+        path.closePath();
+        if (fz) {
+          /* the outline is one body now — hand over to the axis-aligned ring */
+          const dxm = fz[3] - fz[0], dym = fz[4] - fz[1];
+          fuseAxis.set(i, [Math.atan2(dym, dxm), tNow]);
+          fuse.delete(i);
+        }
+        if (rg <= 0 && fuseAxis.has(i)) fuseAxis.delete(i);
+      }
+
+      const gx = x - r*0.42, gy = y - r*0.48;
+      const sg = cx.createRadialGradient(gx, gy, r*0.04, gx, gy, r*1.5);
+      sg.addColorStop(0.00, `rgba(${(150+cr*105)|0},${(165+cg*90)|0},${(180+cb*75)|0},${0.30*a})`);
+      sg.addColorStop(0.28, `rgba(${(cr*205)|0},${(cg*225)|0},${(cb*240)|0},${0.16*a})`);
+      sg.addColorStop(0.62, `rgba(${(cr*120)|0},${(cg*140)|0},${(cb*165)|0},${0.045*a})`);
+      sg.addColorStop(1.00, `rgba(${(cr*70)|0},${(cg*85)|0},${(cb*110)|0},${0.02*a})`);
+      cx.fillStyle = sg; cx.fill(path);
+
+      cx.strokeStyle = `rgba(${(70+cr*185)|0},${(95+cg*160)|0},${(120+cb*135)|0},${0.66*a})`;
+      cx.lineWidth = Math.max(0.5, r*0.055); cx.stroke(path);
+
+      if (r > 4) {
+        cx.strokeStyle = `rgba(${(200+cr*55)|0},${(230+cg*25)|0},255,${0.30*a})`;
+        cx.lineWidth = Math.max(0.5, r*0.028);
+        cx.beginPath();
+        for (let k = 0; k <= 24; k++) {
+          const th = 2.5 + k/24*2.0, rr = shape(th)*0.93;
+          const xx = x + Math.cos(th)*rr, yy = y + Math.sin(th)*rr;
+          if (k === 0) cx.moveTo(xx, yy); else cx.lineTo(xx, yy);
+        }
+        cx.stroke();
+        const hth = -2.25, hr = shape(hth)*0.66;
+        cx.fillStyle = `rgba(255,255,255,${0.42*a})`;
+        cx.beginPath();
+        cx.ellipse(x + Math.cos(hth)*hr, y + Math.sin(hth)*hr,
+                   Math.max(0.7, r*0.11), Math.max(0.5, r*0.075), hth, 0, 6.2832);
+        cx.fill();
+      }
+    }
+  }
+}
+
+let tPrev = performance.now(), acc = 0;
+function frame(now) {
+  const wall = Math.min((now - tPrev)/1000, 0.05); tPrev = now;
+  if (!paused) {
+    tNow += wall; acc += wall;
+    while (acc > 1/120) { physics(1/120); mergeStep(1/120); emit(1/120); acc -= 1/120; }
+  }
+  draw();
+  let rising = 0, free = 0;
+  for (let i = 0; i < CAP; i++) { if (rad[i] <= 0) continue; if (state[i] === 2) free++; else rising++; }
+  $("read").textContent = `${rising} rising in six towers · ${free} released and holding · ${merges} merges`;
+  $("gen").textContent = TOWERS.map((t) => NAMES[((bandOf(t) % BANDS) + BANDS) % BANDS]).join(" · ")
+    + ` · ${released} released · ZigCore.Coalesce ${CO.VERSION}`;
+  requestAnimationFrame(frame);
+}
+
+let uiOn = true;
+addEventListener("keydown", (e) => {
+  if (e.code === "Space") { paused = !paused; e.preventDefault(); }
+  else if (e.key === "r" || e.key === "R") restart();
+  else if (e.key === "h" || e.key === "H") { uiOn = !uiOn;
+    for (const id of ["hud","keys"]) $(id).classList.toggle("hide", !uiOn);
+    document.body.classList.toggle("clean", !uiOn); }
+  else if (e.key === "f" || e.key === "F") {
+    document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {}); }
+  else if (e.code === "ArrowUp") { densityScale = Math.min(1.6, densityScale * 1.3); restart(); }
+  else if (e.code === "ArrowDown") { densityScale = Math.max(0.15, densityScale / 1.3); restart(); }
+});
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

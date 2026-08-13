@@ -146,3 +146,53 @@ if (rm) {
     ? "PASS — the bee varying is declared for every consumer (BEE and NOTEFLASH)"
     : "FAIL — the bee varying is gated on BEE alone but NOTEFLASH also reads it");
 }
+
+/* ---- CROSS-MODULE CONSTANTS -----------------------------------------------
+   Each WGSL block is compiled as a SEPARATE shader module. A const declared in
+   one does not exist in the others, however adjacent they look in this file.
+   nvidia's compiler let a dangling reference through; **Metal refused it**, the
+   render pipeline failed to build, and the result was a black canvas with a
+   healthy HUD at sixty fps — found on a MacBook Air, on a backend this engine
+   had never been run on. Every module must declare what it uses. */
+{
+  const mods = [...src.matchAll(/const ([A-Z_0-9]+_WGSL) = (?:COMMON \+ )?(?:!PHASE \? "" : )?`([\s\S]*?)`;/g)];
+  const skip = /^(GX|GY|GZ|CAP|MAX|PI|WLIFE)$/;
+  let bad = 0;
+  for (const m of mods) {
+    const name = m[1];
+    const body = m[2].replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    const used = new Set([...body.matchAll(/\b([A-Z][A-Z_0-9]{3,})\b/g)].map((x) => x[1]));
+    for (const u of used) {
+      if (skip.test(u)) continue;
+      if (!/_(SIZE|BEE|FRAC|CEIL|TOTAL|REST|BEND|NSPAN|SPANS|DAMP|K|R|N)$/.test(u)) continue;
+      if (!new RegExp("const\\s+" + u + "\\s*:").test(body)) {
+        console.log(`   ${name} uses ${u} without declaring it`);
+        bad++;
+      }
+    }
+  }
+  console.log("\nWGSL modules checked for cross-module constants:", mods.length);
+  console.log(bad ? "FAIL — a module references a constant from another module; the pipeline will fail and the canvas go BLACK"
+                  : "PASS — every module declares the constants it uses");
+}
+
+/* ---- MUTABLE LOCAL ARRAYS IN VERTEX STAGES --------------------------------
+   Metal gives a vertex function a small stack, and a `var` array is a mutable
+   local that cannot live in registers — six vec2f was enough to overflow it and
+   kill the render pipeline. nvidia kept it in registers and never complained.
+   Compute the values instead. */
+{
+  const fns = [...src.matchAll(/fn ([a-zA-Z_]+Vs)\(/g)];
+  let bad = 0;
+  for (const f of fns) {
+    const end = src.indexOf("\nfn ", f.index + 5);
+    const body = src.slice(f.index, end < 0 ? f.index + 4000 : end);
+    /* `var o: WOut;` is a struct, not an array — only an ARRAY spills. Match the
+       assignment form and the typed form, both requiring the word array. */
+    const arrs = [...body.matchAll(/var\s+\w+\s*(?::\s*array<|=\s*array<)/g)];
+    if (arrs.length) { console.log(`   ${f[1]} declares ${arrs.length} mutable local array(s)`); bad++; }
+  }
+  console.log("\nvertex stages checked for stack-spilling arrays:", fns.length);
+  console.log(bad ? "FAIL — a vertex stage declares a mutable local array; Metal will refuse it"
+                  : "PASS — no vertex stage declares a mutable local array");
+}

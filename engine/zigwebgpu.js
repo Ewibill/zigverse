@@ -27,7 +27,7 @@
 (function (global) {
   "use strict";
   const ZigWebGPU = global.ZigWebGPU || (global.ZigWebGPU = {});
-  ZigWebGPU.VERSION = "0.43.4";   // 0.43.4: the BEE varying is declared for EVERY consumer (BEE or NOTEFLASH) — the flash reads inp.bee, so turning the bee OFF while flash was ON left the fragment stage referencing an undeclared varying; bee-on worked and bee-off went black · 0.43.3:   // 0.43.3: the BEE varying inserts ABOVE the near line, never between it and the closing brace — MATERIAL anchors on "near ... };" as ONE string, so anything placed BETWEEN them destroys that anchor whichever slot it claims; verified order-independent both ways · 0.43.2:   // 0.43.2: the BEE varying is SPLICED at @location(11) instead of written into BirdOut — MATERIAL appends its own @location(10) snw by anchoring on the struct's last line + closing brace, so editing that text both collided on slot 10 and broke the anchor (black canvas) · 0.43.1:   // 0.43.1: the NOTE FLASH is THE BEE ALONE (a bee varying on BirdOut gates it) — lighting every shard's cup made the whole field answer the note and lost her in it; one lit interior among a thousand dark ones is the point · 0.43: NOTE FLASH (opts.noteFlash — the two faces answer a note DIFFERENTLY: the cupped INTERIOR takes the pitch-class hue while the OUTSIDE takes one fixed colour, so a turning field alternates a constant skin with an interior that differs for every pitch; render6 declared LAST in the View struct so nothing already hand-indexed shifts; byte-identical when absent) · 0.42: THE BEE FLASHES THE NOTE (render5.z/w)/12 mapping MELODIC STRATA already uses, so a C is the same colour as a band or as her flash; her lantern is also 2.7x larger because her flash is an EVENT not one firefly among thousands; byte-identical at render5.w = 0) · 0.41: THE BEE (agent #0 drawn at 1.45x and swelling with charisma — the SAME letterform as every shard, only larger and self-lit, so the field turning toward her reads as recognition rather than alarm; never hidden by UNSEEN) · 0.40: UNSEEN (opts.unseen — a fraction of the flock fully PRESENT to the physics and not DRAWN. The crowd and the eye want opposite things: contagion and murmur need numbers, legibility needs room. Render-side splice only, so hidden agents still flock, collide, carry contagion and count as neighbours — the shards you see are moved by neighbours you cannot; byte-identical at 0) · 0.39: ONSET (opts.onset — agitation may only RISE over a time constant instead of snapping to full in one frame; the max() gave contagion an instant attack and a slow release, i.e. a popcorn envelope, and agit drives vmax so a single-frame spike made individual shards DART. Brackets the contagion line rather than replacing it, since VOICE claims that text. Performer strikes stay instant; byte-identical at 0) · 0.38: CONTACT (opts.contact {r,k,damp} — matter that OCCUPIES SPACE, reusing the flock's own spatial grid; separation is a preference and can be overpowered, this cannot; SCATTER rewritten as GATHER so each thread keeps its own half of every pair; parity-checked against ZigCore.Contact.self by tools/parity_contact.html; byte-identical when absent) · 0.37: STRUCTURE (opts.structure — matter that is JOINED: spring + damping + momentum-conserving bend, SCATTER rewritten as GATHER so a compute thread only writes its own slot; chains only; parity-checked against ZigCore.Structure.accel by tools/parity_structure.html; byte-identical when absent) ·   // 0.34: INTERIOR BUFF (back-face relief ×0.35 + specular broadened/dimmed + gem glints ×0.5 on !ff — the mesh facet seams stop catching as hard straight lines on the back; front keeps full crisp relief; byte-identical on the front face) · 0.33: GEM FACE (opts.gemFace — "inside" = the SEASHELL: matte material on the outside, gem nacre in the cupped interior; "outside"/"both" too; guards the gem's c=gc by front_facing; byte-identical at "both") · 0.32: MELODIC STRATA (View.noteBands[6] · view[84..107] — each EWI note blooms a band of light at its pitch-height in its pitch-class colour, fading over time; the melody written onto the body's vertical axis; driven by ZC.NoteField; zero when silent) · 0.31: SILHOUETTE RIM (live V.render5.x/y — a fresnel edge re-draws every letter's outline against the void, legible under any material on either face; face-corrected so the concave back outlines too; zero at render5.x=0; the reusable legibility capability all species inherit) · 0.30: GEM MATERIALS (opts.gem — refraction + dispersion fire + fresnel sky-reflection + facet flash + sparkle, sampling the analytic sky; byte-identical off) · 0.29: FABRIC UNDERSIDE (opts.backFabric — 20 textiles: weave pattern + sheen model + colour lining the concave back; byte-identical off) · 0.28: VELVET UNDERSIDE (opts.backVelvet — a different fabric skin on the back face: deep matte + grazing sheen; byte-identical off) · 0.27: MEMORY UNDERSIDE (opts.memoryBack — the back face glows with a lagging ghost of the recent phrase; the 2nd performance surface; render4.y/z; byte-identical off) · 0.26: CHIAROSCURO (opts.chiaro — back off ambient/fill so only the light-facing side shows, unlit → black; byte-identical at 0) · 0.25: WEB — connective filaments between neighbouring agents (grid-driven K-NN compute + instanced thread render; breath strings the web; byte-identical when opts.web absent) · 0.24: GRAIN THROUGH COLOUR — the skin's grain corrugates the spectrum too, so surface texture survives at full ink (byte-identical without material/spectrum) · 0.22: BOUNDARY · 0.23: COMPOSE — spectrum TINTS the material body (visible on pale skins; ink I/K = solid↔rainbow amount over the pigment) · 0.19: MEDIUM · 0.20: FORCES · 0.21: CURRENT (opts.boundary {shape,r,k,lo?,hi?} — the world's SHAPE: a soft cylinder/sphere that holds matter inside a volume; restoring accel before integrate, composes with all; byte-identical when absent) // 0.35: BOUNDARY AXIS — cylinder law holds along any free axis (capsule = horizontal cigar); byte-identical for axis "y" · 0.35.1: GYRE AXIS — current circulates around any axis (roll a horizontal cigar broadside); byte-identical for gyre axis "y" · 0.36: ELLIPSOID boundary (lens — squashed sphere, per-axis radii; the wide breathing disc); byte-identical for sphere/cylinder
+  ZigWebGPU.VERSION = "0.44.2";   // 0.44.2: two more Metal failures the LANTERN module carried — its truncated View struct stopped at render4 while the note-flash block read render5, and its corner table was a mutable local array that overflowed Metal's small vertex stack. nvidia tolerated both · 0.44.1:   // 0.44.1: the LANTERN module referenced BEE_SIZE, a constant declared only in the BIRD module — nvidia tolerated the dangling reference, Metal refused it and the whole render pipeline failed to build (black canvas, healthy HUD, 60fps). Each WGSL block is a separate module and must declare what it uses · 0.44:   // 0.44: SEPCAP (opts.sepCap — the overlap force is unbounded and SUMS over neighbours, so a shard buried in twenty others was kicked 10-50x harder than anything else in the world; per-pair and total ceilings put it back in the same regime; byte-identical when absent) · 0.43.4:   // 0.43.4: the BEE varying is declared for EVERY consumer (BEE or NOTEFLASH) — the flash reads inp.bee, so turning the bee OFF while flash was ON left the fragment stage referencing an undeclared varying; bee-on worked and bee-off went black · 0.43.3:   // 0.43.3: the BEE varying inserts ABOVE the near line, never between it and the closing brace — MATERIAL anchors on "near ... };" as ONE string, so anything placed BETWEEN them destroys that anchor whichever slot it claims; verified order-independent both ways · 0.43.2:   // 0.43.2: the BEE varying is SPLICED at @location(11) instead of written into BirdOut — MATERIAL appends its own @location(10) snw by anchoring on the struct's last line + closing brace, so editing that text both collided on slot 10 and broke the anchor (black canvas) · 0.43.1:   // 0.43.1: the NOTE FLASH is THE BEE ALONE (a bee varying on BirdOut gates it) — lighting every shard's cup made the whole field answer the note and lost her in it; one lit interior among a thousand dark ones is the point · 0.43: NOTE FLASH (opts.noteFlash — the two faces answer a note DIFFERENTLY: the cupped INTERIOR takes the pitch-class hue while the OUTSIDE takes one fixed colour, so a turning field alternates a constant skin with an interior that differs for every pitch; render6 declared LAST in the View struct so nothing already hand-indexed shifts; byte-identical when absent) · 0.42: THE BEE FLASHES THE NOTE (render5.z/w)/12 mapping MELODIC STRATA already uses, so a C is the same colour as a band or as her flash; her lantern is also 2.7x larger because her flash is an EVENT not one firefly among thousands; byte-identical at render5.w = 0) · 0.41: THE BEE (agent #0 drawn at 1.45x and swelling with charisma — the SAME letterform as every shard, only larger and self-lit, so the field turning toward her reads as recognition rather than alarm; never hidden by UNSEEN) · 0.40: UNSEEN (opts.unseen — a fraction of the flock fully PRESENT to the physics and not DRAWN. The crowd and the eye want opposite things: contagion and murmur need numbers, legibility needs room. Render-side splice only, so hidden agents still flock, collide, carry contagion and count as neighbours — the shards you see are moved by neighbours you cannot; byte-identical at 0) · 0.39: ONSET (opts.onset — agitation may only RISE over a time constant instead of snapping to full in one frame; the max() gave contagion an instant attack and a slow release, i.e. a popcorn envelope, and agit drives vmax so a single-frame spike made individual shards DART. Brackets the contagion line rather than replacing it, since VOICE claims that text. Performer strikes stay instant; byte-identical at 0) · 0.38: CONTACT (opts.contact {r,k,damp} — matter that OCCUPIES SPACE, reusing the flock's own spatial grid; separation is a preference and can be overpowered, this cannot; SCATTER rewritten as GATHER so each thread keeps its own half of every pair; parity-checked against ZigCore.Contact.self by tools/parity_contact.html; byte-identical when absent) · 0.37: STRUCTURE (opts.structure — matter that is JOINED: spring + damping + momentum-conserving bend, SCATTER rewritten as GATHER so a compute thread only writes its own slot; chains only; parity-checked against ZigCore.Structure.accel by tools/parity_structure.html; byte-identical when absent) ·   // 0.34: INTERIOR BUFF (back-face relief ×0.35 + specular broadened/dimmed + gem glints ×0.5 on !ff — the mesh facet seams stop catching as hard straight lines on the back; front keeps full crisp relief; byte-identical on the front face) · 0.33: GEM FACE (opts.gemFace — "inside" = the SEASHELL: matte material on the outside, gem nacre in the cupped interior; "outside"/"both" too; guards the gem's c=gc by front_facing; byte-identical at "both") · 0.32: MELODIC STRATA (View.noteBands[6] · view[84..107] — each EWI note blooms a band of light at its pitch-height in its pitch-class colour, fading over time; the melody written onto the body's vertical axis; driven by ZC.NoteField; zero when silent) · 0.31: SILHOUETTE RIM (live V.render5.x/y — a fresnel edge re-draws every letter's outline against the void, legible under any material on either face; face-corrected so the concave back outlines too; zero at render5.x=0; the reusable legibility capability all species inherit) · 0.30: GEM MATERIALS (opts.gem — refraction + dispersion fire + fresnel sky-reflection + facet flash + sparkle, sampling the analytic sky; byte-identical off) · 0.29: FABRIC UNDERSIDE (opts.backFabric — 20 textiles: weave pattern + sheen model + colour lining the concave back; byte-identical off) · 0.28: VELVET UNDERSIDE (opts.backVelvet — a different fabric skin on the back face: deep matte + grazing sheen; byte-identical off) · 0.27: MEMORY UNDERSIDE (opts.memoryBack — the back face glows with a lagging ghost of the recent phrase; the 2nd performance surface; render4.y/z; byte-identical off) · 0.26: CHIAROSCURO (opts.chiaro — back off ambient/fill so only the light-facing side shows, unlit → black; byte-identical at 0) · 0.25: WEB — connective filaments between neighbouring agents (grid-driven K-NN compute + instanced thread render; breath strings the web; byte-identical when opts.web absent) · 0.24: GRAIN THROUGH COLOUR — the skin's grain corrugates the spectrum too, so surface texture survives at full ink (byte-identical without material/spectrum) · 0.22: BOUNDARY · 0.23: COMPOSE — spectrum TINTS the material body (visible on pale skins; ink I/K = solid↔rainbow amount over the pigment) · 0.19: MEDIUM · 0.20: FORCES · 0.21: CURRENT (opts.boundary {shape,r,k,lo?,hi?} — the world's SHAPE: a soft cylinder/sphere that holds matter inside a volume; restoring accel before integrate, composes with all; byte-identical when absent) // 0.35: BOUNDARY AXIS — cylinder law holds along any free axis (capsule = horizontal cigar); byte-identical for axis "y" · 0.35.1: GYRE AXIS — current circulates around any axis (roll a horizontal cigar broadside); byte-identical for gyre axis "y" · 0.36: ELLIPSOID boundary (lens — squashed sphere, per-axis radii; the wide breathing disc); byte-identical for sphere/cylinder
 
   /* ---- probe — the gate. Green or it doesn't ship. ---------------------- */
   ZigWebGPU.probe = async function () {
@@ -720,6 +720,11 @@ fn waterColor(dir: vec3f) -> vec3f {
        equivalent for CHAINS, which is what Rootwhale, Kelp and Zigpede are; general
        trees would need child lists and are not claimed. Byte-identical when absent. */
     const STRUCT = opts.structure || null;
+    /* SEPCAP (v0.44) — bound the overlap force. 0 = unbounded, byte-identical. */
+    const SEPCAP = opts.sepCap ? {
+      pair: (opts.sepCap.pair === undefined) ? 0.55 : +opts.sepCap.pair,
+      total: (opts.sepCap.total === undefined) ? 3.2 : +opts.sepCap.total
+    } : null;
     /* CONTACT (v0.38) — MATTER THAT OCCUPIES SPACE. {r, k, damp}
        Flocking's `separation` is a force between strangers: a PREFERENCE, and a
        preference can always be overpowered. Push density high enough and shards
@@ -852,6 +857,9 @@ fn tapAt(idx: u32) -> f32 {
   return U.taps[i >> 2u][i & 3u];
 }
 
+const SEP_CEIL: f32 = 1.0;      // per-pair overlap ceiling — replaced when opts.sepCap
+const SEP_TOTAL: f32 = 999.0;   // total separation ceiling
+
 @compute @workgroup_size(64)
 fn step(@builtin(global_invocation_id) gid: vec3<u32>) {
   let i = gid.x; if (i >= U.count) { return; }
@@ -897,12 +905,21 @@ fn step(@builtin(global_invocation_id) gid: vec3<u32>) {
   var sep = vec3f(0.0); var ali = vec3f(0.0); var coh = vec3f(0.0);
   var nAgit = 0.0; var cnt = 0.0;
   let sepR = U.knobsA.y;
+  let sepSum0 = 0.0;
   for (var k = 0u; k < K; k++) {
     if (ni[k] == 0xffffffffu) { continue; }
     let j = ni[k];
     let q = posIn[j].xyz;
     let d = max(sqrt(nd[k]), 0.001);
-    if (d < sepR) { sep += (p - q) / d * (sepR - d) / sepR; }
+    /* SEPARATION, BOUNDED. The term (sepR-d)/sepR reaches 1 as two agents
+       coincide, and it SUMS over every neighbour — so a shard buried in twenty
+       others receives twenty times the kick. Measured: 59 to 223 depending on
+       SPREAD, against a field speed ceiling of 4 to 12. Embedded groups were not
+       more agitated by degree, they were in an entirely different force regime,
+       which is exactly what Bill saw. Real bodies cannot embed at all, so an
+       unbounded overlap force is modelling a situation that should not arise;
+       capping the per-pair contribution is what a solid contact does anyway. */
+    if (d < sepR) { sep += (p - q) / d * min((sepR - d) / sepR, SEP_CEIL); }
     ali += velIn[j].xyz;
     coh += q;
     nAgit = max(nAgit, posIn[j].w);
@@ -915,6 +932,10 @@ fn step(@builtin(global_invocation_id) gid: vec3<u32>) {
     // breath binds the cloud: cohesion swells with the LOCAL (lagged) breath
     accel += coh * U.coh_w * (0.35 + 1.9 * localBreath);
     accel += ali * U.wind.w * (1.0 + 1.5 * agit);
+    /* and a TOTAL ceiling, because even bounded per-pair terms sum: twenty
+       neighbours at the cap still exceed anything else in the world. */
+    let sepMag = length(sep);
+    if (sepMag > SEP_TOTAL) { sep = sep / sepMag * SEP_TOTAL; }
     accel += sep * U.sep_w;
   }
 
@@ -1552,7 +1573,13 @@ struct DOut { @builtin(position) cp: vec4f, @location(0) uv: vec2f, @location(1)
 
     /* ---- buffers -------------------------------------------------------- */
     const f4 = 16;
-    const bufOpts = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST;
+    /* COPY_SRC so the positions can be MEASURED. A camera that holds its subject
+       has to know how big the subject is, and nothing else in the engine can tell
+       it: the world's declared extent is 130 while the organism actually occupies
+       a fraction of that, so framing from the declaration puts the camera six
+       times too far away. The flag costs nothing; the readback is deliberately
+       OCCASIONAL and asynchronous, so the hot path never waits on it. */
+    const bufOpts = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
     const posA = device.createBuffer({ size: MAX * f4, usage: bufOpts });
     const posB = device.createBuffer({ size: MAX * f4, usage: bufOpts });
     const velA = device.createBuffer({ size: MAX * f4, usage: bufOpts });
@@ -2152,24 +2179,48 @@ struct View {
   sunDir: vec4f, skyTop: vec4f, skyMid: vec4f, horizon: vec4f, ground: vec4f,
   sunCol: vec4f, birdDark: vec4f, birdLight: vec4f,
   render: vec4f, render2: vec4f, render3: vec4f, render4: vec4f,
+  /* the lantern's View is a TRUNCATED copy of the bird's — it only needs the
+     first few members, and a WGSL struct may stop short of the buffer bound to
+     it. But it must reach EVERY member it actually reads: the note-flash block
+     reads render5, and stopping at render4 gave Metal "struct member render5 not
+     found" and killed the whole render pipeline. nvidia tolerated it. A
+     truncated struct is a promise about what you will read, and this one lied. */
+  render5: vec4f, noteBands: array<vec4f, 6>, render6: vec4f,
 };
 @group(0) @binding(0) var<uniform> V: View;
 @group(0) @binding(1) var<storage, read> pos: array<vec4f>;
 @group(0) @binding(2) var<storage, read> ph: array<vec2f>;
+const LANTERN_BEE: f32 = 1.0;   // THE BEE's lantern multiplier — replaced when opts.bee > 0
+
 struct LOut { @builtin(position) cp: vec4f, @location(0) uv: vec2f, @location(1) b: f32, @location(2) agit: f32, @location(3) bee: f32 };
 @vertex
 fn lanternVs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> LOut {
-  var corners = array<vec2f, 6>(vec2f(-1.0,-1.0), vec2f(1.0,-1.0), vec2f(1.0,1.0),
-                                vec2f(-1.0,-1.0), vec2f(1.0,1.0), vec2f(-1.0,1.0));
+  /* the quad's corners COMPUTED, not tabled. A mutable local array must be
+     placed on the vertex function's stack, and Metal's is small enough that six
+     vec2f overflowed it: "Vertex function exceeds available stack space".
+     nvidia kept it in registers and never complained.
+     Two triangles from an index: bit 0 and bit 1 of a remapped vertex id give
+     the corner directly, no storage at all. */
+  /* two triangles, corners 0,1,3 and 0,3,2 in (bit0 = x, bit1 = y) numbering.
+     Verified against the original table index by index — same quad, no storage. */
+  let ci = select(select(3u, 2u, vi == 5u), select(0u, 1u, vi == 1u), vi == 0u || vi == 1u || vi == 3u);
+  let corner = vec2f(select(-1.0, 1.0, (ci & 1u) != 0u),
+                     select(-1.0, 1.0, (ci & 2u) != 0u));
   let P = pos[ii];
   let s = ph[ii].x / 6.28318;
   let b = smoothstep(0.0, 0.07, s) * exp(-max(s - 0.07, 0.0) * 5.5);   // rise fast, fade slow
   let h = fract(sin(f32(ii) * 127.1) * 43758.5453);
   /* THE BEE's lantern is larger, because her flash is an EVENT in the field
-     rather than one firefly among thousands. */
-  let beeF = select(0.0, 1.0, ii == 0u && BEE_SIZE > 1.0);
+     rather than one firefly among thousands.
+     The lantern carries its OWN multiplier: it is a SEPARATE SHADER MODULE from the
+     bird, and a constant declared in one does not exist in the other. nvidia's
+     compiler let the dangling reference through; Metal correctly refused it and
+     the whole render pipeline failed to build — a black canvas with a healthy
+     HUD, sixty fps and a working compute pass. Found on a MacBook Air, on a
+     backend this engine had never once been run on. */
+  let beeF = select(0.0, 1.0, ii == 0u && LANTERN_BEE > 1.0);
   let size = V.birdDark.w * (0.7 + 0.5 * h) * (0.75 + 0.9 * b) * (1.0 + 1.7 * beeF);
-  let c = corners[vi];
+  let c = corner;
   let wp = P.xyz + (V.camRight.xyz * c.x + V.camUp.xyz * c.y) * size;
   var o: LOut;
   o.cp = V.viewProj * vec4f(wp, 1.0);
@@ -2301,6 +2352,15 @@ struct SkinU { cr: vec4f, dim: vec4f, par: vec4f };
        this constant, and each splice's own guard still names the capability that
        would break. Ordering is by insertion order below (last spliced sits closest
        to the integrate); the modifiers all *add to* accel, so order is commutative. */
+    if (SEPCAP) {
+      const c1 = "const SEP_CEIL: f32 = 1.0;";
+      const c2 = "const SEP_TOTAL: f32 = 999.0;";
+      if (STEP_SRC.indexOf(c1) < 0 || STEP_SRC.indexOf(c2) < 0)
+        throw new Error("SEPCAP splice anchors missing in step kernel");
+      STEP_SRC = STEP_SRC
+        .replace(c1, "const SEP_CEIL: f32 = " + (+SEPCAP.pair).toFixed(4) + ";")
+        .replace(c2, "const SEP_TOTAL: f32 = " + (+SEPCAP.total).toFixed(4) + ";");
+    }
     const K_PREINT = "  /* ---- integrate with speed band ---- */";
     if (ONSET > 0) {
       /* ---- ONSET: agitation swells instead of snapping --------------------
@@ -2786,7 +2846,12 @@ ${body}
       phB = device.createBuffer({ size: MAX * 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
       const phMod = device.createShaderModule({ code: PHASE_WGSL });
       phasePipe = device.createComputePipeline({ layout: "auto", compute: { module: phMod, entryPoint: "phase" } });
-      const lMod = device.createShaderModule({ code: LANTERN_WGSL });
+      /* the lantern is a SEPARATE MODULE and cannot see the bird's constants, so
+         it carries its own copy of the bee multiplier */
+      const LANTERN_SRC = (BEE > 1)
+        ? LANTERN_WGSL.replace("const LANTERN_BEE: f32 = 1.0;", "const LANTERN_BEE: f32 = " + (+BEE).toFixed(3) + ";")
+        : LANTERN_WGSL;
+      const lMod = device.createShaderModule({ code: LANTERN_SRC });
       lanternPipe = device.createRenderPipeline({
         layout: "auto",
         vertex: { module: lMod, entryPoint: "lanternVs" },
@@ -3293,9 +3358,10 @@ fn webVs(@builtin(vertex_index) vi: u32, @builtin(instance_index) inst: u32) -> 
   let sl = length(side);
   if (sl < 1e-5 || L < 1e-4) { o.cp = vec4f(0.0, 0.0, -2.0, 1.0); o.e = 0.0; o.fade = 0.0; o.en = 0.0; return o; }
   side = side / sl;
-  var corners = array<vec2f, 6>(vec2f(0.0,-1.0), vec2f(1.0,-1.0), vec2f(1.0,1.0),
-                                vec2f(0.0,-1.0), vec2f(1.0,1.0),  vec2f(0.0,1.0));
-  let cc = corners[vi];
+  /* computed, not tabled — a mutable local array spills onto Metal's small
+     vertex stack. Same quad (0,1,3 then 0,3,2), x running 0..1 for a ribbon. */
+  let ci = select(select(3u, 2u, vi == 5u), select(0u, 1u, vi == 1u), vi == 0u || vi == 1u || vi == 3u);
+  let cc = vec2f(select(0.0, 1.0, (ci & 1u) != 0u), select(-1.0, 1.0, (ci & 2u) != 0u));
   let ew = 1.0 + 0.9 * max(energy[i], energy[j]);     // energised threads swell slightly
   let wp = a + seg * cc.x + side * (W.p.y * ew * cc.y);
   o.cp = V.viewProj * vec4f(wp, 1.0);
@@ -3380,8 +3446,10 @@ struct SV { vp: mat4x4f };
 @group(0) @binding(0) var<uniform> V: SV;
 struct StOut { @builtin(position) cp: vec4f, @location(0) wp: vec2f };
 @vertex fn stVs(@builtin(vertex_index) vi: u32) -> StOut {
-  var C = array<vec2f,6>(vec2f(-1.,-1.), vec2f(1.,-1.), vec2f(1.,1.), vec2f(-1.,-1.), vec2f(1.,1.), vec2f(-1.,1.));
-  let c = C[vi];
+  /* corners computed, not tabled — a mutable local array lands on Metal's small
+     vertex stack and overflows it. Same quad: 0,1,3 then 0,3,2. */
+  let ci = select(select(3u, 2u, vi == 5u), select(0u, 1u, vi == 1u), vi == 0u || vi == 1u || vi == 3u);
+  let c = vec2f(select(-1.0, 1.0, (ci & 1u) != 0u), select(-1.0, 1.0, (ci & 2u) != 0u));
   let wx = ${cx} + c.x * ${R};
   let wz = ${cz} + c.y * ${R};
   var o: StOut;
@@ -3715,7 +3783,50 @@ struct StOut { @builtin(position) cp: vec4f, @location(0) wp: vec2f };
       _capResolve: null,
       _after: null,
       attachAfterimage(a) { this._after = a; return this; },   // MEMORY GLASS (standalone path)
-      capture() { return new Promise((res) => { this._capResolve = res; }); }
+      capture() { return new Promise((res) => { this._capResolve = res; }); },
+
+      /* MEASURE — the flock's own centroid and radius, so a camera can frame
+         itself. Reads a SUBSAMPLE of the rendered position buffer
+         ASYNCHRONOUSLY: the caller gets last frame's answer and the hot path
+         never waits. A camera eases anyway, so a measurement a few frames old is
+         invisible. Returns false while a read is already in flight.
+
+         The radius is the 93rd PERCENTILE, not the maximum — a handful of
+         stragglers should not pull the camera back and shrink everything.
+
+         (First written onto the wrong object entirely: it landed on the filament
+         renderer's internals, so `flock.measure` never existed and the guard
+         `flock && flock.measure` skipped it silently every frame. The HUD read
+         `cam 48` with no arrow and nothing else complained. A method on the wrong
+         object is invisible in exactly the way a typo is not.) */
+      measure(cb, stride) {
+        if (this._measuring) return false;
+        this._measuring = true;
+        const st = Math.max(1, (stride | 0) || 7);
+        const n = Math.min(this.count || MAX, MAX);
+        const bytes = n * 16;
+        if (!this._mbuf || this._mbuf.size < bytes) {
+          if (this._mbuf) this._mbuf.destroy();
+          this._mbuf = device.createBuffer({ size: bytes, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+        }
+        const enc = device.createCommandEncoder();
+        enc.copyBufferToBuffer(posB, 0, this._mbuf, 0, bytes);
+        device.queue.submit([enc.finish()]);
+        this._mbuf.mapAsync(GPUMapMode.READ).then(() => {
+          const P = new Float32Array(this._mbuf.getMappedRange());
+          let cx = 0, cy = 0, cz = 0, m = 0;
+          for (let i = 0; i < n; i += st) { cx += P[i*4]; cy += P[i*4+1]; cz += P[i*4+2]; m++; }
+          if (m) { cx /= m; cy /= m; cz /= m; }
+          const ds = [];
+          for (let i = 0; i < n; i += st) ds.push(Math.hypot(P[i*4]-cx, P[i*4+1]-cy, P[i*4+2]-cz));
+          ds.sort((a, b) => a - b);
+          const r = ds.length ? ds[Math.min(ds.length - 1, Math.floor(ds.length * 0.93))] : 0;
+          this._mbuf.unmap();
+          this._measuring = false;
+          if (isFinite(r)) cb({ cx, cy, cz, r, n: m });
+        }).catch(() => { this._measuring = false; });
+        return true;
+      }
     };
     return flock;
   };
