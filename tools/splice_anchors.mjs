@@ -2,7 +2,7 @@
 // This is what failed on eyeZ yesterday: CONTACT must not consume an anchor
 // another capability still needs.
 import { readFileSync } from "fs";
-const src = readFileSync("/home/claude/live/engine/zigwebgpu.js", "utf8");
+const src = readFileSync(process.argv[2] || "/home/claude/live/engine/zigwebgpu.js", "utf8");
 const K_PREINT = "  /* ---- integrate with speed band ---- */";
 const VELOUT   = "@group(0) @binding(6) var<storage, read_write> velOut: array<vec4f>;";
 const VMIN_SH  = "let vmin = U.knobsA.z;";
@@ -63,7 +63,25 @@ if (rm) {
   const re = /struct View \{([\s\S]*?)\};/g;
   let m;
   while ((m = re.exec(src))) {
-    const body = m[1].replace(/\/\/[^\n]*/g, "");
+    /* MEASURE THE SHADER, NOT THE SOURCE (2026-08-17). Every capability that
+       adds a module-scope const splices on the literal `"struct View {"`, so
+       that text also appears in this file as JS — and the regex then runs from
+       the JS occurrence forward to the NEXT REAL struct's `};`, swallowing both
+       and reporting a struct that does not exist. RADIANCE hit this and was
+       reported as a 116-float View against a 112-float buffer: a black-canvas
+       FAIL for a law that never touched View.
+       This is the same error as counting `var<private>` with grep — counting a
+       hazard's NAME in source instead of the hazard in emitted output. A real
+       WGSL struct body is field declarations and comments; once the comments
+       are stripped it never contains a JS string quote or a template backtick.
+       Comments MUST be stripped first: the lantern's truncated View carries the
+       word "struct member render5 not found" in a block comment, and a naive
+       quote test silently dropped the one struct that has already caused a
+       Metal black canvas. An audit that quietly stops auditing is worse than
+       no audit. */
+    const stripped = m[1].replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    if (/["`]/.test(stripped)) { re.lastIndex = m.index + 1; continue; }   // REWIND: a JS occurrence runs forward to the NEXT real struct's `};` and would otherwise EAT it — skipping without rewinding is how RADIANCE made the lantern's View disappear from the audit entirely
+    const body = stripped;
     let f = 16 * ((body.match(/mat4x4f/g) || []).length);
     const arr = body.match(/array<vec4f,\s*(\d+)>/);
     if (arr) f += 4 * parseInt(arr[1]);
@@ -195,4 +213,26 @@ if (rm) {
   console.log("\nvertex stages checked for stack-spilling arrays:", fns.length);
   console.log(bad ? "FAIL — a vertex stage declares a mutable local array; Metal will refuse it"
                   : "PASS — no vertex stage declares a mutable local array");
+}
+
+/* ---- TENTH CHECK · THE METAL CLAUSE, MEASURED ON EMITTED WGSL --------------
+   CANON.md §2: "Any law emitting WGSL is checked for `var<private>` arrays
+   reachable from a vertex function before it lands. Metal overflows the vertex
+   stack. Lint it, don't test it."
+
+   The Session_Log already recorded the trap (2026-08-16): a naive
+   `grep -c 'var<private>'` returns 1 on the FIXED zigmesh.js, because the
+   survivor is the comment describing the hazard. Counting occurrences of a
+   hazard's NAME is not counting the hazard. This strips comments FIRST and then
+   looks only at what actually reaches a shader string. */
+{
+  const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+  const clean = strip(src);
+  const inStrings = (clean.match(/(["'`])(?:\\.|(?!\1)[\s\S])*?\1/g) || []).join("\n");
+  const hits = (inStrings.match(/var<private>/g) || []).length;
+  const named = (src.match(/var<private>/g) || []).length;
+  console.log("\n`var<private>` — text occurrences:", named, "\u00b7 EMITTED into WGSL:", hits);
+  console.log(hits === 0
+    ? "PASS \u2014 no var<private> reaches a shader (the remaining " + named + " are comments about the hazard)"
+    : "FAIL \u2014 " + hits + " var<private> would be emitted; Metal will overflow the vertex stack");
 }

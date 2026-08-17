@@ -1539,3 +1539,143 @@ and `tools/metal_gate.mjs` on the Air is the Metal gate.
 - Wire `metal_gate.mjs` into the standing pre-delivery sequence so it is mechanical rather than
   remembered.
 - Then **Radiance** — the first Canon law. Contract and ledger in `CANON.md`.
+
+## 2026-08-17 · RADIANCE 0.1.0 — the first Canon law, and the audit that lied about it
+
+**The Canon had a contract and no machinery.** `ZigCore.Canon` was a declarative
+*ledger* — a list of laws as data. CANON.md §2 specified `Canon.register({...})`,
+`window.ZIG_LAWS`, hash overrides and a byte-identity obligation, none of which
+existed. So the session's real deliverable is the **runtime**, and Radiance is its
+first inhabitant. ZigCore **0.12.0 → 0.13.0**, ZigWebGPU **0.44.6 → 0.45.0**.
+
+**RADIANCE, stated honestly.** The Canon names it *"light has a source and a
+falloff."* 0.1.0 ships **the second half first**, and that is not a dodge: the room
+your panel stands in is a light source with no falloff at all, because its source
+is behind you. `perceived = displayed + veil`. A linear delta survives that
+addition; **a ratio does not**. Two near-blacks at 0.00 and 0.05 are infinite
+contrast on eyeZ at night and 1.25:1 in a lit classroom. The modelling does not
+dim — it *disappears*, while the arithmetic insists nothing was lost. That is why
+the summit room flattened the field, and why it was never a resolution problem.
+
+**Mechanism:** remap outgoing LUMINANCE only (black-point · gain · shadow gamma ·
+soft knee), then scale the colour by the ratio. Channel ratios preserved to 1e-12,
+so nacre, garnet, gem-face, spectrum, memory-underside and note-flash are all
+untouched — every colour decision Bill made by eye survives. `tone(0) = 0` in every
+room: **the law cannot make black blacker**, because the floor belongs to the room.
+
+**Measured, not asserted** — mean ΔL* per step across the organism's shadow ramp:
+
+| room | veil | off | on | |
+|---|---|---|---|---|
+| lit | 0.06 | 2.180 | 3.483 | ×1.60 |
+| bright | 0.14 | 1.524 | 3.317 | ×2.18 |
+| sunlit | 0.26 | 1.095 | 2.979 | ×2.72 |
+
+**And the probe forced out the counterpart:** in a DARK room the same curve still
+separates the ramp (4.125 → 6.520). It buys that with highlight headroom. A law
+that helped everywhere would be suspicious. This is why Radiance ships OFF and the
+room is a decision, not a default.
+
+**Six rooms:** `dark` (identity) · `lit` · `bright` · `sunlit` · `cut` (the
+opposite instinct — refuse the drowned region, rescale survivors) · `white` (the
+spa/projection inversion — the same arithmetic with gain < 1).
+
+**No new uniform.** The room's four numbers are compiled WGSL consts; the live
+amount rides `V.render6.w` (view[111]), which was already declared and unused.
+View did not grow — deliberately, because growing View is the single most
+black-canvas-prone edit in this engine.
+
+---
+
+### THE AUDIT REPORTED A BLACK-CANVAS FAULT THAT DID NOT EXIST — twice over
+
+`splice_anchors.mjs` came back **`FAIL — a View (116) exceeds the 112-float buffer;
+the canvas will be BLACK`**. It was wrong, and the way it was wrong is the same
+mistake this log recorded on 2026-08-16 about `grep -c 'var<private>'`.
+
+The View audit regexes `struct View \{...\};` over the **source file**. Every
+capability that adds a module-scope const splices on the literal string
+`"struct View {"` — so that text appears in the file as JS. The regex matched my
+JS occurrence and ran forward to the **next real struct's** `};`, swallowing both
+and reporting a struct that does not exist. Radiance never touched View.
+
+**Then the first fix was worse than the bug.** Skipping any match whose body
+contained a quote silently dropped the LANTERN's truncated View — the very struct
+that caused a Metal black canvas on 2026-08-12 (its comment contains the words
+*"struct member render5 not found"*). The audit went from crying wolf to quietly
+not auditing, which is strictly worse. Fixed properly: strip comments first, then
+reject JS text, **and rewind `lastIndex`** so a false opening cannot eat the real
+struct that follows it. Verified by running the patched audit against **pristine
+0.44.6 and 0.45.0 and diffing the output — identical, 5 real structs, 76/112/112/76/76.**
+
+**The lesson, restated because it has now cost time twice:** a gate that measures
+*source text* instead of *emitted output* will both invent faults and hide them.
+Every audit in this repo should be asked which of the two it is doing.
+
+**TENTH mechanical check added** — `var<private>`, counted in emitted WGSL rather
+than in source. zigmesh text 1 / **emitted 0** · zigwebgpu text 1 / **emitted 0**;
+both survivors are comments describing the hazard, exactly as predicted.
+
+---
+
+### NEW REUSABLE TOOL — `tools/byte_identity.mjs`
+
+CANON §2's byte-identity obligation was a promise kept by reading diffs carefully.
+It is now mechanical, and **every future law inherits it.** Two engine versions are
+loaded in **separate vm contexts** — the modules are classic scripts binding to
+`globalThis`, and in a shared realm one silently overwrites the other so every
+comparison passes for the wrong reason — then `createFlock` is driven with
+identical opts against a stub device and every WGSL string is hashed.
+
+```
+0.44.6 pristine        | 3 modules | 70322 chars | sha256 ddf1738e214b5b46 | radiance absent
+0.45.0 law ABSENT      | 3 modules | 70322 chars | sha256 ddf1738e214b5b46 | radiance absent
+0.45.0 radiance=bright | 3 modules | 70987 chars | sha256 35ed4e5b130e1296 | radiance PRESENT
+```
+
+It asserts **both directions**. A law that is off when it should be off and *also*
+off when it should be on passes a one-sided identity test perfectly.
+
+---
+
+### VERIFIED
+
+- `node --check` — **13/13** modules clean
+- reference gate — **40/40 PASS** (39 inherited + `test/law_radiance_ref.mjs`, 47 checks)
+- byte identity — law absent is **bit-identical** to 0.44.6; law on differs by exactly 665 chars
+- shader audits — **10 PASS, 0 FAIL**; output identical to 0.44.6 apart from the comment count
+- **HEADLESS WEBGPU BOOT — RUN THIS SESSION** (it could not be, last session): all six
+  rooms LIVE at 56–60 fps on SwiftShader, 0 hard errors (only a favicon 404).
+  `#radiance=dark` reports **"no laws"** — identity resolves to *off* end-to-end.
+- **the live dial proved at the uniform**: Shift+R drove view[111] 1.0 → 0.0 → 1.0,
+  90 / 88 / 90 frames at exactly those values.
+- bundle `dist/Zigverse_Engine_v4_0_Radiance.html` (579 KB) boots LIVE both with the
+  law declared and absent.
+
+**NOT verified.** The canvas still cannot be seen — a `drawImage` readback of the
+WebGPU canvas returned all-zero under SwiftShader, confirming BOOT_GLYPH's warning
+rather than defeating it. **Nothing here proves what it LOOKS like.** And nothing
+proves it runs on Metal; SwiftShader is permissive in exactly the way NVIDIA is.
+
+### OPEN / NEXT
+
+1. **Bill's eye, in a lit room.** Load the host, set `LIGHT` to `bright`, and press
+   Shift+R against a real ambient. That is the only test that matters and no probe
+   substitutes for it. `cut` vs `bright` is a genuine fork — expand the shadows, or
+   refuse the drowned region — and it is his call, not mine.
+2. `node tools/metal_gate.mjs` on the Air against the new bundle.
+3. **The bee's lantern is exempt** from the law (separate WGSL module). At high gain
+   she may read relatively dimmer against a lifted field. One-line splice if it reads wrong.
+4. **Radiance 0.2.0 = FALLOFF**, the first light's half. Needs source position + flock
+   radius in View, and View is full at 112/112. Build a View-growth helper first, or
+   this becomes the fourth black canvas.
+5. Then **Ambience** — with the ordering caveat now recorded in CANON.md §4: Radiance
+   is a tone remap at the END of the fragment, so Ambience must scatter BEFORE it.
+6. Housekeeping: removed a duplicated `sepCap:` key in sickleswarm's `flockB` literal
+   (harmless — same value, later won — but it read as a merge scar).
+
+**Changed:** `engine/zigcore.js` · `engine/zigwebgpu.js` · `species/sickleswarm.js` ·
+`tools/splice_anchors.mjs` · `CANON.md`
+**Added:** `test/law_radiance_ref.mjs` · `tools/byte_identity.mjs` ·
+`briefs/law_radiance.md` · `Zigverse_Engine_v4_0_Radiance_host.html` ·
+`dist/Zigverse_Engine_v4_0_Radiance.html`

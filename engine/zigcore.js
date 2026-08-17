@@ -1016,6 +1016,187 @@
   };
 
   /* ==========================================================================
+     THE CANON RUNTIME (v1.0 · 2026-08-17) — the ledger above is a DECLARATION;
+     this is the MACHINERY. A law registers here, ships OFF, and a host turns it
+     on by name. Contract (CANON.md §2), five obligations:
+
+       1. defaults ARE the identity element — off means unchanged, provably.
+       2. splice is SPLICED, not branched — when off the WGSL is never emitted.
+       3. probe is mandatory — a law with no numeric test is an opinion.
+       4. doc states the MECHANISM, not the intent.
+       5. laws version independently of the engine ("0.45.0 + radiance 0.1.0").
+
+     INHERITANCE (CANON.md §3) — the answer to "let prior builds gain laws."
+     A bundle is frozen and is never edited. Instead a prior build is RE-BUNDLED
+     from source with one line added to its host:
+
+         window.ZIG_LAWS = { radiance: { room: "bright" } };
+
+     Omit ZIG_LAWS entirely and the build is byte-identical to its pre-Canon
+     self — which is what lets an APPROVED signature ride a newer engine and
+     still be the same creature. Every law also takes a hash override
+     (#radiance=bright) so a configuration can be A/B'd on eyeZ without a
+     rebuild.
+     ======================================================================= */
+  ZigCore.Canon.registry = {};    // id → law definition
+  ZigCore.Canon.actives  = {};    // id → resolved config (only what a host turned on)
+
+  ZigCore.Canon.register = function (law) {
+    if (!law || !law.id) throw new Error("Canon.register: a law needs an id");
+    if (!law.version)    throw new Error("Canon.register(" + law.id + "): a law needs its own version");
+    if (!law.defaults)   throw new Error("Canon.register(" + law.id + "): defaults ARE the identity element — declare them");
+    if (!law.probe)      throw new Error("Canon.register(" + law.id + "): a law with no probe is an opinion");
+    this.registry[law.id] = law;
+    return law;
+  };
+
+  /* Resolve a law's config: defaults ← preset (if the law offers named presets)
+     ← explicit fields. Returns a NEW object; never mutates the defaults. */
+  ZigCore.Canon.resolve = function (id, cfg) {
+    const law = this.registry[id];
+    if (!law) return null;
+    const out = Object.assign({}, law.defaults);
+    const pk = law.presetKey || "preset";          // radiance names its presets ROOMS, so #radiance=bright reads naturally
+    if (cfg && typeof cfg === "string") {
+      if (!(law.presets && law.presets[cfg])) return null;    // an unknown preset name is OFF, never a guess
+      Object.assign(out, law.presets[cfg], { preset: cfg });
+    } else if (cfg && typeof cfg === "object") {
+      const name = cfg[pk] || cfg.preset;
+      if (name && law.presets && law.presets[name]) Object.assign(out, law.presets[name], { preset: name });
+      Object.assign(out, cfg);
+    }
+    out.version = law.version;
+    return out;
+  };
+
+  /* Is this config the identity element? A law resolved to its defaults must
+     NOT be emitted at all — that is obligation 2, enforced here rather than
+     remembered at each call site. */
+  ZigCore.Canon.isIdentity = function (id, cfg) {
+    const law = this.registry[id]; if (!law) return true;
+    const r = this.resolve(id, cfg); if (!r) return true;
+    for (const k in law.defaults) {
+      if (Math.abs((+r[k] || 0) - (+law.defaults[k] || 0)) > 1e-9) return false;
+    }
+    return true;
+  };
+
+  /* activate(decl, hash) — a host declares which laws apply, at what strength.
+     decl: window.ZIG_LAWS (an object) · hash: location.hash (string, optional).
+     A hash entry (#radiance=bright / #radiance=off) OVERRIDES the declaration,
+     so a performance configuration is A/B-able live without a rebuild. */
+  ZigCore.Canon.activate = function (decl, hash) {
+    this.actives = {};
+    const ids = Object.keys(this.registry);
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      let cfg = (decl && Object.prototype.hasOwnProperty.call(decl, id)) ? decl[id] : undefined;
+      if (typeof hash === "string" && hash) {
+        const m = hash.match(new RegExp("[#&]" + id + "=([a-z0-9._-]+)", "i"));
+        if (m) cfg = (m[1] === "off" || m[1] === "none") ? undefined : (isNaN(+m[1]) ? m[1] : +m[1]);
+      }
+      if (cfg === undefined || cfg === null || cfg === false) continue;   // absent = OFF = byte-identical
+      if (this.isIdentity(id, cfg)) continue;                            // resolved to identity = also OFF
+      this.actives[id] = this.resolve(id, cfg);
+    }
+    return this.actives;
+  };
+
+  ZigCore.Canon.law = function (id) { return this.actives[id] || null; };
+  ZigCore.Canon.stamp = function () {                                    // "0.45.0 + radiance 0.1.0"
+    const on = Object.keys(this.actives);
+    return on.length ? on.map((id) => id + " " + this.registry[id].version).join(" + ") : "no laws";
+  };
+
+  /* ==========================================================================
+     RADIANCE 0.1.0 — the FIRST Canon law. "Light has a source and a falloff."
+     ---------------------------------------------------------------------------
+     THE SECOND LIGHT. Every law before this one modelled the light INSIDE the
+     world. Radiance is the first to model the light source that is NOT in the
+     world: the room the panel stands in. Ambient light lands on the glass and
+     reflects to the eye, adding a constant to every pixel. That source has no
+     falloff at all — it is behind you — which is exactly why it is ruinous.
+
+     THE PHYSICS. Perceived = displayed + veil. A linear delta survives that
+     addition; a RATIO does not. Two near-blacks at 0.00 and 0.05 are an
+     infinite contrast in a dark room and 1.25:1 in a lit one, so shadow detail
+     disappears while the arithmetic insists nothing was lost. That is why the
+     summit's bright classroom flattened the field and why it is a physics
+     problem, not a resolution one.
+
+     THE MECHANISM (what it multiplies, per obligation 4). The law remaps
+     outgoing LUMINANCE only, then scales the colour by the ratio — so hue and
+     saturation are untouched and every skin, gem and spectrum tuned by eye
+     survives it:
+
+         x = max((L - black) / (1 - black), 0)     black-point: refuse the drowned region
+         x = pow(x * gain, 1/gamma)                exposure, then shadow expansion
+         L' = x / (1 + max(x - knee, 0))           soft shoulder — gain must not clip to flat white
+         c' = c * mix(1, L'/L, amount)             amount = the live dial
+
+     TWO OPPOSITE INSTINCTS, both real, and Bill's eye arbitrates:
+       · EXPAND (gain + gamma) — stretch the shadows apart so their differences
+         are big enough in display units to survive the veil being added.
+       · CUT (black) — refuse to spend range on values the room will drown, and
+         rescale the survivors. Costs the faintest matter; buys separation.
+
+     WHAT THIS LAW CANNOT DO: make black blacker. The floor is set by the room
+     and the panel, not by us. Every honest move is therefore a move of the
+     ORGANISM relative to an unmovable floor — which is also why `white` (the
+     projection/spa inversion) is the same arithmetic with gain below 1.
+
+     FALLOFF — the first light's half of the law — is deliberately NOT in 0.1.0.
+     It needs the source's position and the flock's radius in the View uniform,
+     and growing View is the single most black-canvas-prone edit in the engine.
+     0.1.0 ships the half that needs no new uniform and no species change.
+     ======================================================================= */
+  ZigCore.Radiance = {
+    VERSION: "0.1.0",
+    /* Named ROOMS — the presets ARE platform: a host names a room, it does not
+       copy four numbers. One edit here retunes every build at once. */
+    rooms: {
+      dark:   { black: 0.0,  gain: 1.00, gamma: 1.00, knee: 1e9  },   // the black-box theatre — IDENTITY
+      lit:    { black: 0.0,  gain: 1.35, gamma: 1.45, knee: 0.85 },   // a normally lit room
+      bright: { black: 0.0,  gain: 1.70, gamma: 1.90, knee: 0.75 },   // the summit classroom · a spa in daylight
+      sunlit: { black: 0.0,  gain: 2.10, gamma: 2.40, knee: 0.65 },   // worst case — a window in frame
+      cut:    { black: 0.06, gain: 1.50, gamma: 1.00, knee: 0.85 },   // the OPPOSITE instinct: drop the drowned region, rescale the rest
+      white:  { black: 0.0,  gain: 0.55, gamma: 0.62, knee: 1e9  }    // BACKGROUND INVERSION: a dark organism against a bright floor
+    },
+    /* The tone curve. This function IS the law — the WGSL is a transcription of
+       it, and test/law_radiance_ref.mjs proves the two agree. */
+    tone(L, c) {
+      const black = +c.black || 0, gain = +c.gain || 1, gamma = +c.gamma || 1;
+      const knee = (c.knee === undefined ? 1e9 : +c.knee);
+      let x = (L - black) / (1 - black);
+      if (x < 0) x = 0;
+      x = Math.pow(x * gain, 1 / gamma);
+      return x / (1 + Math.max(x - knee, 0));
+    },
+    /* Apply to a colour, preserving hue and saturation. amount = the live dial. */
+    apply(rgb, c, amount) {
+      const a = (amount === undefined ? 1 : amount);
+      const L = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+      if (L <= 1e-5) return [rgb[0], rgb[1], rgb[2]];
+      const k = 1 + ((this.tone(L, c) / L) - 1) * a;
+      return [rgb[0] * k, rgb[1] * k, rgb[2] * k];
+    }
+  };
+
+  ZigCore.Canon.register({
+    id: "radiance",
+    version: ZigCore.Radiance.VERSION,
+    pillar: "habitat",
+    says: "light has a source and a falloff — including the one behind you",
+    defaults: { black: 0.0, gain: 1.0, gamma: 1.0, knee: 1e9 },   // IDENTITY
+    presets: ZigCore.Radiance.rooms,
+    presetKey: "room",                                             // window.ZIG_LAWS = { radiance: { room: "bright" } }
+    cpu: null,                                                     // logic tier is untouched — this law is optical
+    splice: { stage: "fragment", owner: "zigwebgpu:RENDER_WGSL" },
+    probe: "test/law_radiance_ref.mjs",
+    doc: "briefs/law_radiance.md"
+  });
+
+  /* ==========================================================================
      ZigCore.Env — THE ENVIRONMENT LIBRARY (v0.8 · 2026-07-30)
      The Canon above declares the environment LAWS; this is their canonical
      DATA — the named presets every species inherits instead of re-declaring.
@@ -2215,6 +2396,6 @@
     }
   };
 
-  ZigCore.VERSION = "0.12.0";   // 0.11: BOUNDARY AXIS · 0.11.1: GYRE AXIS · 0.12: ELLIPSOID boundary (lens = a squashed sphere; per-axis radii → the wide breathing disc); byte-identical for sphere/cylinder
+  ZigCore.VERSION = "0.13.0";   // 0.13: THE CANON RUNTIME (Canon.register/resolve/activate/stamp — laws ship OFF and a host names them via window.ZIG_LAWS or #law=preset; absent = byte-identical) + RADIANCE 0.1.0, the first law: the room is a light source with no falloff, and the response is a hue-preserving luminance remap (black-point · gain · shadow gamma · soft knee). Identity at defaults · 0.11: BOUNDARY AXIS · 0.11.1: GYRE AXIS · 0.12: ELLIPSOID boundary (lens = a squashed sphere; per-axis radii → the wide breathing disc); byte-identical for sphere/cylinder
 
 })(typeof window !== "undefined" ? window : globalThis);

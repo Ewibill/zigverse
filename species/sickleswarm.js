@@ -190,6 +190,17 @@
     const NOTEFLASH_AMT = NOTEFLASH_ON ? Math.min(1, +global.ZIG_NOTEFLASH) : 0;
     const NOTEFLASH_TAU = (+global.ZIG_NOTEFLASHTAU > 0) ? +global.ZIG_NOTEFLASHTAU : 0.55;
     const NOTEFLASH_OUT = (global.ZIG_NOTEFLASHOUT != null) ? +global.ZIG_NOTEFLASHOUT : 0.58;
+
+    /* THE CANON (ZigCore 0.13) — laws ship OFF. The host declares which ones
+       apply and at what strength, and the URL hash overrides the host, so a
+       configuration is A/B-able on eyeZ without a rebuild:
+           window.ZIG_LAWS = { radiance: { room: "bright" } };   ·   #radiance=bright
+       Declare nothing and this species is byte-identical to its pre-Canon self —
+       which is what lets an APPROVED signature ride a newer engine unchanged. */
+    const LAWS = (ZC.Canon && ZC.Canon.activate)
+      ? ZC.Canon.activate(global.ZIG_LAWS, (global.location && global.location.hash) || "")
+      : {};
+    const RADIANCE = (ZC.Canon && ZC.Canon.law) ? ZC.Canon.law("radiance") : null;   // resolved {black,gain,gamma,knee} or null
     let noteHue = 0, noteFlash = 0;
     const VMIN_BASE = 0.35;   // the historical speed floor (knobsA[2]); STILLNESS scales this, so the base must survive the per-frame rewrite
     const STILLNESS = (global.ZIG_STILLNESS == null) ? 0 : Math.max(0, Math.min(1, +global.ZIG_STILLNESS));   // STILLNESS: how completely the field is allowed to REST when you stop playing. 0 = the historical cloud (a vmin speed floor + a churn field, neither of which ever listened to breath); 1 = both fade to nothing in silence.
@@ -296,6 +307,7 @@
       sepCap: CROWD_CAP > 0 ? { pair: 0.55, total: CROWD_CAP } : null,
       unseen: UNSEEN_F,
       noteFlash: NOTEFLASH_ON,
+      radiance: RADIANCE || undefined,   // RADIANCE (Canon 0.1.0): absent → not one character of the law's WGSL is emitted
       bee: BEE > 0 ? 1.45 : 1,   // agent #0 drawn larger when the bee is live
       max: 20000, count: COUNT, seed: SEED,
       extent: EXT, extentY: EXTY, cell: 12, debris: 0,
@@ -346,9 +358,9 @@
         contact: CONTACT_R > 0 ? { r: CONTACT_R, k: 45, damp: 4, max: 12 } : null,
         onset: ONSET_S,
         sepCap: CROWD_CAP > 0 ? { pair: 0.55, total: CROWD_CAP } : null,
-      sepCap: CROWD_CAP > 0 ? { pair: 0.55, total: CROWD_CAP } : null,
         unseen: UNSEEN_F,
         noteFlash: NOTEFLASH_ON,
+        radiance: RADIANCE || undefined,
         bee: BEE > 0 ? 1.45 : 1,   // agent #0 drawn larger when the bee is live
         max: 8000, count: 2600, seed: SEED ^ 0xB10C,
         extent: EXT, extentY: EXTY, cell: 12, debris: 0,
@@ -507,6 +519,7 @@
                    rim: Math.max(0, +global.ZIG_RIM || 0),           // SILHOUETTE RIM (↑/↓): 0 = off → up = a bright fresnel edge re-draws each letter's outline against the void (legible under gem/fabric/skin, either face)
                    rimSharp: (global.ZIG_RIMSHARP !== undefined ? +global.ZIG_RIMSHARP : 3.0),   // RIM SHARPNESS (←/→): low = wide glow → high = thin, precise outline
                    memBack: (+global.ZIG_MEMBACK > 0) ? 1 : 0,   // MEMORY UNDERSIDE (Shift+M): the 2nd surface on/off
+                   radiance: RADIANCE ? 1 : 0,   // RADIANCE (Shift+R): the live dial. 1 = the law applies · 0 = arithmetic identity, same shader, same frame — the A/B is against ITSELF, not against a memory of another build.
                    mark: (!AVATAR_ON ? 0 : (global.ZIG_MARK !== undefined ? global.ZIG_MARK : 2)),   // beacon marking off when the avatar is off
                    murmur: (global.ZIG_MURMUR !== undefined ? +global.ZIG_MURMUR : 0),   // 0 = calm field · →1.4 = one folding body (W/S)
                    genesis: (global.ZIG_GENESIS !== undefined ? !!global.ZIG_GENESIS : true), cockpit: false };
@@ -924,6 +937,7 @@
       view[76] = dial.chiaro;       // render4.x — CHIAROSCURO: back off ambient so only the lit side shows (1/2 keys)
       view[80] = dial.rim;          // render5.x — SILHOUETTE RIM: fresnel outline strength (↑/↓)
       view[81] = dial.rimSharp;     // render5.y — RIM SHARPNESS: thin↔wide edge (←/→)
+      view[111] = dial.radiance;    // render6.w — RADIANCE amount (Shift+R). 0 = the law is present in the shader and multiplies by exactly one.
       /* NOTE FLASH (Bill, 2026-08-09) — the two faces answer a note differently.
          The cupped INTERIOR takes the pitch-class hue, the same (pitch mod 12)/12
          wheel MELODIC STRATA already uses, so a C is the same colour wherever it
@@ -1239,6 +1253,7 @@
           (flock.web ? " · web " + dial.webGain.toFixed(2) : "") +
           (dial.chiaro > 0.001 ? " · light " + dial.chiaro.toFixed(2) : "") +
           (dial.rim > 0.001 ? " · rim " + dial.rim.toFixed(2) + "/" + dial.rimSharp.toFixed(1) : "") +
+          (RADIANCE ? " · radiance " + (dial.radiance > 0 ? (RADIANCE.preset || "custom") : "off") : "") +
           (MEMBACK_COMPILED ? (dial.memBack > 0 ? " · mem-back " + Math.round((0.22 + 0.78 * memGlow) * 100) + "%" : " · mem-back off") : "") +
           " · reveal " + dial.reveal.toFixed(2) +
           " · EWI " + (noteForm ? "ON" + (formLife > 0.05 ? " ▮" + (WNAMES.length ? WNAMES[state.letter].toUpperCase() : "") : "") : "off") +
@@ -1326,7 +1341,13 @@
       if (e.code === "KeyE") after.tau = clamp(after.tau < 0.15 ? 0.15 : after.tau * 1.3, 0, 6);   // E/D — memory glass
       if (e.code === "KeyD") { after.tau /= 1.3; if (after.tau < 0.15) after.tau = 0; }
       if (e.code === "KeyV") dial.mark = (dial.mark + 1) % 3;   // V — hidden → ember → BEACON
-      if (e.code === "KeyR") dial.genesis = !dial.genesis;      // R — genesis: black until breath
+      if (e.code === "KeyR" && e.shiftKey && RADIANCE) {        // Shift+R — RADIANCE on/off: the A/B is against ITSELF in the same frame
+        dial.radiance = dial.radiance > 0 ? 0 : 1;
+        H.line("status", dial.radiance > 0
+          ? "RADIANCE ON — room \"" + (RADIANCE.preset || "custom") + "\" · gain " + (+RADIANCE.gain).toFixed(2) + " · gamma " + (+RADIANCE.gamma).toFixed(2) + (RADIANCE.black > 0 ? " · black " + (+RADIANCE.black).toFixed(2) : "")
+          : "RADIANCE OFF — the shader is unchanged, the law multiplies by one");
+        e.preventDefault();
+      } else if (e.code === "KeyR") dial.genesis = !dial.genesis;      // R — genesis: black until breath
       if (e.code === "KeyX") dial.cockpit = !dial.cockpit;      // X — COCKPIT: fly it first-person
       if (e.code === "KeyZ" && ATTACH_ON) attachOn = !attachOn;  // Z — ZIGATTACH: freeze the field into a held pose / melt
       if (e.code === "KeyU") { solo = !solo; H.line("status", solo ? "SOLO — breath is the only pulse (no idle, no wave)" : "ALIVE — the field breathes on its own"); }   // U — SOLO toggle

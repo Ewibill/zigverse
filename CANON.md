@@ -92,8 +92,8 @@ Ten candidates were named post-summit. Status as of this document:
 
 | Law | Says | Status | Why / blocked on |
 |---|---|---|---|
-| **Radiance** | light has a source and a falloff | **next** | The bright-room problem. Ambient light lifts the black floor and kills the pop — that's physics, not resolution. Same law decides whether white-background inversion works for spa/projection installs. Commercially load-bearing. |
-| **Ambience** | the medium itself glows, scatters, occludes | queued | Pairs with Radiance; spec exists (`Ambience_Spec` on Drive). Build second so Radiance defines the light Ambience scatters. |
+| **Radiance** | light has a source and a falloff | **0.1.0 SHIPPED** (2026-08-17) | The veil half is built: the room is a light source with no falloff, and the response is a hue-preserving luminance remap. Six named rooms incl. `white` for the projection/spa inversion. **FALLOFF is deferred to 0.2.0** — it needs the source position + flock radius in View, and View is full at 112/112. See `briefs/law_radiance.md` §6. |
+| **Ambience** | the medium itself glows, scatters, occludes | **next** | Pairs with Radiance; spec exists (`Ambience_Spec` on Drive). Radiance now defines the light Ambience scatters. Note the ordering caveat: Radiance is a TONE remap at the end of the fragment, so Ambience's scattering must be added BEFORE it or the veil compensation will not apply to the medium's own glow. |
 | **Stigmergy** | agents leave traces the field remembers | queued | The first *memory* law. Unlocks trails, paths, wear — and is the cheapest route to "the organism has been somewhere." |
 | **Sounding** | sound propagates and is felt | candidate | The summit's real finding: it read as *more alive* when the sax was audible, because the breath→organism chain became legible. Strategically large. |
 | **Terrain** | the world has surfaces and gradients | candidate | Would give `basin` and `vessel` something to be. |
@@ -105,10 +105,40 @@ Ten candidates were named post-summit. Status as of this document:
 
 **Named gaps that are not laws but block law work:**
 - `ZigCore.Session` — performance capsule on stop. Without it, every law is tuned against guesses instead of your breath.
-- `test/*_ref.mjs` — the reference suite has never been located. The gate has been running on an unverified base.
+- ~~`test/*_ref.mjs` — the reference suite has never been located.~~ **CLOSED** — 40 refs present and passing as of 2026-08-17 (39 inherited + `law_radiance_ref`).
 - `ZIG_BOUNDSCALE` — proposed, never built. `basin` and `vessel` still never touch the body at any murmur setting; they are open space with extra steps.
 
 ---
+
+## 4b · The runtime, as built (2026-08-17)
+
+The contract in §2 was a specification. `ZigCore.Canon` now implements it:
+
+```js
+Canon.register(law)          // refuses a law with no id / version / defaults / probe
+Canon.resolve(id, cfg)       // defaults ← named preset ← explicit fields; never mutates either
+Canon.isIdentity(id, cfg)    // a law resolved to its defaults is OFF, not "on but flat"
+Canon.activate(decl, hash)   // window.ZIG_LAWS, overridden by #law=preset
+Canon.law(id) / Canon.stamp()
+```
+
+Three behaviours worth stating because they are the ones that keep a judged build safe:
+
+1. **Identity is off, not flat.** `#radiance=dark` resolves to the identity element and the
+   law is never activated at all — `Canon.stamp()` reports "no laws" and the shader is
+   byte-identical. A law that is *on but neutral* would still have emitted WGSL.
+2. **An unknown preset name is OFF, never a guess.** `#radiance=nonesuch` does not fall back
+   to a default room. A typo in a venue's URL gets the approved look, not a surprise.
+3. **`activate()` mutates neither the host's declaration nor the law's defaults**, so two
+   flocks in one page cannot poison each other.
+
+Enforcement is mechanical, not remembered. `tools/byte_identity.mjs` loads two engine
+versions in **separate vm contexts** (they are classic scripts binding to `globalThis`; a
+shared realm lets one silently overwrite the other and every comparison passes for the wrong
+reason), drives `createFlock` with identical opts against a stub device, and hashes every
+WGSL string handed to `createShaderModule`. It asserts both directions: the law absent must
+MATCH the baseline, and the law declared must DIFFER. A law that is off when it should be off
+and also off when it should be on passes a one-sided identity test perfectly.
 
 ## 5 · The standing question
 
