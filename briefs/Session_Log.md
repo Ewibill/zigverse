@@ -1473,3 +1473,69 @@ Second, **the diagnosis wasted twenty minutes on the camera** — I had Bill win
 **AND THE BEE IS DOING WHAT SHE WAS BUILT TO DO.** Tracked by her warm lantern across 135 seconds: visible in 75 of 96 sampled frames, lit area **min 36 px, median 577, max 15,850 — a 440x range between dimmest and brightest.** That is not a lamp, it is a RESPONSE. A stab leaves her dim; a held note lights her and turns the field toward her. In the frame at t=75s she stands alone in the empty quarter of the composition with the whole mass angled at her, which is exactly the ten-second story a summit audience can follow.
 **Audio holding too:** -13 and -17 dBFS across the two takes, properly levelled and not clipping. 79% sounding, 48 events, and one sustained passage of **78 seconds** — which is what the bee is for.
 **Venue notes:** an M-series Air drives one external display, so the wall TV and the Asus must be MIRRORED, which is what Bill wants anyway — the crowd reads the big screen from across the room and walks up to the Asus for detail. Both then run at the lower resolution. Set resolution before going fullscreen; drag Chrome to the target display THEN press F.
+## 2026-08-16 · THE RECOVERY — four releases were living only inside delivered bundles
+
+**What was wrong.** `engine/` in the repo sat at zigwebgpu **0.44.2** / zigmesh **0.6.0**. The
+summit was performed on **0.44.5**, and a later session had already reached **0.44.6**. Everything
+after 0.44.2 — the Metal `const` fixes, renderscale (`#dpr`, `#msaa`), wardrobe/mint, HUD scaling
+(`#hud`), and `tools/metal_gate.mjs` — was built in a sandbox, delivered as a self-contained HTML
+file, and **never merged back into source.** The repo and the mirror agreed with each other and
+both were wrong.
+
+Concretely: `engine/zigmesh.js` still emitted three `var<private>` letterform tables, and
+`engine/zigwebgpu.js` three more (`STARLING`, `FISH_POS`, `FISH_NRM` — 519 vec3f between them).
+**The known Metal fault was still in the source of truth four days after it was diagnosed and
+fixed twice.**
+
+**How it was recovered.** Five bundles were still in `C:\Users\billy\Downloads`. Copied to
+`recover/`, pushed to the git mirror, pulled into the sandbox, unbundled with
+`tools/unbundle.mjs` — precisely the dead-end-escape that tool was written for. Its own header
+says it: *work that only exists inside a bundle cannot be tested, diffed, or inherited.*
+
+| bundle | zigwebgpu | zigmesh | emitted `var<private>` (mesh / webgpu) |
+|---|---|---|---|
+| `zigwebgpu-0.44.2` | 0.44.2 | 0.6.0 | 3 / 3 |
+| `metalfix_zigmesh-0.6.1` | 0.44.2 | 0.6.1 | 0 / 3 |
+| `renderscale_0.44.3` | 0.44.3 | 0.6.1 | 0 / 3 |
+| `hudscale_0.44.5` (summit) | 0.44.5 | 0.6.1 | 0 / 3 |
+| `0.44.6_metalclean` | **0.44.6** | **0.6.1** | **0 / 0** |
+| repo `engine/` (before) | 0.44.2 | 0.6.0 | 3 / 3 |
+
+0.44.6 differs from 0.44.5 by exactly four things: the version string and three
+`var<private>` → `const` conversions in the renderer. It is a strict superset and was taken as
+the merge source.
+
+**TWO SESSIONS CONVERGED ON THE SAME MERGE AND ONE NEARLY CLOBBERED THE OTHER.** This session had
+merged 0.44.5 and packaged it for delivery before noticing `0.44.6_metalclean.html` and
+`metal_gate.mjs` sitting in Downloads with a timestamp from earlier the same day. Copying the
+0.44.5 merge into `engine/` would have silently reverted the renderer fix. The only thing that
+prevented it was reading a directory listing carefully. **That is not a control.** Every session
+must push before it ends, including sessions that produce nothing but a bundle.
+
+**A measurement note.** A naive `grep -c 'var<private>'` returns **1** on the fixed `zigmesh.js` —
+the survivor is the comment describing the hazard. Counting occurrences of a hazard's *name* is
+not counting the hazard. Any lint must match emitted WGSL, not source text.
+
+**Changed:** `engine/zigcore.js` · `engine/zigmesh.js` · `engine/zigmidi.js` ·
+`engine/zigwebgpu.js` · `species/sickleswarm.js` — replaced from the 0.44.6 bundle.
+**Added:** `tools/metal_gate.mjs` — drives real Chrome on the Mac, because every gate we own runs
+on SwiftShader, which is permissive in exactly the way NVIDIA is and will pass a file Metal
+rejects.
+
+**Verified:**
+- `node --check` — 9/9 modules clean (incl. `metal_gate.mjs`)
+- reference gate — **39/39 PASS**
+- emitted `var<private>` in vertex-reachable paths: zigmesh **3 → 0**, zigwebgpu **3 → 0**
+
+**NOT verified — no GPU and no browser in the sandbox:** headless boot could not be run this
+session. Compile-clean and reference-parity are proven; *running* is not. eyeZ is the real gate,
+and `tools/metal_gate.mjs` on the Air is the Metal gate.
+
+**Open / next:**
+- Bill to launch on eyeZ and confirm the field is unchanged. This is a version reconciliation,
+  not a feature; nothing should look different.
+- Run `node tools/metal_gate.mjs` on the Air against a fresh bundle — the first real test of the
+  gate now that it lives in the repo.
+- Wire `metal_gate.mjs` into the standing pre-delivery sequence so it is mechanical rather than
+  remembered.
+- Then **Radiance** — the first Canon law. Contract and ledger in `CANON.md`.
