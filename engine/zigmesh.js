@@ -26,7 +26,7 @@
 (function (global) {
   "use strict";
   const ZigMesh = global.ZigMesh || (global.ZigMesh = {});
-  ZigMesh.VERSION = "0.6.0";   // 0.3: SECOND ALPHABET · 0.3.1: MINT · 0.4: WARDROBE · 0.5: SHELL · 0.6: THIRD SET (thorn·plume·drop·crook·scallop·burr — 20 letterforms)
+  ZigMesh.VERSION = "0.6.1";   // 0.3: SECOND ALPHABET · 0.3.1: MINT · 0.4: WARDROBE · 0.5: SHELL · 0.6: THIRD SET (thorn·plume·drop·crook·scallop·burr — 20 letterforms)
 
   const V3 = {
     sub: (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]],
@@ -257,9 +257,15 @@
       aux += "vec2f(" + f(m.side[i]) + "," + f(m.u[i]) + "),";
     }
     const N = m.verts;
-    return "var<private> " + nm + "_POS: array<vec3f, " + N + "> = array<vec3f, " + N + ">(" + pos.slice(0, -1) + ");\n" +
-           "var<private> " + nm + "_NRM: array<vec3f, " + N + "> = array<vec3f, " + N + ">(" + nrm.slice(0, -1) + ");\n" +
-           "var<private> " + nm + "_AUX: array<vec2f, " + N + "> = array<vec2f, " + N + ">(" + aux.slice(0, -1) + ");\n";
+    /* METAL (v0.6.1): these tables are READ-ONLY and must NOT be var<private>.
+       WGSL private maps to MSL's `thread` address space — per-thread stack —
+       and a 6-letter wardrobe put 33KB there, overflowing Metal's small vertex
+       stack ("Vertex function exceeds available stack space"). nvidia and
+       SwiftShader hoisted them to constant memory and never complained.
+       `const` lands them in MSL `constant`. Nothing wrote them; nothing should. */
+    return "const " + nm + "_POS: array<vec3f, " + N + "> = array<vec3f, " + N + ">(" + pos.slice(0, -1) + ");\n" +
+           "const " + nm + "_NRM: array<vec3f, " + N + "> = array<vec3f, " + N + ">(" + nrm.slice(0, -1) + ");\n" +
+           "const " + nm + "_AUX: array<vec2f, " + N + "> = array<vec2f, " + N + ">(" + aux.slice(0, -1) + ");\n";
   };
 
   /* ---- toWGSLMany — THE WARDROBE (v0.4, 2026-07-21) ------------------------

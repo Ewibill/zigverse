@@ -65,7 +65,7 @@
       H.line("status", "gate closed"); return { ok: false };
     }
     let gpu;
-    try { gpu = await withTimeout(ZG.init(canvas, { msaa: true }), 10000, "adapter/device request"); }
+    try { gpu = await withTimeout(ZG.init(canvas, { msaa: (global.ZIG_MSAA !== false) }), 10000, "adapter/device request"); }   // RENDER SCALE: #msaa=off
     catch (e) {
       const m = (e && e.message) || String(e);
       H.pill(false, m);
