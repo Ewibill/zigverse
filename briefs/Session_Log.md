@@ -1679,3 +1679,172 @@ proves it runs on Metal; SwiftShader is permissive in exactly the way NVIDIA is.
 **Added:** `test/law_radiance_ref.mjs` · `tools/byte_identity.mjs` ·
 `briefs/law_radiance.md` · `Zigverse_Engine_v4_0_Radiance_host.html` ·
 `dist/Zigverse_Engine_v4_0_Radiance.html`
+
+## 2026-08-17 · THE ORDERING CONTRACT — order is a law, not a leftover (Canon.Order 1.0.0)
+
+**The Canon had a contract for WHAT a law does and nothing for WHEN.** §2 said a splice is
+spliced, not branched. It never said *where*. So two laws touching the same pixel composed
+in whatever order their `if (LAW)` blocks happened to sit in `createFlock` — an accident of
+build history. ZigCore **0.13.0 → 0.14.0**, ZigWebGPU **0.45.0 → 0.45.1**.
+
+**BOTH COLLISIONS MEASURED FIRST, from emitted WGSL** (`tools/order_collisions.mjs`, new),
+against the shipped 0.45.0 engine before a line of it changed. A contract argued from a
+reading of the source is an opinion.
+
+**1 · THE APPEND INVERSION.** `.replace(A, A + block)` emits the LAST-applied block FIRST;
+`.replace(A, block + A)` emits it LAST. **Both idioms are in the engine.**
+
+```
+applied radiance THEN ambience   → executes: ambience → radiance
+applied ambience THEN radiance   → executes: radiance → ambience
+```
+
+So the correct order — scatter before tone — required applying **Radiance first**, the
+counter-intuitive one, and nothing enforced it. A law's position in the light's path was a
+property of the idiom its author reached for, not of the law.
+
+**2 · THE FOUR-OWNER UNDERSIDE, AND IT IS WORSE THAN IT WAS NAMED.** Emitted write order on
+the back face is `fabric 0.29 → memory 0.27 → flash 0.43 → gem 0.33` — template position,
+not version order, not any order. Two of the four REPLACE. The gem lands last, so with
+`gemFace="inside"` **three shipped capabilities are computed and thrown away**: not just
+the memory and the note flash but the entire 20-textile fabric library. Valid shader, sixty
+frames a second, three dead laws. Proven to be COMPOSITION and not the laws themselves —
+memory alone survives; memory under an inside gem does not.
+
+---
+
+### THE CONTRACT
+
+**A law no longer splices itself.** It files a claim naming a RAIL and a STATION, and the
+rail emits every claim once, in station order, at one insertion point. There is no anchor
+and no idiom left to choose, so the inversion is not *guarded against* — it is structurally
+impossible.
+
+Stations are ordered because the PHYSICS is ordered, which is the Canon's prime law
+(Inevitability) applied to composition itself. **Radiance holds `tone` not by seniority but
+because the room is the only thing that happens after the light leaves the screen.**
+Ambience at `medium` is then a consequence, not a decision — and that is the
+Ambience-vs-Radiance question settled in the contract instead of re-litigated per build.
+
+```
+shard.face  : surface → pigment → lining → tint → edge
+frame.light : body → medium → tone
+```
+
+Adding a STATION is a Canon-level edit. Adding a LAW is not.
+
+**Four refusals at build time:** unknown rail/station (a typo is not a law; the refusal
+prints the stations that DO exist) · **AMBIGUOUS** (two claims, one station, one face,
+neither declares `after` — this silence is exactly how the underside got its order) ·
+**CONTESTED** (two `replace` claims share a face; they do not compose at ANY order, so
+ordering them is not a fix — `yieldsTo` makes the loss a decision on the record) ·
+**DEAD** (a write a later `replace` discards). The last had been shipping for four months.
+
+**Radiance retro-fitted as the first customer** and **byte-identical across the matrix** —
+the rail emits exactly the shader the hand splice did, hash for hash.
+
+---
+
+### THE GATE HAD TO BE FIXED TWICE BEFORE IT COULD BE TRUSTED
+
+Check 11 added to `splice_anchors.mjs`: an anchor may be written by at most one capability.
+
+**First version counted variable NAMES and invented a fault.** It reported `a1` contested
+three times — but `a1` is declared separately inside three blocks holding a *different*
+string in each. Meanwhile it would have missed a real collision entirely if two authors had
+picked different letters for the same anchor. Fixed by resolving each anchor variable to
+its literal VALUE via the nearest preceding declaration.
+
+**Second version then found a REAL seven-way collision and was still wrong about it.** The
+`velOut` binding line is appended at by **seven** capabilities. But every one of them
+inserts a module-scope declaration — bindings, structs, consts, each with a distinct
+binding number — and **WGSL imposes no ordering on module-scope declarations.** Failing
+that would have put a permanent red line in the audit that everyone learns to scroll past.
+So the check now separates **declaration anchors** (order-free, reported) from
+**statement anchors** (order IS the meaning, FAIL).
+
+**This is the same lesson for the third time**, after `grep -c 'var<private>'` (2026-08-16)
+and the View-struct regex reading JS as WGSL (2026-08-17 morning): *a gate that measures the
+wrong thing will both invent faults and hide them.* Ask every audit which of the two it is
+doing.
+
+**Proven by negative test:** a hand-spliced Ambience at Radiance's fog anchor is caught, both
+claimants named. A gate that has never fired is a gate nobody should trust.
+
+---
+
+### ALSO FIXED — TWO GATES THAT COULD NOT RUN AT ALL
+
+`splice_anchors.mjs` read `/home/claude/live/engine/zigwebgpu.js` and `byte_identity.mjs`
+read `/home/claude/pristine/...` — **hard-coded paths from a previous session's sandbox.**
+Both crashed on first invocation this session. A gate with a hard-coded path is a gate that
+silently stops running the moment the sandbox is rebuilt, which is a slower version of the
+same failure the 2026-08-16 recovery was about.
+
+`byte_identity.mjs` was also **upgraded from one case to a MATRIX**. The original asked one
+question — "is the law off when off?" — against one option set. But a REFACTOR changes no
+behaviour and must therefore change no byte in EVERY state, not just the off one. Five
+cases now, baseline vs current, including the four-owner underside because that is the
+composition the contract exists for:
+
+```
+  law ABSENT             | ddf1738e214b5b46 | ddf1738e214b5b46 | IDENTICAL
+  radiance=bright        | 35ed4e5b130e1296 | 35ed4e5b130e1296 | IDENTICAL
+  radiance=white         | 486bb45e4f34d702 | 486bb45e4f34d702 | IDENTICAL
+  four-owner underside   | e2f7d8da88cece7b | e2f7d8da88cece7b | IDENTICAL
+  underside + radiance   | e9b80affe3e1ab1a | e9b80affe3e1ab1a | IDENTICAL
+```
+
+---
+
+### VERIFIED
+
+- `node --check` — **14/14** modules clean
+- reference gate — **41/41 PASS** (40 inherited + `test/canon_order_ref.mjs`, 30 checks)
+- shader audits — **11 PASS, 0 FAIL** (check 11 new)
+- byte identity — **5/5 cases identical to baseline**; law on still differs by exactly 665 chars
+- **HEADLESS WEBGPU BOOT (SwiftShader)** — four configurations LIVE at 60 fps, 0 hard errors,
+  and the rail proved end-to-end in the live runtime: `#radiance=dark` resolves to identity,
+  so `Canon.stamp()` reads "no laws" AND `Order.stamp("frame.light")` reads **empty** — the
+  claim is never filed, not filed-and-neutral.
+- `tools/boot_gate.mjs` added so the boot gate is a committed tool, not a command retyped
+  each session.
+- bundle `dist/Zigverse_Engine_v4_1_Order.html` (593 KB) boots LIVE.
+
+**NOT verified.** The canvas still cannot be seen. Nothing here proves what anything LOOKS
+like, and nothing proves Metal — SwiftShader is permissive in exactly the way NVIDIA is.
+
+### OPEN / NEXT
+
+1. **BILL'S CALL — the underside migration.** The contract can now describe and refuse that
+   composition; the shard fragment still emits the old order, deliberately. Re-stationing
+   (`fabric → gem` at `lining`, `memory → flash` at `tint`) would make the fabric and the
+   memory reach the eye **in configurations where they have been silently dead** — which
+   changes what he sees, possibly including the approved Signatures. Taste, not engineering.
+   Two options to A/B: ship as now (nothing looks different, collision visible), or enforce
+   and hand him a bundle where the cupped interior composes properly for the first time.
+2. **AMBIENCE is now unblocked** and its ordering is settled before a line of it is written:
+   claim `frame.light` / `medium` / mode `add`. It needs no decision about Radiance at all.
+3. `node tools/metal_gate.mjs` on the Air against the new bundle — still outstanding from
+   two sessions ago.
+4. Radiance 0.2.0 = FALLOFF still needs a View-growth helper first (View full at 112/112).
+5. **THE FABRIC FORK — raised and parked by Bill this session, recorded so it is not
+   re-derived.** The 20-textile library is invisible whenever `gemFace="inside"`, and
+   **this is not an ordering fault and reordering will not fix it.** Fabric REPLACEs the
+   back face; an inside gem REPLACEs the back face; two skins claiming one interior do not
+   compose at ANY order. The contract classifies it CONTESTED for exactly that reason.
+   Three distinct pieces of work were separated, and they are very different sizes:
+   - **More textiles** — data only, byte-identical when unused, safe to add any session.
+     But 20 more parameter rows are more *specimens* of an existing capability.
+   - **New weave generators + sheen models** — the capability move. The current library is
+     7 weaves x 4 sheens; the looks that cannot currently be reached are gated on the
+     MODELS, not the table.
+   - **A lining that COMPOSITES instead of replacing** — the gem sitting *on* the velvet
+     rather than instead of it. This is the one that answers the CONTESTED fault properly,
+     and it is a Canon-level addition (a new write mode on the `shard.face` rail, between
+     `lining` and `tint`). It wants its own session.
+
+**Changed:** `engine/zigcore.js` · `engine/zigwebgpu.js` · `CANON.md` ·
+`tools/splice_anchors.mjs` · `tools/byte_identity.mjs`
+**Added:** `test/canon_order_ref.mjs` · `tools/order_collisions.mjs` · `tools/boot_gate.mjs` ·
+`briefs/canon_order.md` · `dist/Zigverse_Engine_v4_1_Order.html`

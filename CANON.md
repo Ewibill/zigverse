@@ -56,6 +56,60 @@ Lint it, don't test it.
 
 ---
 
+## 2b · The ordering contract — `Canon.Order` 1.0.0 (2026-08-17)
+
+§2 says a splice is *spliced, not branched*. It did not say **where**. Until this
+version, two laws touching the same pixel composed in whatever order their `if (LAW)`
+blocks happened to sit in `createFlock`. `tools/order_collisions.mjs` measured what that
+cost, against the shipped 0.45.0 engine:
+
+- **The append inversion.** `.replace(A, A + block)` emits the *last-applied* block
+  **first**; `.replace(A, block + A)` emits it **last**. Both idioms are in use. So the
+  correct Ambience-before-Radiance order required applying **Radiance first** — the
+  counter-intuitive one — and nothing enforced it. A law's place in the light's path was
+  a property of the idiom its author reached for.
+- **The four-owner underside.** Fabric (0.29), Memory (0.27), Note Flash (0.43) and Gem
+  (0.33) all write the back face, emitted in that order — which is template position, not
+  version order and not any order. The gem `REPLACE`s and lands last, so with
+  `gemFace="inside"` **three shipped capabilities are computed and thrown away.** Valid
+  shader, sixty frames a second, three dead laws.
+
+**A law no longer splices itself.** It files a claim naming a **rail** and a **station**;
+the rail emits every claim once, in station order, at one insertion point. There is no
+anchor and no idiom left to choose, so the inversion is not guarded against — it is
+structurally impossible.
+
+Stations are ordered because the **physics** is. This is the prime law (*Inevitability*)
+applied to composition: Radiance holds `tone` not by seniority but because the room is
+the only thing that happens after the light leaves the screen.
+
+| rail | stations |
+|---|---|
+| `shard.face` — one face of a body | `surface` → `pigment` → `lining` → `tint` → `edge` |
+| `frame.light` — the colour's journey to the eye | `body` → `medium` → `tone` |
+
+Adding a **station** is a Canon-level edit. Adding a **law** is not.
+
+**Four refusals, at build time:** unknown rail/station · **AMBIGUOUS** (two claims, one
+station, one face, no `after`) · **CONTESTED** (two `replace` claims share a face — they
+do not compose at *any* order) · **DEAD** (a write a later `replace` discards). The last
+had been running in production for four months.
+
+Enforced by `test/canon_order_ref.mjs` (30 checks) and by `tools/splice_anchors.mjs`
+check 11, which forbids two capabilities appending at one **statement** anchor. Module-
+scope declaration anchors are exempt and reported as order-free: the `velOut` binding line
+is shared by seven capabilities, and WGSL imposes no order on module-scope declarations,
+so failing it would put a permanent red line in the audit that everyone learns to scroll
+past. Full mechanism in `briefs/canon_order.md`.
+
+**Not done: the underside is diagnosed, not migrated.** Re-stationing those four laws
+would make the fabric and the memory reach the eye in configurations where they have been
+silently dead — which changes what Bill *sees*, possibly including the approved
+Signatures. That is a taste decision, and it is his. The contract as shipped is
+byte-identical across the whole option matrix.
+
+---
+
 ## 3 · Inheritance — how prior builds gain laws
 
 This is the part that answers *"let prior builds leverage appropriate laws."*
@@ -93,7 +147,7 @@ Ten candidates were named post-summit. Status as of this document:
 | Law | Says | Status | Why / blocked on |
 |---|---|---|---|
 | **Radiance** | light has a source and a falloff | **0.1.0 SHIPPED** (2026-08-17) | The veil half is built: the room is a light source with no falloff, and the response is a hue-preserving luminance remap. Six named rooms incl. `white` for the projection/spa inversion. **FALLOFF is deferred to 0.2.0** — it needs the source position + flock radius in View, and View is full at 112/112. See `briefs/law_radiance.md` §6. |
-| **Ambience** | the medium itself glows, scatters, occludes | **next** | Pairs with Radiance; spec exists (`Ambience_Spec` on Drive). Radiance now defines the light Ambience scatters. Note the ordering caveat: Radiance is a TONE remap at the end of the fragment, so Ambience's scattering must be added BEFORE it or the veil compensation will not apply to the medium's own glow. |
+| **Ambience** | the medium itself glows, scatters, occludes | **next** | Pairs with Radiance; spec exists (`Ambience_Spec` on Drive). Radiance now defines the light Ambience scatters. ~~Note the ordering caveat…~~ **The caveat is now a contract**: Ambience claims station `medium` on the `frame.light` rail, Radiance holds `tone`, and the rail emits in that order whatever sequence the two blocks are written in. See §2b. |
 | **Stigmergy** | agents leave traces the field remembers | queued | The first *memory* law. Unlocks trails, paths, wear — and is the cheapest route to "the organism has been somewhere." |
 | **Sounding** | sound propagates and is felt | candidate | The summit's real finding: it read as *more alive* when the sax was audible, because the breath→organism chain became legible. Strategically large. |
 | **Terrain** | the world has surfaces and gradients | candidate | Would give `basin` and `vessel` something to be. |

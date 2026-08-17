@@ -236,3 +236,87 @@ if (rm) {
     ? "PASS \u2014 no var<private> reaches a shader (the remaining " + named + " are comments about the hazard)"
     : "FAIL \u2014 " + hits + " var<private> would be emitted; Metal will overflow the vertex stack");
 }
+
+/* ---- ELEVENTH CHECK · THE ORDERING CONTRACT -------------------------------
+   Added 2026-08-17 with Canon.Order 1.0.0, and it is the check that would have
+   caught Ambience-vs-Radiance BEFORE it shipped rather than during a design
+   session.
+
+   Two capabilities that append after the SAME anchor execute in the REVERSE of
+   the order they were applied in, because `.replace(A, A + block)` pushes the
+   later one in front. The engine ALSO uses `.replace(A, block + A)`, which has
+   the opposite semantics. So whenever two capabilities share an anchor, their
+   order in the emitted shader is decided by which idiom each author reached
+   for and where their `if` block happened to sit — not by anything anyone
+   declared. tools/order_collisions.mjs measures this; this check forbids it.
+
+   The rule: an anchor may be APPENDED at by at most one capability. If two
+   want the same insertion point, they belong on a rail (ZigCore.Canon.Order),
+   which emits every claim once, in a declared station order, with no idiom to
+   get backwards.
+
+   MEASURE THE ANCHOR, NOT THE VARIABLE. The first version of this check
+   counted anchor VARIABLE NAMES and reported `a1` as contested three times.
+   It is not: `a1` is declared separately inside BIOME, MEDIUM and BOUNDARY and
+   holds a DIFFERENT string in each. Meanwhile `q1` is genuinely the same
+   velOut binding in three blocks. A check keyed on names invents one fault and
+   would have missed the real one if the authors had picked different letters —
+   which is the same failure this log recorded twice already (`grep -c
+   'var<private>'`, and the View-struct regex reading JS as WGSL). So each
+   anchor variable is resolved to its literal VALUE and the values are what
+   gets counted. */
+{
+  const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+  const clean = strip(src);
+
+  /* Resolve every `const NAME = "literal";` to its value, keyed by the offset
+     it was declared at, so the nearest PRECEDING declaration wins — which is
+     what block scoping does. */
+  const decls = [...clean.matchAll(/const\s+([A-Za-z_$][\w$]*)\s*=\s*("(?:\\.|[^"\\])*")\s*;/g)]
+    .map((m) => ({ at: m.index, name: m[1], val: m[2] }));
+  const valueAt = (name, at) => {
+    let best = null;
+    for (const d of decls) if (d.name === name && d.at < at && (!best || d.at > best.at)) best = d;
+    return best ? best.val : "?" + name;
+  };
+
+  const writes = {};                       // anchor VALUE -> [{idiom, name}]
+  const note = (val, idiom, name) => (writes[val] || (writes[val] = [])).push({ idiom, name });
+  for (const m of clean.matchAll(/\.replace\(\s*([A-Za-z_$][\w$]*)\s*,\s*\1\s*\+/g))
+    note(valueAt(m[1], m.index), "append", m[1]);
+  for (const m of clean.matchAll(/\.replace\(\s*([A-Za-z_$][\w$]*)\s*,\s*[^,]*?\+\s*\1\s*\)/g))
+    note(valueAt(m[1], m.index), "prepend", m[1]);
+
+  const railed = (clean.match(/Order\.(render|emit)\(/g) || []).length;
+  const contested = Object.keys(writes).filter((v) => writes[v].length > 1);
+
+  /* ORDER IS ONLY SEMANTICS INSIDE A FUNCTION. An anchor that is itself a
+     MODULE-SCOPE declaration (a binding, a struct, a const, an fn) opens an
+     order-free region: WGSL places no ordering requirement on module-scope
+     declarations, so seven capabilities appending their own bindings after the
+     velOut line cannot get in each other's way however they are sequenced.
+     An anchor that is a STATEMENT inside a function is an execution chain, and
+     there order IS the meaning — that is the Ambience-vs-Radiance case.
+     Reporting both as the same fault would put a permanent red line in the
+     audit that everyone learns to scroll past, so they are separated. */
+  const isDecl = (v) => /^"\s*(@group|@binding|struct\s|const\s|alias\s|fn\s|var<)/.test(v);
+  const free = contested.filter(isDecl);
+  const chains = contested.filter((v) => !isDecl(v));
+
+  console.log("\ndistinct anchors written by a splice:", Object.keys(writes).length,
+    "\u00b7 rail-emitted insertion points:", railed);
+  const show = (v) => {
+    const w = writes[v];
+    const mixed = w.some((x) => x.idiom === "append") && w.some((x) => x.idiom === "prepend");
+    console.log("   " + v.slice(0, 60) + (v.length > 60 ? "\u2026\"" : "") +
+      "\n     written " + w.length + " times as " + w.map((x) => x.name + ":" + x.idiom).join(", ") +
+      (mixed ? "  \u2190 MIXED idioms: the same pair would order oppositely" : ""));
+  };
+  for (const v of free) show(v);
+  if (free.length) console.log("   \u2191 module-scope declarations \u2014 WGSL does not order these, so sharing is safe");
+  for (const v of chains) show(v);
+  console.log(chains.length === 0
+    ? "PASS \u2014 no EXECUTION-chain anchor is written by two capabilities" +
+      (free.length ? " (" + free.length + " order-free declaration anchor(s) shared, which is fine)" : "")
+    : "FAIL \u2014 " + chains.length + " statement anchor(s) written by more than one capability. Inside a\n         function, order IS the meaning. Put them on a rail (ZigCore.Canon.Order).");
+}

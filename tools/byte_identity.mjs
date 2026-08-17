@@ -76,29 +76,76 @@ function run(dir, extra) {
 }
 
 const BRIGHT = { radiance: { black: 0, gain: 1.7, gamma: 1.9, knee: 0.75, preset: "bright", version: "0.1.0" } };
-const runs = [
-  ["0.44.6 pristine       ", process.argv[2] || "/home/claude/pristine/zigverse-main", null],
-  ["0.45.0 law ABSENT     ", ROOT, null],
-  ["0.45.0 radiance=bright", ROOT, BRIGHT]
+
+/* THE MATRIX (added 2026-08-17 with the ordering contract).
+   The original tool asked one question — "is the law off when it is off?" —
+   against one option set. That is necessary and not sufficient. A REFACTOR
+   (routing a law through Canon.Order instead of letting it splice itself)
+   changes no behaviour and must therefore change no BYTE, in EVERY state the
+   law can be in, not just the off one. So the tool now runs a matrix: each
+   case is hashed on the baseline and on the current tree and the two must
+   agree, unless the case is declared NEW (it exercises something the baseline
+   does not have, so a difference is the point).
+
+   The fourth case is the four-owner underside. It is here because it is the
+   composition the ordering contract exists for, and any change to how those
+   four laws compose must be a deliberate, visible diff. */
+const NACRE  = { dark: [0.12, 0.115, 0.13], light: [0.92, 0.90, 0.88], moon: [0.55, 0.58, 0.72],
+                 iriBase: 0.55, iriBurst: 2.9, tex: [2, 18, 0.16, 26, 0.5, 0.15, 0.65, 0] };
+const VELVET = { weave: "pile", wscale: 42, wdepth: 0.45, sheen: "retro", spow: 1.4,
+                 sgain: 0.85, base: 0.55, col: [0.57, 0.02, 0.20] };
+const AQUA   = { col: [0.46, 0.88, 0.93], ior: 1.58, disp: 0.014, facet: 0.72, spark: 0.62 };
+
+const CASES = [
+  { label: "law ABSENT            ", extra: null },
+  { label: "radiance=bright       ", extra: BRIGHT },
+  { label: "radiance=white        ", extra: { radiance: { black: 0, gain: 0.55, gamma: 0.62, knee: 1e9, preset: "white", version: "0.1.0" } } },
+  { label: "four-owner underside  ", extra: { material: NACRE, backFabric: VELVET, memoryBack: true,
+                                              noteFlash: true, bee: 1.45, gem: AQUA, gemFace: "inside" } },
+  { label: "underside + radiance  ", extra: Object.assign({ material: NACRE, backFabric: VELVET, memoryBack: true,
+                                              noteFlash: true, bee: 1.45, gem: AQUA, gemFace: "inside" }, BRIGHT) }
 ];
-const out = [];
-for (const [label, dir, extra] of runs) {
-  const { shaders, err } = run(dir, extra);
-  const all = shaders.join("\n\u0000\n");
-  const h = createHash("sha256").update(all).digest("hex").slice(0, 16);
-  out.push({ label, h, all, n: shaders.length, err });
-  console.log(label, "| modules", String(shaders.length).padStart(2),
-    "| chars", String(all.length).padStart(7), "| sha256", h,
-    "| fn radiance()", all.indexOf("fn radiance(") >= 0 ? "PRESENT" : "absent",
-    err ? "| (init stopped: " + err + ")" : "");
+
+/* The baseline tree: the release this change is measured against. Passed on
+   the command line, because a hard-coded sandbox path is a gate that stops
+   running the moment the sandbox is rebuilt — which is exactly what had
+   happened to this file and to tools/splice_anchors.mjs. */
+const BASE = process.argv[2] || null;
+if (!BASE) {
+  console.log("usage: node tools/byte_identity.mjs <baselineDir>");
+  console.log("       (a checkout of the release this tree is measured against)");
+  process.exit(2);
 }
+
+let fail = 0;
+const hash = (a) => createHash("sha256").update(a).digest("hex").slice(0, 16);
+console.log("baseline: " + BASE);
+console.log("current : " + ROOT + "\n");
+console.log("  case                     | baseline         | current          | verdict");
+console.log("  " + "-".repeat(78));
+
+const cur = {};
+for (const c of CASES) {
+  const b = run(BASE, c.extra), n = run(ROOT, c.extra);
+  const bs = b.shaders.join("\n\u0000\n"), ns = n.shaders.join("\n\u0000\n");
+  cur[c.label.trim()] = ns;
+  const same = bs === ns;
+  if (!same) fail++;
+  console.log("  " + c.label + " | " + hash(bs) + " | " + hash(ns) + " | " +
+    (same ? "IDENTICAL" : "DIFFERS by " + (ns.length - bs.length) + " chars"));
+  if (b.err || n.err) console.log("      (init stopped: " + (b.err || n.err) + ")");
+}
+
 console.log();
-const same = out[0].all === out[1].all;
-console.log(same
-  ? "PASS — 0.45.0 with the law ABSENT is BYTE-IDENTICAL to 0.44.6 (" + out[0].all.length + " chars, same hash)"
-  : "FAIL — the law changed the shader while switched off");
-const grew = out[2].all.length - out[1].all.length;
-console.log(out[2].all !== out[1].all
-  ? "PASS — with radiance=bright the shader differs by exactly " + grew + " chars of spliced WGSL"
-  : "FAIL — the law was requested and emitted nothing");
-process.exit(same && out[2].all !== out[1].all ? 0 : 1);
+console.log(fail === 0
+  ? "PASS \u2014 every case is BYTE-IDENTICAL to the baseline. Composition was refactored,\n       not changed: the rail emits exactly the shader the hand splice did."
+  : "FAIL \u2014 " + fail + " case(s) differ from the baseline. A refactor must change no bytes;\n       if the change is deliberate, declare the case NEW and say so in the log.");
+
+/* The original two-sided assertion, kept: off must be off, and on must be on. */
+const off = cur["law ABSENT"], on = cur["radiance=bright"];
+const onOk = off !== on;
+console.log(onOk
+  ? "PASS \u2014 the law is absent when absent and PRESENT when declared (+" + (on.length - off.length) + " chars).\n       A law that is off when it should be on passes a one-sided test perfectly."
+  : "FAIL \u2014 the law was requested and emitted nothing");
+if (!onOk) fail++;
+process.exit(fail === 0 ? 0 : 1);

@@ -1109,6 +1109,199 @@
   };
 
   /* ==========================================================================
+     THE ORDERING CONTRACT (Canon.Order v1.0.0 · 2026-08-17)
+     ---------------------------------------------------------------------------
+     ORDER IS A LAW, NOT A LEFTOVER.
+
+     Until now, two laws that touch the same pixel composed in whatever order
+     their `if (LAW)` blocks happened to sit in createFlock — an accident of
+     build history. `tools/order_collisions.mjs` proves what that costs:
+
+       1. THE APPEND INVERSION. `.replace(A, A + block)` puts the LAST-applied
+          block FIRST in the emitted shader; `.replace(A, block + A)` puts it
+          LAST. Both idioms are in use. So a law's position in the light's path
+          is decided by which idiom its author reached for — and getting
+          Ambience to scatter BEFORE Radiance's tone remap requires applying
+          Radiance FIRST, which no one would guess and nothing enforced.
+
+       2. THE FOUR-OWNER UNDERSIDE. Fabric (0.29), Memory (0.27), Note Flash
+          (0.43) and Gem (0.33) all write the back face's colour. Emitted order
+          is 0.29 → 0.27 → 0.43 → 0.33: not version order, not any order — just
+          where each cursor happened to be. Two of them REPLACE the colour
+          outright. With `gemFace=inside` the gem lands last, and the fabric,
+          the memory and the note flash are all computed and thrown away. The
+          shader is valid, the frame renders, and three capabilities are dead.
+
+     THE FIX IS STRUCTURAL, not vigilance. A law never splices itself. It files
+     a CLAIM naming a RAIL and a STATION, and the rail emits every claim once,
+     in the rail's declared order. The idiom disappears, so the inversion
+     cannot happen; the order is data, so it can be read, tested and argued
+     about without reading createFlock top to bottom.
+
+     A RAIL is the path a value takes. Its STATIONS are ordered because the
+     PHYSICS is ordered — which is the Canon's prime law (Inevitability)
+     applied to composition itself. Radiance sits at `tone` not because it was
+     built last but because the room is the only thing that happens after the
+     light leaves the screen. Ambience sits at `medium` because the space
+     between body and eye is crossed before the screen is reached. Neither
+     position is a decision any more; both are consequences.
+
+     FOUR REFUSALS, all at build time, all mechanical:
+       · unknown rail or station                → the claim is a typo, not a law
+       · two claims at one station, no `after`  → AMBIGUOUS: order undeclared
+       · two REPLACE claims on one face         → CONTESTED: they cannot coexist
+       · a write earlier than a REPLACE it      → DEAD: computed and discarded
+         shares a face with
+
+     The fourth is the one that had been running in production for four months.
+     ======================================================================= */
+  ZigCore.Canon.Order = {
+    VERSION: "1.0.0",
+
+    /* THE RAILS. Each is a path a value takes, with its stations in the order
+       the physics puts them. Adding a station is a Canon-level edit and shows
+       up in every build's stamp; adding a law is not. */
+    rails: {
+      "shard.face": {
+        says: "the colour of one face of a body, from what it is made of to what stains it",
+        carries: "c",                       // the WGSL identifier the claims write
+        stations: [
+          "surface",   // what the face IS — geometric normal, relief, buff. Writes normals, not colour.
+          "pigment",   // what colour the material HAS — base shade, spectrum, iridescence
+          "lining",    // what LINES this face — a skin that REPLACES the pigment (fabric, gem)
+          "tint",      // what STAINS it — an event or a memory colouring what is already there
+          "edge"       // what its RIM does — silhouette, edge occlusion; last because it is geometry, not skin
+        ]
+      },
+      "frame.light": {
+        says: "the journey of the finished colour from the body to the eye to the room",
+        carries: "col",
+        stations: [
+          "body",      // the colour as the body emitted it
+          "medium",    // what the space between body and eye does — haze, scatter, glow (AMBIENCE)
+          "tone"       // what the ROOM does to the display — the veil (RADIANCE). Always last: nothing follows the screen.
+        ]
+      }
+    },
+
+    claims: {},   // rail id → [claim]
+
+    /* file a claim. A law calls this instead of touching the shader source. */
+    claim(rail, c) {
+      const R = this.rails[rail];
+      if (!R) throw new Error("Canon.Order: no rail \"" + rail + "\"");
+      if (!c || !c.id) throw new Error("Canon.Order(" + rail + "): a claim needs an id");
+      if (R.stations.indexOf(c.station) < 0)
+        throw new Error("Canon.Order(" + rail + "): \"" + c.id + "\" claims station \"" +
+          c.station + "\", which is not on this rail (" + R.stations.join(" → ") + ")");
+      const mode = c.mode || "modulate";
+      if (["replace", "tint", "add", "modulate"].indexOf(mode) < 0)
+        throw new Error("Canon.Order(" + rail + "): \"" + c.id + "\" has no write mode");
+      const rec = { id: c.id, station: c.station, mode, face: c.face || "both",
+                    after: c.after || [], yieldsTo: c.yieldsTo || [], wgsl: c.wgsl || "",
+                    note: c.note || "", since: c.since || "" };
+      (this.claims[rail] || (this.claims[rail] = [])).push(rec);
+      return rec;
+    },
+
+    reset(rail) { if (rail) delete this.claims[rail]; else this.claims = {}; return this; },
+
+    /* Do two claims land on the same physical face? "both" overlaps everything. */
+    _shareFace(a, b) { return a.face === "both" || b.face === "both" || a.face === b.face; },
+
+    /* ORDER — the rail's claims, sorted by station, ties broken only by an
+       explicit `after`. Returns { order, faults }. Never throws, so a caller
+       can REPORT faults (the audit) or REFUSE them (the build). */
+    order(rail) {
+      const R = this.rails[rail];
+      if (!R) throw new Error("Canon.Order: no rail \"" + rail + "\"");
+      const cs = (this.claims[rail] || []).slice();
+      const si = (c) => R.stations.indexOf(c.station);
+      const faults = [];
+
+      /* stable sort by station; `after` resolves ties within a station */
+      cs.sort((a, b) => (si(a) - si(b)) ||
+        (a.after.indexOf(b.id) >= 0 ? 1 : b.after.indexOf(a.id) >= 0 ? -1 : 0));
+
+      /* REFUSAL 2 — two claims at one station with nothing to separate them.
+         Silence here is exactly how the underside got its order. */
+      for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) {
+        const a = cs[i], b = cs[j];
+        if (a.station !== b.station) continue;
+        if (a.after.indexOf(b.id) >= 0 || b.after.indexOf(a.id) >= 0) continue;
+        if (!this._shareFace(a, b)) continue;
+        faults.push({ kind: "AMBIGUOUS", rail, a: a.id, b: b.id, station: a.station,
+          says: "\"" + a.id + "\" and \"" + b.id + "\" both write " + a.station +
+                " on the same face and neither declares `after` — their order is undeclared" });
+      }
+
+      /* REFUSAL 3 — two skins that both REPLACE the same face. They do not
+         compose at all; one of them is invisible whatever the order. */
+      const reps = cs.filter((c) => c.mode === "replace");
+      for (let i = 0; i < reps.length; i++) for (let j = i + 1; j < reps.length; j++) {
+        const a = reps[i], b = reps[j];
+        if (!this._shareFace(a, b)) continue;
+        if (a.yieldsTo.indexOf(b.id) >= 0 || b.yieldsTo.indexOf(a.id) >= 0) continue;
+        faults.push({ kind: "CONTESTED", rail, a: a.id, b: b.id, face: a.face,
+          says: "\"" + a.id + "\" and \"" + b.id + "\" both REPLACE the " + a.face +
+                " face; whichever runs second erases the other. One must declare `yieldsTo`" });
+      }
+
+      /* REFUSAL 4 — a write that a later REPLACE on the same face discards.
+         This is the four-owner underside, stated as a rule. */
+      for (let i = 0; i < cs.length; i++) {
+        const w = cs[i];
+        for (let j = i + 1; j < cs.length; j++) {
+          const r = cs[j];
+          if (r.mode !== "replace" || !this._shareFace(w, r)) continue;
+          if (w.yieldsTo.indexOf(r.id) >= 0) continue;    // declared: I accept being overwritten
+          faults.push({ kind: "DEAD", rail, dead: w.id, by: r.id, face: w.face,
+            says: "\"" + w.id + "\" writes the " + w.face + " face at station \"" + w.station +
+                  "\", then \"" + r.id + "\" REPLACES it at \"" + r.station +
+                  "\" — every instruction in \"" + w.id + "\" is computed and thrown away" });
+          break;
+        }
+      }
+      return { order: cs, faults };
+    },
+
+    /* EMIT — the rail's WGSL, once, in order. This is the only place a claim's
+       text enters a shader, which is what makes the append/prepend inversion
+       structurally impossible: there is no anchor and no idiom to choose. */
+    _resolved(rail, opts) {
+      const o = this.order(rail);
+      if (!(opts && opts.strict === false) && o.faults.length)
+        throw new Error("Canon.Order(" + rail + "): " + o.faults.length + " ordering fault(s)\n  " +
+          o.faults.map((f) => f.kind + " \u00b7 " + f.says).join("\n  "));
+      return o.order.filter((c) => c.wgsl);
+    },
+
+    emit(rail, opts) { return this._resolved(rail, opts).map((c) => c.wgsl).join("\n"); },
+
+    /* RENDER — emit() in the house style of the shader it lands in: one
+       statement per line at a given indent, each claim's note aligned to a
+       fixed column. A spliced block should be indistinguishable from the
+       hand-written WGSL around it, or the next person reading the emitted
+       shader can see which lines the machine wrote and stops trusting them
+       equally. */
+    render(rail, opts) {
+      const ind = (opts && opts.indent) || "";
+      const col = (opts && opts.noteCol) || 0;
+      return this._resolved(rail, opts).map((c) => {
+        let line = ind + c.wgsl;
+        if (c.note) { while (line.length < col) line += " "; line += c.note; }
+        return line;
+      }).join("\n");
+    },
+
+    /* the ordering half of Canon.stamp() — "shard.face: fabric→memory→gem" */
+    stamp(rail) {
+      const ids = (this.claims[rail] || []).length ? this.order(rail).order.map((c) => c.id) : [];
+      return rail + ": " + (ids.length ? ids.join(" → ") : "empty");
+    }
+  };
+
+  /* ==========================================================================
      RADIANCE 0.1.0 — the FIRST Canon law. "Light has a source and a falloff."
      ---------------------------------------------------------------------------
      THE SECOND LIGHT. Every law before this one modelled the light INSIDE the
@@ -1191,7 +1384,13 @@
     presets: ZigCore.Radiance.rooms,
     presetKey: "room",                                             // window.ZIG_LAWS = { radiance: { room: "bright" } }
     cpu: null,                                                     // logic tier is untouched — this law is optical
-    splice: { stage: "fragment", owner: "zigwebgpu:RENDER_WGSL" },
+    /* ORDERING (Canon.Order v1.0.0): the LAST station on the light's rail, and
+       not by seniority — the room is the only thing that happens after the
+       light has left the screen, so nothing can legally follow it. Ambience
+       scatters at "medium", one station earlier, which is what makes the veil
+       compensation reach the medium's own glow. */
+    splice: { stage: "fragment", owner: "zigwebgpu:RENDER_WGSL",
+              rail: "frame.light", station: "tone", mode: "modulate", face: "both" },
     probe: "test/law_radiance_ref.mjs",
     doc: "briefs/law_radiance.md"
   });
@@ -2396,6 +2595,6 @@
     }
   };
 
-  ZigCore.VERSION = "0.13.0";   // 0.13: THE CANON RUNTIME (Canon.register/resolve/activate/stamp — laws ship OFF and a host names them via window.ZIG_LAWS or #law=preset; absent = byte-identical) + RADIANCE 0.1.0, the first law: the room is a light source with no falloff, and the response is a hue-preserving luminance remap (black-point · gain · shadow gamma · soft knee). Identity at defaults · 0.11: BOUNDARY AXIS · 0.11.1: GYRE AXIS · 0.12: ELLIPSOID boundary (lens = a squashed sphere; per-axis radii → the wide breathing disc); byte-identical for sphere/cylinder
+  ZigCore.VERSION = "0.14.0";   // 0.14: THE ORDERING CONTRACT (Canon.Order — composition order is DECLARED, not inherited from build history. Two rails, "shard.face" and "frame.light", whose stations are ordered because the physics is; a law files a CLAIM at a station instead of splicing itself, and the rail emits every claim once, in order. Kills the append inversion structurally — there is no idiom left to get backwards — and refuses four faults at build time: unknown station, AMBIGUOUS (two claims, one station, no `after`), CONTESTED (two REPLACE skins on one face), DEAD (a write a later REPLACE discards). Byte-identical: the rail emits exactly the shader the hand splice did) · 0.13: THE CANON RUNTIME (Canon.register/resolve/activate/stamp — laws ship OFF and a host names them via window.ZIG_LAWS or #law=preset; absent = byte-identical) + RADIANCE 0.1.0, the first law: the room is a light source with no falloff, and the response is a hue-preserving luminance remap (black-point · gain · shadow gamma · soft knee). Identity at defaults · 0.11: BOUNDARY AXIS · 0.11.1: GYRE AXIS · 0.12: ELLIPSOID boundary (lens = a squashed sphere; per-axis radii → the wide breathing disc); byte-identical for sphere/cylinder
 
 })(typeof window !== "undefined" ? window : globalThis);
