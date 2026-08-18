@@ -1848,3 +1848,130 @@ like, and nothing proves Metal — SwiftShader is permissive in exactly the way 
 `tools/splice_anchors.mjs` · `tools/byte_identity.mjs`
 **Added:** `test/canon_order_ref.mjs` · `tools/order_collisions.mjs` · `tools/boot_gate.mjs` ·
 `briefs/canon_order.md` · `dist/Zigverse_Engine_v4_1_Order.html`
+
+## 2026-08-18 · GROUND 0.1.0 — "a world has a ground of being" (DECLARED, not yet consulted)
+
+**Bill asked for a white background. The answer took three tries, and the first two were
+mine and wrong.** ZigCore **0.14.0 → 0.15.0**. Nothing in the shader has moved; this commit
+is pure logic and byte-identical, deliberately, so the risky half lands separately.
+
+### WHAT WAS ACTUALLY THERE — and what I said before measuring
+
+| I claimed | truth |
+|---|---|
+| "hardcoded black in five places" | **Wrong.** Five `clearValue` sites exist, but **two are the TRAIL accumulation buffer**, where black means ZERO. Sweeping all five would have flooded the echo feedback rather than lit the world. |
+| "only the clear colour is genuinely hardcoded" | **Wrong, and worse** — the clear colour is not the background at all. |
+
+The sky is a FULLSCREEN triangle, `depthWriteEnabled:false`, `depthCompare:"always"`, drawn
+before any agent. **It paints over every pixel, so the clear colour has been invisible in
+every build ever shipped** — it is the background only when `sky:false`. And `skyTop /
+skyMid / horizon` were already View uniforms, authored near-black by the species.
+
+> **The engine has always been able to paint a lit world. Nobody has ever asked it to.**
+
+`skyMid` is also the haze target, so lifting the sky lifts the medium for free. Two thirds
+of the pairing was already wired. All measured by `tools/ground_gap.mjs`, not asserted.
+
+### THE COLLISION NOBODY HAD NAMED
+
+**THE AFTERIMAGE ASSUMES A DARK WORLD, IN ITS ARITHMETIC.** It composites with `max()` —
+correct when light accumulates upward out of black. Invert the world (a dark organism on a
+bright ground, which is exactly what `radiance=white` is FOR) and the sky's own memory
+outranks the body:
+
+```
+DARK  (void)     body 0.6000 → glass 0.6000   survives
+LIT + rise       body 0.2500 → glass 0.8359   ERASED by its own afterimage
+LIT + signed     body 0.2500 → glass 0.2500   survives
+```
+
+The memory GATE is inverted too — a luminance floor keeps the empty sky at 1.000 and the
+organism at 0.000. **The world remembers its own emptiness and forgets what crossed it.**
+
+That is why GROUND is a law and not a preset: declaring "lit from outside" reaches into
+another capability's compositing math, and a preset has no way to say so.
+
+### THE LAW
+
+Four grounds — `void` (0.000, IDENTITY) · `dusk` (0.055) · `mist` (0.620) · `paper` (0.880).
+Every lit ground pairs `signed` compositing AND an inverted room; no half-declarations,
+because that pairing is precisely what `radiance=white` was missing alone.
+
+Four operations, each the same arithmetic measured from `lift` instead of zero, each
+reducing EXACTLY to what already ships when `lift = 0`: `compose` · `decay` · `gate` ·
+`gated`. Identity proven across the whole unit square, not argued.
+
+**Three refusals**, declared on the law itself. The composition Bill set on 8/17 — lit
+ground, `rise`, no room — now trips **two build-time faults** instead of silently sinking
+the organism on screen.
+
+Ground rides **no rail**. It is not a station in the light's journey; it is the starting
+condition of that journey, and it reaches sideways into a different pass. A law that
+changes the arithmetic others compose WITH cannot be a station on their rail.
+
+### THREE DESIGN ERRORS, ALL CAUGHT BY PROBES, NONE BY READING
+
+1. **Memory faded toward black, not toward the ground.** `trail*decay - eps` fades to zero —
+   right only when zero IS the ground. On a pale field a decaying trail slid PAST the floor
+   into **negative luminance**, and under signed compositing a negative value is the furthest
+   thing from the ground there is, so a spent memory outranked everything. Glass returned
+   `-0.1388`. Fixed: memory fades to the ground and stops.
+2. **An ungated pixel contributed zero.** Same error one level down. `scene * keep` means
+   "not worth remembering, contribute nothing" — and nothing is the floor only in a dark
+   world. On a pale ground it contributes PURE BLACK, maximal departure, so ungated pixels
+   won everything. Fixed: an ungated pixel falls back to the GROUND.
+3. **The probe refused its own author's claim.** `ground_gap` reported the body SURVIVING,
+   because it simulated one frame from an empty trail buffer. A trail buffer in a lit world
+   is never empty. Warm it and the erasure appears at once. **The claim was right and the
+   measurement was wrong** — same failure as `grep -c 'var<private>'` (8/16) and the
+   View-struct regex (8/17). **Four sessions running. Ask every probe which of the two it is
+   doing.**
+
+A further note on identity: `rise` lets a spent trail drift below zero and `signed` stops it
+at the ground. That difference is real but **unobservable** — `max()` can never return a
+negative against a non-negative scene — so the identity asserted is of the COMPOSED RESULT,
+not of the internal scratch value. Asserting the intermediate would have been the same
+measure-the-wrong-thing error a fourth time, in the test written to catch it.
+
+### PROCESS — a false alarm worth recording
+
+A turn errored on Bill's screen but completed on disk, leaving `tools/ground_gap.mjs`
+written by a turn absent from the transcript. I read that as a PARALLEL SESSION and raised
+an alarm. **Wrong: the sandbox is private to one conversation, so no other chat could have
+written into it.** The hazard is real and worth being twitchy about; the inference was not.
+Container isolation settles it in one step — reason about that before escalating.
+
+### VERIFIED
+
+- `node --check` clean · **reference gate 42/42 PASS** (new `test/law_ground_ref.mjs`)
+- shader audits **11 PASS / 0 FAIL**
+- byte identity **5/5 IDENTICAL** — this commit cannot have changed a pixel, and that is the
+  point of committing here
+
+### NOT DONE — the wiring
+
+The engine does not consult this law yet. Still to come: sky triple, the **three** live clear
+values (the trail's two stay black), the afterimage's compose/decay/gate, and the Radiance
+room pulled from the ground rather than set separately. Byte-identical at `void` across the
+matrix, then the boot gate on all four grounds, then Bill's eye on `mist`.
+
+### ALSO OPEN
+
+1. **ZigGlow assessment** (asked 8/18): balloon glow · lantern festival · fireworks. All three
+   need one missing law — **EMISSION**, *a body can be a source, not only a surface*. The
+   ordering rail predicted this: `frame.light` runs `body → medium → tone`, Radiance holds
+   `tone`, Ambience will hold `medium`, and **`body` is empty**. Balloon glow is nearest
+   (Emission + Ground + Diurnal; breath IS inflation). Fireworks needs a soloist, which the
+   engine has no concept of, but gives flash-then-report — Sounding with an audible delay.
+   Lantern festival is furthest: many small sources cross-illuminating, plus water.
+2. **FORK POSITION, stated by Bill:** one engine. "The Mercedes is our vehicle. We won't
+   consider a Tesla unless client-initiated for large commission." A white-background
+   deliverable is a HOST PAGE plus this law, not a second engine. If a fork is ever right
+   (client owns the code, frozen installation, IP separation), fork deliberately — tag it,
+   name it, accept it is frozen.
+3. Radiance `bright` reads washed out in a dark studio — **expected**, the room is a decision.
+   `white` needs a lit ground to read at all, which is what this law is for.
+4. Underside migration still parked (CONTESTED, not ordering). Metal gate still outstanding.
+
+**Changed:** `engine/zigcore.js` · `briefs/Session_Log.md`
+**Added:** `test/law_ground_ref.mjs` · `tools/ground_gap.mjs` · `briefs/law_ground.md`

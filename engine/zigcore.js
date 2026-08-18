@@ -1396,6 +1396,167 @@
   });
 
   /* ==========================================================================
+     GROUND 0.1.0 — the SECOND Canon law. "A world has a ground of being."
+     ---------------------------------------------------------------------------
+     Every world so far has been black, and black was never a decision. It was
+     the value the sky triple happened to be authored at, plus a clear colour
+     nobody has ever seen. `tools/ground_gap.mjs` measures all of it:
+
+       · the sky is a FULLSCREEN triangle, depth writes off, depthCompare
+         "always" — it paints over every pixel before an agent draws, so the
+         clear colour is invisible in every build ever shipped. It is the
+         background only when `sky:false`.
+       · skyTop / skyMid / horizon / ground are already View UNIFORMS. There is
+         no plumbing to lay. The engine has always been able to paint a lit
+         world; nobody has ever asked it to.
+       · skyMid is ALSO the haze the fragment fogs toward, so lifting the sky
+         lifts the medium for free. Two thirds of the pairing is already wired.
+
+     So why a LAW and not a preset? Because of the third finding, which nobody
+     had named:
+
+       THE AFTERIMAGE ASSUMES A DARK WORLD, IN ITS ARITHMETIC.
+
+     It composites with max() — correct when light accumulates upward from
+     black. Invert the world and the sky's own memory sits at 0.85 while a dark
+     body draws at 0.25, so max(scene, trail) returns 0.8359 and THE CREATURE IS
+     ERASED BY ITS OWN AFTERIMAGE. The same body in a dark world reaches the
+     glass untouched. The memory gate is a luminance FLOOR, too, so an inverted
+     world remembers its empty sky and forgets the organism.
+
+     A preset can set a colour. Only a law can say that four capabilities must
+     agree — sky, haze, tone curve and compositing — and REFUSE the ones that
+     do not. On 2026-08-17 Bill set `radiance=white` and watched the organism
+     sink into a dark floor. That was four settings disagreeing with nothing to
+     stop them. Under this law it is a build-time fault.
+
+     GROUNDS are named, and `void` is the identity: today's near-black sky,
+     max() compositing, no tone curve. Every build that exists keeps rendering
+     byte-for-byte what it renders now.
+     ======================================================================= */
+  ZigCore.Ground = {
+    VERSION: "0.1.0",
+
+    /* Named GROUNDS. `lift` is the ground's own luminance — the floor the world
+       never falls below. `sky` is the triple (top, mid, horizon); `mid` doubles
+       as the haze target, which is why it is not a free parameter. `compose`
+       says how memory stacks against this ground, and `room` is the Radiance
+       curve that belongs with it: a lit ground REQUIRES an inverted body or the
+       organism has nothing to be dark against. */
+    grounds: {
+      /* IDENTITY — the black-box theatre. What every build has always been. */
+      void:   { lift: 0.000, compose: "rise",  room: null, gateAt: 0.45,
+                sky: { top: [0.003, 0.005, 0.014], mid: [0.007, 0.011, 0.024], hor: [0.010, 0.014, 0.030] },
+                says: "no ground at all — light accumulates upward out of nothing" },
+      /* Pre-dawn: a sky that is no longer black and not yet day. The balloon
+         glow ground, and the gentlest test of the inversion. */
+      dusk:   { lift: 0.055, compose: "rise",  room: null, gateAt: 0.45,
+                sky: { top: [0.028, 0.026, 0.040], mid: [0.075, 0.050, 0.044], hor: [0.130, 0.085, 0.060] },
+                says: "the hour before the sun — the floor has lifted but light still rises" },
+      /* The inversion proper: a bright ground, a dark organism. Projection,
+         the spa, a lobby, any room that is not a black box. */
+      mist:   { lift: 0.620, compose: "signed", room: "white", gateAt: 0.15,
+                sky: { top: [0.560, 0.600, 0.660], mid: [0.660, 0.700, 0.750], hor: [0.740, 0.770, 0.800] },
+                says: "a pale fog with no horizon — the medium IS the ground" },
+      paper:  { lift: 0.880, compose: "signed", room: "white", gateAt: 0.15,
+                sky: { top: [0.870, 0.870, 0.865], mid: [0.900, 0.898, 0.890], hor: [0.920, 0.918, 0.910] },
+                says: "a white field — print, projection onto a pale wall, a gallery" }
+    },
+
+    /* THE COMPOSITING MODES. This is the half a preset could never reach.
+
+       "rise"   — memory = max(scene, trail). Light accumulates upward from a
+                  dark ground. Correct, and the only mode that has ever existed.
+       "signed" — memory is the FURTHEST-FROM-GROUND value, not the brightest.
+                  On a bright ground a dark body is the departure, so the trail
+                  must remember darkness. Same operation, measured as a signed
+                  distance from `lift` rather than an unsigned climb from zero.
+
+       Both reduce to identical arithmetic when lift = 0, which is what keeps
+       `void` byte-identical. */
+    compose(mode, scene, trail, lift) {
+      if (mode !== "signed") return Math.max(scene, trail);
+      return (Math.abs(scene - lift) >= Math.abs(trail - lift)) ? scene : trail;
+    },
+
+    /* THE DECAY. Memory fades TOWARD THE GROUND, not toward black.
+
+       This is the half the first draft of this law got wrong, and the probe
+       caught it: `trail * decay - eps` fades every memory to zero, which is
+       correct only when zero IS the ground. On a bright ground a decayed trail
+       kept sliding past the floor into negative luminance, and under signed
+       compositing a value further from the ground WINS — so a fading memory
+       eventually outranked everything and the glass returned -0.1388.
+
+       A memory of a dark body on a pale field should fade back to the pale
+       field. The operation is the same one, measured from `lift`. */
+    decay(mode, trail, lift, k, eps) {
+      if (mode !== "signed") return trail * k - eps;
+      const d = trail - lift;
+      const mag = Math.abs(d) * k - eps;
+      return lift + (mag <= 0 ? 0 : (d < 0 ? -mag : mag));
+    },
+
+    /* The memory gate: which pixels are worth remembering. A luminance FLOOR
+       ("remember what is bright") is correct only on a dark ground. On a lit
+       one the test is DISTANCE from the ground, or the world remembers its own
+       empty sky and forgets the organism crossing it. */
+    gate(mode, L, lift, at, width) {
+      const x = (mode === "signed") ? Math.abs(L - lift) : L;
+      const t = Math.min(1, Math.max(0, (x - at) / (width || 0.22)));
+      return t * t * (3 - 2 * t);
+    },
+
+    /* THE GATED SCENE — what a pixel contributes to memory once the gate has
+       spoken. `scene * keep` is right only when zero is the ground: it means
+       "not worth remembering, so contribute nothing", and nothing IS the floor.
+       On a pale ground, contributing zero is contributing pure black, which
+       under signed compositing is the furthest thing from the ground there is —
+       so an ungated pixel would win everything and the memory would fill with
+       darkness that was never drawn.
+
+       An ungated pixel must fall back TO THE GROUND. Same operation, measured
+       from `lift`, and identical to `scene * keep` when lift is zero. */
+    gated(mode, scene, lift, at, width) {
+      const keep = this.gate(mode, scene, lift, at, width);
+      return (mode !== "signed") ? scene * keep : lift + (scene - lift) * keep;
+    },
+
+    resolve(name) { return this.grounds[name] || this.grounds.void; }
+  };
+
+  ZigCore.Canon.register({
+    id: "ground",
+    version: ZigCore.Ground.VERSION,
+    pillar: "habitat",
+    says: "a world has a ground of being — a floor it never falls below, and a direction its light travels from",
+    defaults: { lift: 0.0, compose: "rise", room: null },          // IDENTITY = void
+    presets: ZigCore.Ground.grounds,
+    presetKey: "ground",                                            // window.ZIG_LAWS = { ground: { ground: "mist" } }
+    cpu: null,
+    /* ORDERING (Canon.Order 1.0.0): Ground does not ride the frame.light rail.
+       It is not a step in the light's journey — it is the STARTING CONDITION of
+       that journey, and it also reaches sideways into the afterimage's
+       compositing, which is a different pass entirely. A law that changes the
+       arithmetic other capabilities compose WITH cannot be a station on their
+       rail; it is what the rail runs over. */
+    splice: { stage: "scene", owner: "zigwebgpu:createScene+AFTERIMAGE",
+              rail: null, station: null, mode: "world", face: "both" },
+    /* THE PAIRING REFUSALS — the reason this is a law. Each names a combination
+       that renders without error and destroys the piece. */
+    refuses: [
+      { when: "lift > 0.3 && compose === 'rise'",
+        says: "a lit ground with rise compositing: the sky's own memory outranks a dark body, and max() erases the organism (measured: body 0.2500 reaches the glass at 0.8359)" },
+      { when: "lift > 0.3 && room === null",
+        says: "a lit ground with no inverted tone curve: the body stays bright against a bright floor and sinks — this is what was seen on 2026-08-17" },
+      { when: "lift === 0 && compose === 'signed'",
+        says: "signed compositing on a dark ground: legal but pointless — it reduces to max() and only costs clarity" }
+    ],
+    probe: "test/law_ground_ref.mjs",
+    doc: "briefs/law_ground.md"
+  });
+
+  /* ==========================================================================
      ZigCore.Env — THE ENVIRONMENT LIBRARY (v0.8 · 2026-07-30)
      The Canon above declares the environment LAWS; this is their canonical
      DATA — the named presets every species inherits instead of re-declaring.
@@ -2595,6 +2756,6 @@
     }
   };
 
-  ZigCore.VERSION = "0.14.0";   // 0.14: THE ORDERING CONTRACT (Canon.Order — composition order is DECLARED, not inherited from build history. Two rails, "shard.face" and "frame.light", whose stations are ordered because the physics is; a law files a CLAIM at a station instead of splicing itself, and the rail emits every claim once, in order. Kills the append inversion structurally — there is no idiom left to get backwards — and refuses four faults at build time: unknown station, AMBIGUOUS (two claims, one station, no `after`), CONTESTED (two REPLACE skins on one face), DEAD (a write a later REPLACE discards). Byte-identical: the rail emits exactly the shader the hand splice did) · 0.13: THE CANON RUNTIME (Canon.register/resolve/activate/stamp — laws ship OFF and a host names them via window.ZIG_LAWS or #law=preset; absent = byte-identical) + RADIANCE 0.1.0, the first law: the room is a light source with no falloff, and the response is a hue-preserving luminance remap (black-point · gain · shadow gamma · soft knee). Identity at defaults · 0.11: BOUNDARY AXIS · 0.11.1: GYRE AXIS · 0.12: ELLIPSOID boundary (lens = a squashed sphere; per-axis radii → the wide breathing disc); byte-identical for sphere/cylinder
+  ZigCore.VERSION = "0.15.0";   // 0.15: GROUND 0.1.0 — the SECOND Canon law. "A world has a ground of being." Declared, NOT yet consulted by the engine. Four grounds (void=identity, dusk, mist, paper); one word sets sky, haze, Radiance room and the afterimage's compositing together. Exists because the afterimage assumes a dark world IN ITS ARITHMETIC: max() compositing erases a dark body on a bright ground (0.2500 reaches the glass at 0.8359). Three refusals; the 8/17 sinking organism now trips two of them at build time · 0.14: THE ORDERING CONTRACT (Canon.Order — composition order is DECLARED, not inherited from build history. Two rails, "shard.face" and "frame.light", whose stations are ordered because the physics is; a law files a CLAIM at a station instead of splicing itself, and the rail emits every claim once, in order. Kills the append inversion structurally — there is no idiom left to get backwards — and refuses four faults at build time: unknown station, AMBIGUOUS (two claims, one station, no `after`), CONTESTED (two REPLACE skins on one face), DEAD (a write a later REPLACE discards). Byte-identical: the rail emits exactly the shader the hand splice did) · 0.13: THE CANON RUNTIME (Canon.register/resolve/activate/stamp — laws ship OFF and a host names them via window.ZIG_LAWS or #law=preset; absent = byte-identical) + RADIANCE 0.1.0, the first law: the room is a light source with no falloff, and the response is a hue-preserving luminance remap (black-point · gain · shadow gamma · soft knee). Identity at defaults · 0.11: BOUNDARY AXIS · 0.11.1: GYRE AXIS · 0.12: ELLIPSOID boundary (lens = a squashed sphere; per-axis radii → the wide breathing disc); byte-identical for sphere/cylinder
 
 })(typeof window !== "undefined" ? window : globalThis);
