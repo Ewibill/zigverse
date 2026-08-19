@@ -1975,3 +1975,109 @@ matrix, then the boot gate on all four grounds, then Bill's eye on `mist`.
 
 **Changed:** `engine/zigcore.js` · `briefs/Session_Log.md`
 **Added:** `test/law_ground_ref.mjs` · `tools/ground_gap.mjs` · `briefs/law_ground.md`
+
+## 2026-08-19 · THE GATE THAT COULD NOT FAIL — and the fault it was hiding
+
+**ZigWebGPU 0.45.1 → 0.46.0. GROUND is WIRED and confirmed on screen.** Bill: pale field,
+dark organism, holding its shape, 165fps on eyeZ.
+
+### THE DECISION THAT MADE THE DAY WORK
+
+Bill had letterforms and organic inner-layers ready to add. He asked whether to do them
+first, then answered his own question: **build the gate first.** That was right, and the
+reasoning is worth keeping — *any* work done before the gate was fixed would have been
+verified through the instrument that lied to us the day before. Platform before project,
+applied to the work itself.
+
+### WHAT WAS WRONG WITH THE GATE
+
+`boot_gate.mjs` 1.0 asked ONE question: does the HUD still say "fps"? A page whose every
+command buffer is invalid answers YES, because the JavaScript loop keeps ticking regardless
+of what the driver thinks. It reported **"LIVE at 60fps · 0 hard errors"** for a
+configuration in which Bill's RTX rejected 32,750 draw calls and the screen was black.
+
+That cost most of 8/18. Six fixes were made, each correcting something genuinely broken,
+none of them the fault — because the instrument said green the whole way. **Fifth time this
+project has caught a probe measuring the wrong thing, and the most expensive: it was the one
+measuring the FRAME.**
+
+### boot_gate 2.0 — THE CONFORMANCE GATE
+
+Now asks: did it boot · **did the DRIVER reject anything** · were frames actually submitted ·
+what clear colour did each pass get · which laws are active and in what order.
+
+The engine has logged `[ZigWebGPU] …` validation errors at device init all along. **Nothing
+was listening.** A single one now fails the run.
+
+**PORTABLE BY CONSTRUCTION.** Browser is DISCOVERED — `ZIG_BROWSER` → system Chrome →
+bundled Chromium — because a hard-coded path is a gate that stops running when the machine
+changes, which has already happened twice here (`splice_anchors`, `byte_identity`).
+Preferring the INSTALLED Chrome is not merely lean: yesterday's fault was a driver
+divergence, and validating against a bundled Chromium on a software rasteriser answers a
+question nobody asked.
+
+**NEGATIVE-TESTED, and the negative test itself taught something.** Injecting a blatant WGSL
+syntax error did NOT fail the gate — this sandbox's Chrome compiled it without complaint, and
+`getCompilationInfo()` rejects with "Instance dropped" here. So the DETECTOR was proved
+instead, by injecting the exact console shape a real rejection produces: 364 driver errors,
+FAIL, at 60fps with 609 submits. **The environment cannot reproduce a driver rejection; only
+eyeZ can.** That is the whole argument for the gate living on Bill's machine.
+
+### eyeZ CAN NOW RUN THE GATE ITSELF
+
+`npm.cmd install playwright-core` — 8 seconds, one package, a few MB, drives the Chrome Bill
+already has. (Plain `npm` is blocked by PowerShell's execution policy; `npm.cmd` sidesteps it.)
+**First run on eyeZ found the fault immediately.**
+
+### THE FAULT — one conditional bind group entry
+
+```
+[ZigWebGPU] Number of entries (2) did not match the expected number of entries (3)
+            for [BindGroupLayoutInternal (unlabeled)]
+```
+
+The base `blitFs` is `max(s, t)` and **never touches the uniform**, so `layout:"auto"`
+derived a TWO-entry layout and its bind group matched. GROUND's signed `blitFs` calls
+`gndFarther(s, t, A.lift)` — binding 0 is now used, the layout became THREE, and every bind
+group was rejected. **1,240 per run, at 165fps, black screen.**
+
+> **A SHADER SPLICE THAT CHANGES WHICH BINDINGS A STAGE USES CHANGES ITS AUTO-DERIVED
+> LAYOUT.** Byte-identity cannot see it — the `void` text is unchanged. A gate that watches
+> the loop cannot see it either. This belongs beside the Metal `var<private>` hazard as a
+> class of bug that renders, reports fine, and is wrong.
+
+### VERIFIED
+
+- reference gate **42/42** · shader audits **11/11** · byte identity **5/5 IDENTICAL**
+- boot gate 2.0: **void · dusk · mist · paper all PASS**, 0 driver errors, ~700 submits each
+- **eyeZ, Bill's eye:** mist and paper both render, both **165fps**
+
+### TWO FINDINGS LOGGED, NOT FIXED
+
+1. **A LIT GROUND WANTS ITS OWN RIM AND SHADOW.** On a dark ground shards separate by
+   brightness; on a pale one only the EDGE distinguishes a shard from its neighbour, and rim
+   sits at 0.40/3.0 tuned for the opposite world. The interior reads as a mass rather than as
+   thousands of individuals. Taste call, Bill's, and probably belongs in the grounds table
+   alongside `compose` and `gateAt` — the same shape of pairing the law already makes.
+2. **AN ERRORING TAB LEFT OPEN STEALS THE GPU.** `paper` measured 20fps with the old broken
+   builds still open in background tabs; 165fps with a clean browser. A failed WebGPU build
+   spewing 32k errors/frame will look like a performance regression in whatever is measured
+   next. Close them before trusting a number.
+
+### PARKED WITH DEPENDENCIES NAMED
+
+**Letterforms** (Spoon · Needle · Comma · Shingle · Corkscrew · Hook) — pure wardrobe data,
+every slider already exists in `ZigMesh.presets`. Safe any session. Corkscrew is the
+interesting one: rotation makes travelling light/dark bands, i.e. shading from GEOMETRY.
+
+**Organic inner layers** (Living Veins · Cellular Honeycomb · Striated Muscle · Porous Foam ·
+Crystal Growth · Fluid Marbling) — NOT wardrobe. Scout's own line gives it away: *"the
+outside is the costume, the inside is the creature."* Every one is a BEHAVIOUR — veins branch
+toward activity and reroute when injured; cells inflate and propagate pressure waves. They
+need **branching structure** (engine has chains only) and several are **Emission with a
+pattern**. And they would land on the underside, which is still CONTESTED — three capabilities
+already computed and discarded there. Underside migration and Emission come first.
+
+**Changed:** `engine/zigwebgpu.js` · `tools/boot_gate.mjs` · `briefs/law_ground.md` ·
+`briefs/Session_Log.md` · `species/sickleswarm.js` · `engine/zigcore.js`
+**Added:** `tools/ground_clear.mjs` · `dist/Zigverse_Engine_v4_5_Ground.html`

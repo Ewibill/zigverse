@@ -200,7 +200,16 @@
     const LAWS = (ZC.Canon && ZC.Canon.activate)
       ? ZC.Canon.activate(global.ZIG_LAWS, (global.location && global.location.hash) || "")
       : {};
-    const RADIANCE = (ZC.Canon && ZC.Canon.law) ? ZC.Canon.law("radiance") : null;   // resolved {black,gain,gamma,knee} or null
+    let RADIANCE = (ZC.Canon && ZC.Canon.law) ? ZC.Canon.law("radiance") : null;
+    /* GROUND (Canon 0.1.0): the world's floor of light. Absent → `void`, which
+       is today's near-black sky, rise compositing and no tone curve, and every
+       shader emits byte-for-byte what it always has. A lit ground carries its
+       own sky triple, its compositing mode AND the Radiance room that must
+       accompany it — because a bright floor with an un-inverted body is the
+       composition that sank the organism on 2026-08-17.
+          window.ZIG_LAWS = { ground: { ground: "mist" } }   ·   #ground=mist   */
+    const GROUND = (ZC.Canon && ZC.Canon.law) ? ZC.Canon.law("ground") : null;
+    if (ZC.Canon && ZC.Canon.pairGroundToRadiance) RADIANCE = ZC.Canon.pairGroundToRadiance(RADIANCE);   // resolved {black,gain,gamma,knee} or null
     let noteHue = 0, noteFlash = 0;
     const VMIN_BASE = 0.35;   // the historical speed floor (knobsA[2]); STILLNESS scales this, so the base must survive the per-frame rewrite
     const STILLNESS = (global.ZIG_STILLNESS == null) ? 0 : Math.max(0, Math.min(1, +global.ZIG_STILLNESS));   // STILLNESS: how completely the field is allowed to REST when you stop playing. 0 = the historical cloud (a vmin speed floor + a churn field, neither of which ever listened to breath); 1 = both fade to nothing in silence.
@@ -302,6 +311,7 @@
       ? WNAMES.map((n) => ZM.make(ZM.presets[n], { refine: global.ZIG_MINT || 1, thickness: THICK, hollow: HOLLOW }))
       : ZM.make(PETAL, { refine: global.ZIG_MINT || 1, thickness: THICK, hollow: HOLLOW });
     const flock = ZG.createFlock(gpu, {
+      ground: GROUND || undefined,   // GROUND: a sceneless build still has a floor of light
       contact: CONTACT_R > 0 ? { r: CONTACT_R, k: 45, damp: 4, max: 12 } : null,
       onset: ONSET_S,
       sepCap: CROWD_CAP > 0 ? { pair: 0.55, total: CROWD_CAP } : null,
@@ -353,8 +363,9 @@
        Embodiment: the deep owns nothing it wasn't handed by a wave.        */
     let scene = null, flockB = null;
     if (global.ZIG_UNDERROW) {
-      scene = ZG.createScene(gpu, { sky: true });
+      scene = ZG.createScene(gpu, { sky: true, ground: GROUND || undefined });
       flockB = ZG.createFlock(gpu, {
+        ground: GROUND || undefined,
         contact: CONTACT_R > 0 ? { r: CONTACT_R, k: 45, damp: 4, max: 12 } : null,
         onset: ONSET_S,
         sepCap: CROWD_CAP > 0 ? { pair: 0.55, total: CROWD_CAP } : null,
@@ -380,7 +391,12 @@
        E = longer · D = shorter (τ < 0.15 s snaps OFF). */
     const after = ZG.createAfterimage(gpu, {
       tau: global.ZIG_FX === "gong" ? 2.2 : 0,
-      gate: 0.48                                    // only real flashes cross into memory
+      /* GROUND: on a lit floor the gate is a DISTANCE from the ground, not a
+         luminance ceiling — a luminance gate on a pale field keeps the empty
+         sky at 1.000 and the organism at 0.000, so the world remembers its own
+         emptiness. The ground supplies its own threshold; void keeps 0.48. */
+      gate: (GROUND && GROUND.compose === "signed" && GROUND.gateAt !== undefined) ? GROUND.gateAt : 0.48,
+      ground: GROUND || undefined
     });
     if (scene) scene.attachAfterimage(after); else flock.attachAfterimage(after);
     Sickle.after = after;
@@ -483,6 +499,25 @@
       setV4(40, 0.007, 0.011, 0.024, 0.0);       // skyMid (also the haze color)
       setV4(44, 0.013, 0.020, 0.035, 0.0);       // horizon
       setV4(48, 0.004, 0.005, 0.008, 0.0);       // ground
+    }
+    /* GROUND (Canon 0.1.0) — THE FLOOR OF LIGHT, and the last word on the sky.
+
+       Everything above authors a NIGHT. That was never a limitation of the
+       engine: skyTop/skyMid/horizon have always been View uniforms, and
+       `tools/ground_gap.mjs` proves the plumbing was complete. They had simply
+       only ever been given dark values. A declared ground overwrites them.
+
+       This is also the ONLY place the background truly changes. The clear
+       colour is a fallback the sky paints over (fullscreen triangle, depth
+       writes off, depthCompare "always"), so lifting the sky here is what
+       actually lights the world — and because slot 40 doubles as the haze the
+       fragment fogs toward, the medium lifts with it at no cost. */
+    if (GROUND && GROUND.sky && GROUND.lift > 0) {
+      const K = GROUND.sky;
+      setV4(36, K.top[0], K.top[1], K.top[2], 0.0);   // skyTop
+      setV4(40, K.mid[0], K.mid[1], K.mid[2], 0.0);   // skyMid — AND the haze target
+      setV4(44, K.hor[0], K.hor[1], K.hor[2], 0.0);   // horizon
+      setV4(48, K.mid[0] * 0.92, K.mid[1] * 0.92, K.mid[2] * 0.92, 0.0);   // ground plane, a shade under the sky
     }
     /* LIVE DIALS — start hot (the extremes hunt), tune with keys, read the
        numbers off the HUD when a sweet spot lands */
@@ -1254,6 +1289,12 @@
           (dial.chiaro > 0.001 ? " · light " + dial.chiaro.toFixed(2) : "") +
           (dial.rim > 0.001 ? " · rim " + dial.rim.toFixed(2) + "/" + dial.rimSharp.toFixed(1) : "") +
           (RADIANCE ? " · radiance " + (dial.radiance > 0 ? (RADIANCE.preset || "custom") : "off") : "") +
+          /* GROUND: name the floor of light in the HUD. A law you cannot see the
+             state of is a law you debug by guessing — which cost most of an
+             afternoon on 2026-08-18, when a black screen could have been either
+             an inactive law or an active one rendering wrongly. */
+          (GROUND ? " · ground " + (GROUND.preset || "?") + " lift " + (GROUND.lift || 0).toFixed(2) +
+                    " " + (GROUND.compose || "rise") : " · ground void") +
           (MEMBACK_COMPILED ? (dial.memBack > 0 ? " · mem-back " + Math.round((0.22 + 0.78 * memGlow) * 100) + "%" : " · mem-back off") : "") +
           " · reveal " + dial.reveal.toFixed(2) +
           " · EWI " + (noteForm ? "ON" + (formLife > 0.05 ? " ▮" + (WNAMES.length ? WNAMES[state.letter].toUpperCase() : "") : "") : "off") +

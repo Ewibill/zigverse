@@ -27,7 +27,7 @@
 (function (global) {
   "use strict";
   const ZigWebGPU = global.ZigWebGPU || (global.ZigWebGPU = {});
-  ZigWebGPU.VERSION = "0.45.1";   // 0.45.1: RADIANCE RIDES THE RAIL — the law no longer splices itself; it files a claim at station "tone" on ZigCore.Canon.Order's `frame.light` rail and the rail emits at one insertion point in declared station order. When AMBIENCE lands at "medium" it is emitted BEFORE the tone remap without a character of the radiance block changing, which is the Ambience-vs-Radiance collision settled in the contract instead of re-litigated per build. Byte-identical to 0.45.0 across the whole option matrix · 0.45.0: RADIANCE (opts.radiance — the FIRST Canon law: the room is a light source with no falloff, so perceived = displayed + veil and the shadow RATIOS that carry the modelling collapse in a lit space. A hue-preserving luminance remap (black-point · gain · shadow gamma · soft knee) spliced at the end of BOTH fragment paths; the live dial V.render6.w cross-fades it against itself. Not one character emitted when opts.radiance is absent) · 0.44.2: two more Metal failures the LANTERN module carried — its truncated View struct stopped at render4 while the note-flash block read render5, and its corner table was a mutable local array that overflowed Metal's small vertex stack. nvidia tolerated both · 0.44.1:   // 0.44.1: the LANTERN module referenced BEE_SIZE, a constant declared only in the BIRD module — nvidia tolerated the dangling reference, Metal refused it and the whole render pipeline failed to build (black canvas, healthy HUD, 60fps). Each WGSL block is a separate module and must declare what it uses · 0.44:   // 0.44: SEPCAP (opts.sepCap — the overlap force is unbounded and SUMS over neighbours, so a shard buried in twenty others was kicked 10-50x harder than anything else in the world; per-pair and total ceilings put it back in the same regime; byte-identical when absent) · 0.43.4:   // 0.43.4: the BEE varying is declared for EVERY consumer (BEE or NOTEFLASH) — the flash reads inp.bee, so turning the bee OFF while flash was ON left the fragment stage referencing an undeclared varying; bee-on worked and bee-off went black · 0.43.3:   // 0.43.3: the BEE varying inserts ABOVE the near line, never between it and the closing brace — MATERIAL anchors on "near ... };" as ONE string, so anything placed BETWEEN them destroys that anchor whichever slot it claims; verified order-independent both ways · 0.43.2:   // 0.43.2: the BEE varying is SPLICED at @location(11) instead of written into BirdOut — MATERIAL appends its own @location(10) snw by anchoring on the struct's last line + closing brace, so editing that text both collided on slot 10 and broke the anchor (black canvas) · 0.43.1:   // 0.43.1: the NOTE FLASH is THE BEE ALONE (a bee varying on BirdOut gates it) — lighting every shard's cup made the whole field answer the note and lost her in it; one lit interior among a thousand dark ones is the point · 0.43: NOTE FLASH (opts.noteFlash — the two faces answer a note DIFFERENTLY: the cupped INTERIOR takes the pitch-class hue while the OUTSIDE takes one fixed colour, so a turning field alternates a constant skin with an interior that differs for every pitch; render6 declared LAST in the View struct so nothing already hand-indexed shifts; byte-identical when absent) · 0.42: THE BEE FLASHES THE NOTE (render5.z/w)/12 mapping MELODIC STRATA already uses, so a C is the same colour as a band or as her flash; her lantern is also 2.7x larger because her flash is an EVENT not one firefly among thousands; byte-identical at render5.w = 0) · 0.41: THE BEE (agent #0 drawn at 1.45x and swelling with charisma — the SAME letterform as every shard, only larger and self-lit, so the field turning toward her reads as recognition rather than alarm; never hidden by UNSEEN) · 0.40: UNSEEN (opts.unseen — a fraction of the flock fully PRESENT to the physics and not DRAWN. The crowd and the eye want opposite things: contagion and murmur need numbers, legibility needs room. Render-side splice only, so hidden agents still flock, collide, carry contagion and count as neighbours — the shards you see are moved by neighbours you cannot; byte-identical at 0) · 0.39: ONSET (opts.onset — agitation may only RISE over a time constant instead of snapping to full in one frame; the max() gave contagion an instant attack and a slow release, i.e. a popcorn envelope, and agit drives vmax so a single-frame spike made individual shards DART. Brackets the contagion line rather than replacing it, since VOICE claims that text. Performer strikes stay instant; byte-identical at 0) · 0.38: CONTACT (opts.contact {r,k,damp} — matter that OCCUPIES SPACE, reusing the flock's own spatial grid; separation is a preference and can be overpowered, this cannot; SCATTER rewritten as GATHER so each thread keeps its own half of every pair; parity-checked against ZigCore.Contact.self by tools/parity_contact.html; byte-identical when absent) · 0.37: STRUCTURE (opts.structure — matter that is JOINED: spring + damping + momentum-conserving bend, SCATTER rewritten as GATHER so a compute thread only writes its own slot; chains only; parity-checked against ZigCore.Structure.accel by tools/parity_structure.html; byte-identical when absent) ·   // 0.34: INTERIOR BUFF (back-face relief ×0.35 + specular broadened/dimmed + gem glints ×0.5 on !ff — the mesh facet seams stop catching as hard straight lines on the back; front keeps full crisp relief; byte-identical on the front face) · 0.33: GEM FACE (opts.gemFace — "inside" = the SEASHELL: matte material on the outside, gem nacre in the cupped interior; "outside"/"both" too; guards the gem's c=gc by front_facing; byte-identical at "both") · 0.32: MELODIC STRATA (View.noteBands[6] · view[84..107] — each EWI note blooms a band of light at its pitch-height in its pitch-class colour, fading over time; the melody written onto the body's vertical axis; driven by ZC.NoteField; zero when silent) · 0.31: SILHOUETTE RIM (live V.render5.x/y — a fresnel edge re-draws every letter's outline against the void, legible under any material on either face; face-corrected so the concave back outlines too; zero at render5.x=0; the reusable legibility capability all species inherit) · 0.30: GEM MATERIALS (opts.gem — refraction + dispersion fire + fresnel sky-reflection + facet flash + sparkle, sampling the analytic sky; byte-identical off) · 0.29: FABRIC UNDERSIDE (opts.backFabric — 20 textiles: weave pattern + sheen model + colour lining the concave back; byte-identical off) · 0.28: VELVET UNDERSIDE (opts.backVelvet — a different fabric skin on the back face: deep matte + grazing sheen; byte-identical off) · 0.27: MEMORY UNDERSIDE (opts.memoryBack — the back face glows with a lagging ghost of the recent phrase; the 2nd performance surface; render4.y/z; byte-identical off) · 0.26: CHIAROSCURO (opts.chiaro — back off ambient/fill so only the light-facing side shows, unlit → black; byte-identical at 0) · 0.25: WEB — connective filaments between neighbouring agents (grid-driven K-NN compute + instanced thread render; breath strings the web; byte-identical when opts.web absent) · 0.24: GRAIN THROUGH COLOUR — the skin's grain corrugates the spectrum too, so surface texture survives at full ink (byte-identical without material/spectrum) · 0.22: BOUNDARY · 0.23: COMPOSE — spectrum TINTS the material body (visible on pale skins; ink I/K = solid↔rainbow amount over the pigment) · 0.19: MEDIUM · 0.20: FORCES · 0.21: CURRENT (opts.boundary {shape,r,k,lo?,hi?} — the world's SHAPE: a soft cylinder/sphere that holds matter inside a volume; restoring accel before integrate, composes with all; byte-identical when absent) // 0.35: BOUNDARY AXIS — cylinder law holds along any free axis (capsule = horizontal cigar); byte-identical for axis "y" · 0.35.1: GYRE AXIS — current circulates around any axis (roll a horizontal cigar broadside); byte-identical for gyre axis "y" · 0.36: ELLIPSOID boundary (lens — squashed sphere, per-axis radii; the wide breathing disc); byte-identical for sphere/cylinder
+  ZigWebGPU.VERSION = "0.46.0";   // 0.46.0: GROUND IS WIRED — a declared ground now sets the sky triple, the three scene clear values (NOT the trail's two, where black means zero), the afterimage's compositing/decay/gate, and the Radiance room, from one word. Signed compositing is SPLICED, so `void` and `dusk` emit the base afterimage byte for byte. THE FAULT THAT COST 8/18: the base blitFs never used the uniform, so `layout:"auto"` gave it a 2-entry layout; the signed blitFs uses A.lift, the layout became 3, and every bind group was rejected — 1,240 driver errors per run at 165fps with a black screen. A shader splice that changes WHICH BINDINGS A STAGE USES changes its auto-derived layout · 0.45.1: RADIANCE RIDES THE RAIL — the law no longer splices itself; it files a claim at station "tone" on ZigCore.Canon.Order's `frame.light` rail and the rail emits at one insertion point in declared station order. When AMBIENCE lands at "medium" it is emitted BEFORE the tone remap without a character of the radiance block changing, which is the Ambience-vs-Radiance collision settled in the contract instead of re-litigated per build. Byte-identical to 0.45.0 across the whole option matrix · 0.45.0: RADIANCE (opts.radiance — the FIRST Canon law: the room is a light source with no falloff, so perceived = displayed + veil and the shadow RATIOS that carry the modelling collapse in a lit space. A hue-preserving luminance remap (black-point · gain · shadow gamma · soft knee) spliced at the end of BOTH fragment paths; the live dial V.render6.w cross-fades it against itself. Not one character emitted when opts.radiance is absent) · 0.44.2: two more Metal failures the LANTERN module carried — its truncated View struct stopped at render4 while the note-flash block read render5, and its corner table was a mutable local array that overflowed Metal's small vertex stack. nvidia tolerated both · 0.44.1:   // 0.44.1: the LANTERN module referenced BEE_SIZE, a constant declared only in the BIRD module — nvidia tolerated the dangling reference, Metal refused it and the whole render pipeline failed to build (black canvas, healthy HUD, 60fps). Each WGSL block is a separate module and must declare what it uses · 0.44:   // 0.44: SEPCAP (opts.sepCap — the overlap force is unbounded and SUMS over neighbours, so a shard buried in twenty others was kicked 10-50x harder than anything else in the world; per-pair and total ceilings put it back in the same regime; byte-identical when absent) · 0.43.4:   // 0.43.4: the BEE varying is declared for EVERY consumer (BEE or NOTEFLASH) — the flash reads inp.bee, so turning the bee OFF while flash was ON left the fragment stage referencing an undeclared varying; bee-on worked and bee-off went black · 0.43.3:   // 0.43.3: the BEE varying inserts ABOVE the near line, never between it and the closing brace — MATERIAL anchors on "near ... };" as ONE string, so anything placed BETWEEN them destroys that anchor whichever slot it claims; verified order-independent both ways · 0.43.2:   // 0.43.2: the BEE varying is SPLICED at @location(11) instead of written into BirdOut — MATERIAL appends its own @location(10) snw by anchoring on the struct's last line + closing brace, so editing that text both collided on slot 10 and broke the anchor (black canvas) · 0.43.1:   // 0.43.1: the NOTE FLASH is THE BEE ALONE (a bee varying on BirdOut gates it) — lighting every shard's cup made the whole field answer the note and lost her in it; one lit interior among a thousand dark ones is the point · 0.43: NOTE FLASH (opts.noteFlash — the two faces answer a note DIFFERENTLY: the cupped INTERIOR takes the pitch-class hue while the OUTSIDE takes one fixed colour, so a turning field alternates a constant skin with an interior that differs for every pitch; render6 declared LAST in the View struct so nothing already hand-indexed shifts; byte-identical when absent) · 0.42: THE BEE FLASHES THE NOTE (render5.z/w)/12 mapping MELODIC STRATA already uses, so a C is the same colour as a band or as her flash; her lantern is also 2.7x larger because her flash is an EVENT not one firefly among thousands; byte-identical at render5.w = 0) · 0.41: THE BEE (agent #0 drawn at 1.45x and swelling with charisma — the SAME letterform as every shard, only larger and self-lit, so the field turning toward her reads as recognition rather than alarm; never hidden by UNSEEN) · 0.40: UNSEEN (opts.unseen — a fraction of the flock fully PRESENT to the physics and not DRAWN. The crowd and the eye want opposite things: contagion and murmur need numbers, legibility needs room. Render-side splice only, so hidden agents still flock, collide, carry contagion and count as neighbours — the shards you see are moved by neighbours you cannot; byte-identical at 0) · 0.39: ONSET (opts.onset — agitation may only RISE over a time constant instead of snapping to full in one frame; the max() gave contagion an instant attack and a slow release, i.e. a popcorn envelope, and agit drives vmax so a single-frame spike made individual shards DART. Brackets the contagion line rather than replacing it, since VOICE claims that text. Performer strikes stay instant; byte-identical at 0) · 0.38: CONTACT (opts.contact {r,k,damp} — matter that OCCUPIES SPACE, reusing the flock's own spatial grid; separation is a preference and can be overpowered, this cannot; SCATTER rewritten as GATHER so each thread keeps its own half of every pair; parity-checked against ZigCore.Contact.self by tools/parity_contact.html; byte-identical when absent) · 0.37: STRUCTURE (opts.structure — matter that is JOINED: spring + damping + momentum-conserving bend, SCATTER rewritten as GATHER so a compute thread only writes its own slot; chains only; parity-checked against ZigCore.Structure.accel by tools/parity_structure.html; byte-identical when absent) ·   // 0.34: INTERIOR BUFF (back-face relief ×0.35 + specular broadened/dimmed + gem glints ×0.5 on !ff — the mesh facet seams stop catching as hard straight lines on the back; front keeps full crisp relief; byte-identical on the front face) · 0.33: GEM FACE (opts.gemFace — "inside" = the SEASHELL: matte material on the outside, gem nacre in the cupped interior; "outside"/"both" too; guards the gem's c=gc by front_facing; byte-identical at "both") · 0.32: MELODIC STRATA (View.noteBands[6] · view[84..107] — each EWI note blooms a band of light at its pitch-height in its pitch-class colour, fading over time; the melody written onto the body's vertical axis; driven by ZC.NoteField; zero when silent) · 0.31: SILHOUETTE RIM (live V.render5.x/y — a fresnel edge re-draws every letter's outline against the void, legible under any material on either face; face-corrected so the concave back outlines too; zero at render5.x=0; the reusable legibility capability all species inherit) · 0.30: GEM MATERIALS (opts.gem — refraction + dispersion fire + fresnel sky-reflection + facet flash + sparkle, sampling the analytic sky; byte-identical off) · 0.29: FABRIC UNDERSIDE (opts.backFabric — 20 textiles: weave pattern + sheen model + colour lining the concave back; byte-identical off) · 0.28: VELVET UNDERSIDE (opts.backVelvet — a different fabric skin on the back face: deep matte + grazing sheen; byte-identical off) · 0.27: MEMORY UNDERSIDE (opts.memoryBack — the back face glows with a lagging ghost of the recent phrase; the 2nd performance surface; render4.y/z; byte-identical off) · 0.26: CHIAROSCURO (opts.chiaro — back off ambient/fill so only the light-facing side shows, unlit → black; byte-identical at 0) · 0.25: WEB — connective filaments between neighbouring agents (grid-driven K-NN compute + instanced thread render; breath strings the web; byte-identical when opts.web absent) · 0.24: GRAIN THROUGH COLOUR — the skin's grain corrugates the spectrum too, so surface texture survives at full ink (byte-identical without material/spectrum) · 0.22: BOUNDARY · 0.23: COMPOSE — spectrum TINTS the material body (visible on pale skins; ink I/K = solid↔rainbow amount over the pigment) · 0.19: MEDIUM · 0.20: FORCES · 0.21: CURRENT (opts.boundary {shape,r,k,lo?,hi?} — the world's SHAPE: a soft cylinder/sphere that holds matter inside a volume; restoring accel before integrate, composes with all; byte-identical when absent) // 0.35: BOUNDARY AXIS — cylinder law holds along any free axis (capsule = horizontal cigar); byte-identical for axis "y" · 0.35.1: GYRE AXIS — current circulates around any axis (roll a horizontal cigar broadside); byte-identical for gyre axis "y" · 0.36: ELLIPSOID boundary (lens — squashed sphere, per-axis radii; the wide breathing disc); byte-identical for sphere/cylinder
 
   /* ---- probe — the gate. Green or it doesn't ship. ---------------------- */
   ZigWebGPU.probe = async function () {
@@ -165,7 +165,7 @@
      worlds that never attach render EXACTLY as before. Every species —
      Halo Field, Lake, Fireflies, futures — inherits this with one call.
      ===================================================================== */
-  const AFTERIMAGE_WGSL = `
+  const AFTERIMAGE_BASE = `
 struct AU { decay: f32, eps: f32, gate: f32, pad1: f32 };
 @group(0) @binding(0) var<uniform> A: AU;
 @group(0) @binding(1) var sceneT: texture_2d<f32>;
@@ -194,10 +194,76 @@ struct FSQ { @builtin(position) cp: vec4f };
   return vec4f(max(s, t), 1.0);
 }`;
 
+  /* GROUND 0.1.0 — SIGNED COMPOSITING (spliced, never rewritten).
+
+     The base above is correct and stays untouched for every world whose ground
+     is `void`: light accumulates upward out of black, and max() is exactly
+     right. It is also what every build ever shipped emits, byte for byte.
+
+     A LIT ground inverts the premise. `tools/ground_gap.mjs` measures the cost:
+     the bright sky's own memory sits at 0.85 while a dark body draws at 0.25,
+     so max(scene, trail) returns the SKY and the creature is erased by its own
+     afterimage — in a shader that reports no error. The memory gate is a
+     luminance FLOOR too, so the world remembers its empty sky at keep 1.000 and
+     forgets the organism at 0.000.
+
+     Every line below is the same operation measured from the ground instead of
+     from zero, and each reduces exactly to the base when lift = 0:
+       · FARTHER  — memory keeps the value furthest FROM the ground, not the
+                    brightest, because on a pale field a dark body is the event
+       · the gate — tests DISTANCE from the ground, not luminance
+       · the gated scene — an ungated pixel falls back TO THE GROUND, not to
+                    black; contributing black on a pale ground is contributing
+                    maximal departure, which is how ungated pixels would win
+       · the decay — memory fades TO the ground and STOPS there. Fading toward
+                    zero slid past the floor into negative luminance, where
+                    signed compositing ranked it above everything.
+
+     The last two were design errors caught by the probe, not by reading. Both
+     would have shipped as a screen full of darkness that was never drawn. The
+     transcription is proved against ZigCore.Ground by test/law_ground_ref.mjs. */
+  const AFTERIMAGE_SIGNED = `
+/* GROUND: the value FURTHEST from the ground wins — per channel. */
+fn gndFarther(a: vec3f, b: vec3f, g: f32) -> vec3f {
+  return select(b, a, abs(a - vec3f(g)) >= abs(b - vec3f(g)));
+}`;
+
+  const AFTERIMAGE_WGSL = function (ground) {
+    const base = AFTERIMAGE_BASE;
+    if (!ground || ground.compose !== "signed") return base;          // void — untouched
+    return base
+      .replace("struct AU { decay: f32, eps: f32, gate: f32, pad1: f32 };",
+               "struct AU { decay: f32, eps: f32, gate: f32, lift: f32 };" + AFTERIMAGE_SIGNED)
+      .replace(
+        "  let keep = smoothstep(A.gate, A.gate + 0.22, max(s.r, max(s.g, s.b)));\n" +
+        "  return vec4f(max(s * keep, p * A.decay - vec3f(A.eps)), 1.0);",
+        "  let g = vec3f(A.lift);\n" +
+        "  let keep = smoothstep(A.gate, A.gate + 0.22, abs(max(s.r, max(s.g, s.b)) - A.lift));\n" +
+        "  let gated = g + (s - g) * keep;                       // ungated falls back to the GROUND\n" +
+        "  let d = p - g;\n" +
+        "  let faded = g + sign(d) * max(abs(d) * A.decay - vec3f(A.eps), vec3f(0.0));   // fades TO the ground\n" +
+        "  return vec4f(gndFarther(gated, faded, A.lift), 1.0);")
+      .replace("  return vec4f(max(s, t), 1.0);",
+               "  return vec4f(gndFarther(s, t, A.lift), 1.0);");
+  };
+
   ZigWebGPU.createAfterimage = function (gpu, opts) {
     opts = opts || {};
     const device = gpu.device;
-    const mod = device.createShaderModule({ code: AFTERIMAGE_WGSL });
+    /* GROUND 0.1.0 — the afterimage asks the world what its ground is. A world
+       that never declares one resolves to `void`, and the shader below is then
+       the base text unchanged, byte for byte. */
+    const ZCg = global.ZigCore && global.ZigCore.Ground;
+    const GND = opts.ground
+      ? (typeof opts.ground === "string" ? (ZCg ? ZCg.resolve(opts.ground) : null) : opts.ground)
+      : null;
+    const AFTER_SRC = AFTERIMAGE_WGSL(GND);
+    /* Does the BLIT stage use the uniform? `layout:"auto"` derives a layout
+       from the bindings a stage statically uses, so this decides how many
+       entries its bind group needs. Computed ONCE here — rebuilding a shader
+       string inside a bind-group loop is wasteful and obscures the reason. */
+    const blitNeedsU = /A\.lift/.test(AFTER_SRC);
+    const mod = device.createShaderModule({ code: AFTER_SRC });
     const mkPipe = (entry) => device.createRenderPipeline({
       layout: "auto",
       vertex: { module: mod, entryPoint: "fsqVs" },
@@ -210,7 +276,23 @@ struct FSQ { @builtin(position) cp: vec4f };
     const uarr = new Float32Array(4);
     const after = {
       tau: opts.tau === undefined ? 1.2 : opts.tau,   // memory time-constant, seconds (≤0.02 = off)
-      gate: opts.gate === undefined ? 0 : opts.gate,  // luminance floor for memory (0 = remember all · ~0.45 = only flashes)
+      gate: opts.gate === undefined ? (GND && GND.gateAt !== undefined && GND.compose === "signed" ? GND.gateAt : 0)
+                                    : opts.gate,      // luminance floor for memory (0 = remember all · ~0.45 = only flashes)
+      lift: GND ? (GND.lift || 0) : 0,                // GROUND: the floor memory is measured from (0 = void, identity)
+      /* GROUND — THE EMPTY TRAIL IS THE GROUND, NOT BLACK.
+         This buffer clears to black because black is ZERO: nothing remembered.
+         That is true only while the ground is at zero. Under signed
+         compositing black is MAXIMALLY far from a lit ground, so a
+         freshly-cleared trail outranks every real pixel and wins the whole
+         frame — a black screen on `mist` and `paper`, found by Bill's eye on
+         2026-08-18 after every probe passed. The probes could not see it: the
+         reference sim seeds its buffer at the ground ("a world starts AT its
+         ground") while the engine cleared to black, so the test was right about
+         the arithmetic and silent about the initial condition. Third time this
+         law has confused "empty" with "black". */
+      gclear: (GND && GND.compose === "signed" && GND.sky)
+        ? { r: GND.sky.mid[0], g: GND.sky.mid[1], b: GND.sky.mid[2], a: 1 }
+        : { r: 0, g: 0, b: 0, a: 1 },
       w: 0, h: 0, sceneTex: null, trail: [null, null], flip: 0,
       _bgTrail: [null, null], _bgBlit: [null, null], _sceneView: null,
       _ensure() {
@@ -229,9 +311,29 @@ struct FSQ { @builtin(position) cp: vec4f };
             { binding: 0, resource: { buffer: ubuf } },
             { binding: 1, resource: this._sceneView },
             { binding: 2, resource: tv[f] }] });
-          this._bgBlit[f] = device.createBindGroup({ layout: blitPipe.getBindGroupLayout(0), entries: [
+          /* THE BLIT'S BIND GROUP DEPENDS ON THE SHADER IT IS FOR.
+
+             `layout: "auto"` derives a layout from the bindings a stage
+             STATICALLY USES. The base blitFs is `max(s, t)` and never touches
+             the uniform, so its layout has two entries and this bind group
+             matched. GROUND's signed blitFs calls gndFarther(s, t, A.lift) —
+             it now uses binding 0, the layout becomes three entries, and a
+             two-entry bind group is rejected:
+
+               "Number of entries (2) did not match the expected number of
+                entries (3) for [BindGroupLayoutInternal]"
+
+             1,240 of those per run on Bill's RTX, cascading into invalid
+             command buffers and a black screen — while the loop kept reporting
+             165fps. This is the fault that cost 2026-08-18, and the lesson is
+             narrow and worth stating: A SHADER SPLICE THAT CHANGES WHICH
+             BINDINGS A STAGE USES CHANGES ITS AUTO-DERIVED LAYOUT. Byte
+             identity cannot see it (the void text is unchanged), and a boot
+             gate that only watches the loop cannot see it either. */
+          this._bgBlit[f] = device.createBindGroup({ layout: blitPipe.getBindGroupLayout(0), entries:
+            (blitNeedsU ? [{ binding: 0, resource: { buffer: ubuf } }] : []).concat([
             { binding: 1, resource: this._sceneView },
-            { binding: 2, resource: tv[f] }] });
+            { binding: 2, resource: tv[f] }]) });
         }
         this._tv = tv;
       },
@@ -240,12 +342,12 @@ struct FSQ { @builtin(position) cp: vec4f };
       /* fold scene → trail, blit trail → glass. Recorded on the SAME encoder. */
       run(enc, swapView, dt) {
         const decay = this.tau <= 0.02 ? 0 : Math.exp(-(dt || 1 / 60) / this.tau);
-        uarr[0] = decay; uarr[1] = 0.6 / 255; uarr[2] = this.gate;
+        uarr[0] = decay; uarr[1] = 0.6 / 255; uarr[2] = this.gate; uarr[3] = this.lift;   // [3] was pad1 — GROUND uses it, void writes 0
         device.queue.writeBuffer(ubuf, 0, uarr);
         const next = 1 - this.flip;
-        const tp = enc.beginRenderPass({ colorAttachments: [{ view: this._tv[next], clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: "clear", storeOp: "store" }] });
+        const tp = enc.beginRenderPass({ colorAttachments: [{ view: this._tv[next], clearValue: this.gclear, loadOp: "clear", storeOp: "store" }] });
         tp.setPipeline(trailPipe); tp.setBindGroup(0, this._bgTrail[this.flip]); tp.draw(3); tp.end();
-        const bp = enc.beginRenderPass({ colorAttachments: [{ view: swapView, clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: "clear", storeOp: "store" }] });
+        const bp = enc.beginRenderPass({ colorAttachments: [{ view: swapView, clearValue: this.gclear, loadOp: "clear", storeOp: "store" }] });
         bp.setPipeline(blitPipe); bp.setBindGroup(0, this._bgBlit[next]); bp.draw(3); bp.end();
         this.flip = next;
       }
@@ -543,6 +645,27 @@ fn waterColor(dir: vec3f) -> vec3f {
     const device = gpu.device;
     const viewBuf = device.createBuffer({  size: 112 * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });   // 112: +noteBands[6] strata (v0.32) +render6 note flash (v0.43)
     const drawSky = opts.sky !== false;
+    /* GROUND 0.1.0 — the world's floor of light.
+
+       The clear colour is a FALLBACK, not the background: the sky is a
+       fullscreen triangle with depth writes off and depthCompare "always", so
+       it paints over every pixel before an agent draws. `tools/ground_gap.mjs`
+       proves the clear has been invisible in every build ever shipped. It
+       matters only when a caller passes `sky:false` — and then it matters
+       completely, which is why it is no longer a literal.
+
+       Note the count: THREE clear values live in this file's render passes, not
+       five. The other two belong to the trail accumulation buffer, where black
+       means ZERO and a lit colour would flood the echo rather than light the
+       world. Sweeping all five would have been the obvious change and the
+       wrong one. */
+    const ZCg = global.ZigCore && global.ZigCore.Ground;
+    const GND = opts.ground
+      ? (typeof opts.ground === "string" ? (ZCg ? ZCg.resolve(opts.ground) : null) : opts.ground)
+      : null;
+    const CLEAR = (GND && GND.sky && GND.lift > 0)
+      ? { r: GND.sky.mid[0], g: GND.sky.mid[1], b: GND.sky.mid[2], a: 1 }
+      : { r: 0, g: 0, b: 0, a: 1 };
     let skyPipe = null, skyBG = null;
     if (drawSky) {
       const mod = device.createShaderModule({ code: SCENE_SKY_WGSL });
@@ -576,7 +699,7 @@ fn waterColor(dir: vec3f) -> vec3f {
           colorAttachments: [{
             view: gpu.sampleCount > 1 ? gpu.msaaTex.createView() : target,
             resolveTarget: gpu.sampleCount > 1 ? target : undefined,
-            clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: "clear", storeOp: gpu.sampleCount > 1 ? "discard" : "store"
+            clearValue: CLEAR, loadOp: "clear", storeOp: gpu.sampleCount > 1 ? "discard" : "store"
           }],
           depthStencilAttachment: { view: gpu.depthTex.createView(), depthClearValue: 1, depthLoadOp: "clear", depthStoreOp: "discard" }
         });
@@ -594,6 +717,17 @@ fn waterColor(dir: vec3f) -> vec3f {
      ===================================================================== */
   ZigWebGPU.createFlock = function (gpu, opts) {
     opts = opts || {};
+    /* GROUND 0.1.0 — a flock drawing its OWN pass (no scene) still needs a
+       floor. Resolved here rather than borrowed from createScene, which is a
+       different closure: reaching for a name that is merely nearby in the file
+       is how a ReferenceError becomes a black canvas with no message. */
+    const SELFCLEAR = (function () {
+      const Z = global.ZigCore && global.ZigCore.Ground;
+      const g = opts.ground ? (typeof opts.ground === "string" ? (Z ? Z.resolve(opts.ground) : null) : opts.ground) : null;
+      return (g && g.sky && g.lift > 0)
+        ? { r: g.sky.mid[0], g: g.sky.mid[1], b: g.sky.mid[2], a: 1 }
+        : { r: 0, g: 0, b: 0, a: 1 };
+    })();
     const MAX = opts.max || 150000;
     const SEED = opts.seed || 0x516;
     // world: x,z in [-EXT, EXT], y in [0, EXTY]
@@ -3833,7 +3967,7 @@ struct StOut { @builtin(position) cp: vec4f, @location(0) wp: vec2f };
           colorAttachments: [{
             view: gpu.sampleCount > 1 ? gpu.msaaTex.createView() : target,
             resolveTarget: gpu.sampleCount > 1 ? target : undefined,
-            clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: "clear", storeOp: gpu.sampleCount > 1 ? "discard" : "store"
+            clearValue: SELFCLEAR, loadOp: "clear", storeOp: gpu.sampleCount > 1 ? "discard" : "store"
           }],
           depthStencilAttachment: {
             view: gpu.depthTex.createView(),
@@ -4032,6 +4166,14 @@ struct KOut {
 
   ZigWebGPU.createForest = function (gpu, opts) {
     opts = opts || {};
+    /* GROUND 0.1.0 — same as createFlock: its own closure, its own resolution. */
+    const SELFCLEAR = (function () {
+      const Z = global.ZigCore && global.ZigCore.Ground;
+      const g = opts.ground ? (typeof opts.ground === "string" ? (Z ? Z.resolve(opts.ground) : null) : opts.ground) : null;
+      return (g && g.sky && g.lift > 0)
+        ? { r: g.sky.mid[0], g: g.sky.mid[1], b: g.sky.mid[2], a: 1 }
+        : { r: 0, g: 0, b: 0, a: 1 };
+    })();
     const device = gpu.device;
     const G = global.ZigCore;
     const rng = G ? G.rng(opts.seed || 0xC0FFEE) : Math.random;
@@ -4265,7 +4407,7 @@ struct KOut {
           colorAttachments: [{
             view: gpu.sampleCount > 1 ? gpu.msaaTex.createView() : swapView,
             resolveTarget: gpu.sampleCount > 1 ? swapView : undefined,
-            clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: "clear", storeOp: gpu.sampleCount > 1 ? "discard" : "store"
+            clearValue: SELFCLEAR, loadOp: "clear", storeOp: gpu.sampleCount > 1 ? "discard" : "store"
           }],
           depthStencilAttachment: { view: gpu.depthTex.createView(), depthClearValue: 1, depthLoadOp: "clear", depthStoreOp: "discard" }
         });

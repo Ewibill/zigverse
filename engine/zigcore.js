@@ -1525,6 +1525,28 @@
     resolve(name) { return this.grounds[name] || this.grounds.void; }
   };
 
+  /* THE PAIRING. A lit ground REQUIRES an inverted tone curve — that is the
+     whole finding of 2026-08-17, where `radiance=white` alone put a bright body
+     on a bright floor and the organism sank. The ground names the room it needs;
+     this is where a declared ground supplies it, so the two cannot be set
+     independently and disagree. An explicitly declared radiance always wins:
+     the law informs the default, it does not overrule the director. */
+  ZigCore.Canon.pairGroundToRadiance = function (declared) {
+    const g = this.law && this.law("ground");
+    if (!g || !g.room) return declared || null;
+    if (declared) return declared;                       // Bill said otherwise; Bill wins
+    const room = ZigCore.Radiance.rooms[g.room];
+    if (!room) return declared || null;
+    /* THE STAMP MUST NOT LIE. A paired room is really in the shader, so it has
+       to be really in the actives — otherwise Canon.stamp() reports "ground
+       0.1.0" for a build whose WGSL also carries radiance, and the one place a
+       build states what it IS becomes untrustworthy. This was caught by a probe
+       reading the live runtime: the ordering rail showed `frame.light:
+       radiance` while Canon.law("radiance") returned null. */
+    this.actives.radiance = Object.assign({}, room, { pairedBy: "ground" });
+    return this.actives.radiance;
+  };
+
   ZigCore.Canon.register({
     id: "ground",
     version: ZigCore.Ground.VERSION,

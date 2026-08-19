@@ -3,10 +3,10 @@
 
 > Every world so far has been black, and black was never a decision.
 
-**Status: declared, not yet consulted.** The law exists in the Canon, its arithmetic is
-proven, and the engine does not read it yet. `mist` and `paper` do nothing on screen until
-the wiring lands. This is deliberate — the law alone is byte-identical, so it commits as a
-clean bisect point before the risky half.
+**Status: WIRED and confirmed on screen (2026-08-19).** A declared ground now sets the sky
+triple, the three scene clear values, the afterimage's compositing, and the Radiance room —
+from one word. Bill confirmed `mist` and `paper` render on eyeZ at 165fps: pale field, dark
+organism, holding its shape.
 
 ---
 
@@ -125,15 +125,61 @@ shipped as a screen full of darkness that was never drawn.
 
 ---
 
-## 7 · Not done
+## 7 · The wiring, and the fault it cost
 
-The engine does not consult this law yet. Still to wire:
+One word now sets four things. `#ground=mist` lifts the sky from 0.007 to **0.695**
+luminance (the haze follows for free — same uniform), switches the afterimage to **signed**
+compositing, changes the memory gate from a luminance floor to a distance-from-ground, and
+pulls in Radiance's `white` room without anyone asking. Measured live:
 
-- the **sky triple** from the declared ground
-- the **three live clear values** (and only three — the trail's two stay black)
-- the **afterimage's compositing, decay and gate** to `compose` / `decay` / `gate` / `gated`
-- the **Radiance room** pulled from the ground rather than set separately
+| ground | sky luminance | compositing | radiance | fps (eyeZ) |
+|---|---|---|---|---|
+| `void` | *(untouched)* | rise | — | 165 |
+| `dusk` | 0.055 | rise | — | — |
+| `mist` | 0.695 | **signed** | gain 0.55 | 165 |
+| `paper` | 0.898 | **signed** | gain 0.55 | 165 |
 
-Byte-identical at `void` is the obligation, proven across the option matrix. Then the boot
-gate across all four grounds — and then Bill's eye, which is the only test that matters for
-`mist`.
+### THE BIND GROUP FAULT — a full day, one conditional entry
+
+The base `blitFs` is `max(s, t)` and **never touches the uniform**, so `layout: "auto"`
+derived a **two-entry** layout and its bind group matched. GROUND's signed `blitFs` calls
+`gndFarther(s, t, A.lift)` — it now uses binding 0, the layout became **three** entries, and
+every bind group was rejected:
+
+```
+Number of entries (2) did not match the expected number of entries (3)
+for [BindGroupLayoutInternal (unlabeled)]
+```
+
+**1,240 of those per run on Bill's RTX**, cascading into invalid command buffers and a black
+screen — while the loop reported 165fps.
+
+> **A shader splice that changes WHICH BINDINGS A STAGE USES changes its auto-derived
+> layout.** Byte-identity cannot see it: the `void` text is unchanged. A boot gate that only
+> watches whether the loop ticks cannot see it either.
+
+Nothing in the stack could catch this until `tools/boot_gate.mjs` 2.0 counted driver errors.
+It then found it in **a single run**, after a day of guessing from a sandbox whose Chrome
+accepts what a real GPU refuses.
+
+### Also wired
+
+- **`createFlock` and `createForest` resolve their own ground.** `scene` is only built when
+  `ZIG_UNDERROW` is set, so the default build has no sky pass at all and the background is
+  the flock's clear. Wiring only `createScene` lit nothing.
+- **The trail buffer clears to the GROUND**, not to black — black is *zero*, which is the
+  floor only in a dark world. On a pale field a freshly-cleared trail is maximally far from
+  the ground and wins the whole frame.
+- **`LIGHT` defaults to `dark`** in the host dropdowns, which counted as an explicit
+  declaration and overruled the pairing. Real bug, found by reading the HUD.
+
+---
+
+## 8 · Open
+
+- **A lit ground probably wants its own RIM and SHADOW.** On a dark ground shards separate by
+  brightness; on a pale one only the edge distinguishes a shard from its neighbour, and rim is
+  tuned at 0.40/3.0 for the opposite world. The interior currently reads as a mass rather than
+  as thousands of individuals. Bill's call whether that is muddy or moody.
+- The sceneless path gives a **flat** pale field, not a gradient. It matches the fog reference,
+  but by accident rather than design.
