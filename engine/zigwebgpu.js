@@ -165,6 +165,8 @@
      worlds that never attach render EXACTLY as before. Every species —
      Halo Field, Lake, Fireflies, futures — inherits this with one call.
      ===================================================================== */
+  const PRESENCE_WGSL = '  /* ---- PRESENCE: the distinguished body the field FEELS -----------------\n     CHARISMA was only ever half a capability. It already weights the avatar in\n     the PHASE kernel (line ~2365), so the flock synchronises toward her — but\n     nothing carried that into the FORCE kernel, so she pulled their timing and\n     never their bodies. This is the other half.\n\n     One signed axis. Positive draws neighbours toward her (COZY); negative\n     pushes them away (AGITATE). The sign is a DECISION, not a consequence of\n     how hard Bill is playing: breath drives the MAGNITUDE only, so a fierce\n     cozy and a gentle agitation are both reachable. Welding intent to intensity\n     would have made "play hard" mean "scatter", which is not the instrument\n     Bill wants.\n\n     Her position is read straight from the buffer rather than broadcast in a\n     uniform — she is an agent like any other, and posIn[idx] is already there.\n\n     The agitation injection is deliberately available to BOTH signs. A crowd\n     rushing toward something can be every bit as excited as one fleeing it, and\n     agit spreads by ordinary contagion one neighbour-hop per step — so this\n     hands the social wave a source without scripting the wave itself.\n\n     MAGNITUDE RIDES CHARISMA, which the engine already earns by DWELL:\n     smoothstep(0.28s, 1.9s) of held note, times the BEE dropdown ceiling\n     (shy 3 / curious 6 / magnetic 11). So the field IGNORES her on a short\n     note and commits over a long one — the attention curve was already\n     built and driven by the performer; the first draft invented a flat\n     breath multiplier instead of using it, and at 22 against separation\n     forces measured at 59-223 it was swamped an order of magnitude. */\n  if (U.presence.y > 0.0 && U.avatarA.x >= 0.0 && i32(U.avatarA.x) != i32(i)) {\n    let bp = posIn[u32(U.avatarA.x)].xyz;\n    let toB = bp - p;\n    let dB = length(toB) + 0.0001;\n    if (dB < U.presence.y) {\n      let fall = 1.0 - dB / U.presence.y;      // linear reach, squared response\n      accel += (toB / dB) * U.presence.x * U.avatarB.w * fall * fall;\n      agit = max(agit, U.presence.z * min(U.avatarB.w * 0.16, 1.0) * fall);\n    }\n  }\n\n';
+
   const AFTERIMAGE_BASE = `
 struct AU { decay: f32, eps: f32, gate: f32, pad1: f32 };
 @group(0) @binding(0) var<uniform> A: AU;
@@ -886,6 +888,22 @@ fn waterColor(dir: vec3f) -> vec3f {
        turns each flash into a swell, so the eye reads the ORGANISM rather than
        individual sparks. Performer strikes are deliberately left instant. */
     const ONSET = Math.max(0, +opts.onset || 0);
+    /* PRESENCE (0.47) — the Bee's first BEHAVIOUR. Until now she was a costume:
+       drawn 1.45x, her own note-flash hue, a bigger lantern, and not one line of
+       the compute kernel knew she existed. `mode` is the DECISION (cozy draws
+       the field in, agitate drives it off); breath drives the magnitude, so the
+       same energy reaches both. Absent → not one character spliced. */
+    const PRESENCE = (function () {
+      const o = opts.presence;
+      if (!o) return null;
+      const mode = (typeof o === "string") ? o : (o.mode || "cozy");
+      if (mode === "off") return null;
+      const sign = (mode === "agitate") ? -1 : 1;
+      return { sign,
+               k:    Math.max(0, (o.strength === undefined ? 18 : +o.strength)),
+               r:    Math.max(0.001, (o.radius === undefined ? 14 : +o.radius)),
+               agit: Math.max(0, Math.min(1, (o.agit === undefined ? 0.55 : +o.agit))) };
+    })();
     /* UNSEEN (v0.40) — a fraction of the flock fully PRESENT and not DRAWN.
        The crowd and the eye want opposite things: contagion, flocking and murmur
        need a large population for a wave to be a wave, while legibility needs few
@@ -950,7 +968,7 @@ struct Sim {
   avatarA: vec4f,               // AVATAR law: x agent index (<0 = off) · yzw steer target
   avatarB: vec4f,               // x steer strength · y flash-now (note-on frame) · z agit burn · w charisma
   morph: vec4f,                 // WARDROBE: x letter index · y letterB · z per-agent mix toward B (0..1) · w free
-};
+${PRESENCE ? "  presence: vec4f,              // PRESENCE: x signed pull (+ toward = COZY \u00b7 - away = AGITATE) \u00b7 y radius \u00b7 z agitation injected \u00b7 w free\n" : ""}};
 const EXT: f32 = ${EXT}.0;
 const EXTY: f32 = ${EXTY}.0;
 const CELL: f32 = ${CELL}.0;
@@ -1755,7 +1773,7 @@ struct DOut { @builtin(position) cp: vec4f, @location(0) uv: vec2f, @location(1)
     }
     const gridCount = device.createBuffer({ size: CELLS * 4, usage: GPUBufferUsage.STORAGE });
     const gridIdx = device.createBuffer({ size: CELLS * CAP * 4, usage: GPUBufferUsage.STORAGE });
-    const SIMF = 212;                                    // floats in Sim (+ modes + pace + avatar + morph/wardrobe)
+    const SIMF = 216;                                    // floats in Sim (+ modes + pace + avatar + morph/wardrobe + presence)
     const VIEWF = 112;                                   // floats in View (+ render..render5 + noteBands[6] + render6) — render4.x chiaroscuro (v0.26) · render5.x rim (v0.31) · view[84..107] melodic strata (v0.32) · view[108..111] NOTE FLASH (v0.43). MUST match the View struct: the struct is declared in several shaders and the buffer is sized HERE — a mismatch fails the pipeline silently and the canvas goes black.
     const simBuf = device.createBuffer({ size: SIMF * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     const viewBuf = device.createBuffer({ size: VIEWF * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
@@ -2503,6 +2521,12 @@ fn lanternFs(inp: LOut) -> @location(0) vec4f {
        RINGS through it and fades like a struck body, not a blink. voice=1
        compiles to the exact golden constant via select().                   */
     let STEP_SRC = STEP_WGSL;
+    /* PRESENCE splice — byte-identical when the law is absent. */
+    if (PRESENCE) {
+      const pA = "  /* ---- integrate with speed band ---- */";
+      if (STEP_SRC.indexOf(pA) < 0) throw new Error("PRESENCE splice anchor missing in step kernel");
+      STEP_SRC = STEP_SRC.replace(pA, PRESENCE_WGSL + pA);
+    }
     if (MESH) {
       const g = "agit = max(agit * exp(-1.6 * U.dt), nAgit * U.knobsA.x);";
       if (STEP_WGSL.indexOf(g) < 0) throw new Error("VOICE splice anchor missing in step kernel");
@@ -3864,6 +3888,19 @@ struct StOut { @builtin(position) cp: vec4f, @location(0) wp: vec2f };
         /* AVATAR — the performer embodied as ONE agent; influence spreads
            only through the local laws (neighbors, contagion, phase) */
         if (state.avatarA) { simArr.set(state.avatarA, 200); simArr.set(state.avatarB, 204); }
+        /* PRESENCE — breath drives the MAGNITUDE, the mode drives the SIGN.
+           A held note reaches as far as a struck one; only the direction of the
+           field's answer is Bill's decision. Radius 0 = dormant, which is what
+           the WGSL guard tests, so an absent law costs nothing at runtime. */
+        if (PRESENCE) {
+          /* No breath term here: CHARISMA already carries the performance (BEE
+             ceiling x earned dwell) and the shader multiplies by it. Adding
+             breath as well would double-count the same gesture. */
+          simArr[212] = PRESENCE.sign * PRESENCE.k;
+          simArr[213] = PRESENCE.r;
+          simArr[214] = PRESENCE.agit;
+          simArr[215] = 0;
+        }
         else { simArr[200] = -1; simArr.fill(0, 201, 208); }
         /* WARDROBE — which letter the flock wears this frame. letter/letterB
            index the baked wardrobe; mix = fraction of agents wearing B

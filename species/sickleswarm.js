@@ -184,6 +184,21 @@
     const BEE = (+global.ZIG_BEE > 0) ? +global.ZIG_BEE : 0;
     const BEE_IGNORE = (+global.ZIG_BEEIGNORE > 0) ? +global.ZIG_BEEIGNORE : 0.28;
     const BEE_FULL = (+global.ZIG_BEEFULL > 0) ? +global.ZIG_BEEFULL : 1.9;
+    /* PRESENCE (0.47) — the Bee's first behaviour. She was a costume: drawn
+       larger, her own flash hue, a bigger lantern, and the compute kernel had
+       never heard of her. Charisma already weighted her in the PHASE kernel, so
+       she pulled the field's TIMING; this is the half that pulls their BODIES.
+          window.ZIG_BEEMODE = "cozy" | "agitate"   ·   #beemode=agitate
+       The MODE is Bill's decision and breath drives only the MAGNITUDE, so the
+       same energy reaches both — a fierce cozy and a gentle agitation are each
+       playable. Absent → not one character spliced into the kernel. */
+    const BEEMODE = (function () {
+      const h = (global.location && global.location.hash) || "";
+      const m = h.match(/[#&]beemode=([a-z]+)/i);
+      const v = String((m && m[1]) || global.ZIG_BEEMODE || "").toLowerCase();
+      return (v === "cozy" || v === "agitate") ? v : null;
+    })();
+    const PRESENCE = (BEE > 0 && BEEMODE) ? { mode: BEEMODE } : null;
     let beeAttn = 0, beeHue = 0;
     /* NOTE FLASH — inside takes the note's colour, outside takes one. */
     const NOTEFLASH_ON  = (+global.ZIG_NOTEFLASH > 0);
@@ -319,6 +334,7 @@
       noteFlash: NOTEFLASH_ON,
       radiance: RADIANCE || undefined,   // RADIANCE (Canon 0.1.0): absent → not one character of the law's WGSL is emitted
       bee: BEE > 0 ? 1.45 : 1,   // agent #0 drawn larger when the bee is live
+      presence: PRESENCE || undefined,   // PRESENCE: the field feels her (cozy = drawn in · agitate = driven off)
       max: 20000, count: COUNT, seed: SEED,
       extent: EXT, extentY: EXTY, cell: 12, debris: 0,
       mesh,                                      // ← ZigMesh wears the kernel
@@ -373,6 +389,7 @@
         noteFlash: NOTEFLASH_ON,
         radiance: RADIANCE || undefined,
         bee: BEE > 0 ? 1.45 : 1,   // agent #0 drawn larger when the bee is live
+        presence: PRESENCE || undefined,   // PRESENCE: the field feels her (cozy = drawn in · agitate = driven off)
         max: 8000, count: 2600, seed: SEED ^ 0xB10C,
         extent: EXT, extentY: EXTY, cell: 12, debris: 0,
         mesh: ZM.make(ZM.presets.woodblock),         // no phase — a body, not a voice
