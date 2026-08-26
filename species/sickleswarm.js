@@ -1316,6 +1316,12 @@
           " · reveal " + dial.reveal.toFixed(2) +
           " · EWI " + (noteForm ? "ON" + (formLife > 0.05 ? " ▮" + (WNAMES.length ? WNAMES[state.letter].toUpperCase() : "") : "") : "off") +
           (dial.murmur > 0.001 ? " · MURMUR " + Math.round(dial.murmur * 100) + "%" : "") +
+          /* PRESENCE: name the mode AND the reach. A law you cannot see the state
+             of is a law you debug by guessing — the same argument GROUND makes
+             two lines up, and the reason three separate causes hid this one on
+             2026-08-25. The reach is live on Shift+↑/↓; read it off here. */
+          (flock.presence ? " · BEE " + (flock.presence.sign < 0 ? "agitate" : "cozy") +
+                            " reach " + flock.presence.r.toFixed(0) : "") +
           (MAT ? " · " + matName + (WORLD && !global.ZIG_MATERIAL ? " (native)" : "") : "") +
           " · cam " + (AUTOFRAME ? autoRad.toFixed(0) + (measured ? "\u2194" + measured.r.toFixed(0) : "") + (Math.abs(frameZoom-1) > 0.01 ? " \u00d7" + frameZoom.toFixed(2) : "") : dial.camRad.toFixed(0)) + " · fov " + dial.fov.toFixed(2) +
           " · " + (WNAMES.length > 1
@@ -1429,9 +1435,24 @@
       if (e.code === "Digit5") revealBase = Math.max(0.05, revealBase - 0.15);          // 5 — smaller letter-fragments (the drift) — sets the RESTING baseline (no longer stomped by note→form)
       if (e.code === "Digit6") revealBase = Math.min(2.0, revealBase + 0.15);           // 6 — toward WHOLE letters (the N switch reads clearly)
       /* SILHOUETTE RIM — arrow cluster (brackets are FOV). ↑/↓ strength · ←/→ edge thickness */
-      if (e.code === "ArrowUp")   { dial.rim = Math.min(3, dial.rim + 0.12); e.preventDefault();
+      /* PRESENCE REACH — Shift+↑/↓. Every letter and every digit was already
+         bound, so the Bee's reach takes the SHIFT LAYER of the arrow cluster.
+         The unshifted rim handlers below are guarded accordingly: they did not
+         test shiftKey, so without the guard Shift+↑ would move rim AND reach.
+         Radius is a uniform float (simArr[213]) — live, no recompile. Default
+         14 against a field 130 across is a whisper in a stadium; this is the
+         dial that finds the true one, and the HUD prints it so the number
+         SURVIVES the tab closing. */
+      if ((e.code === "ArrowUp" || e.code === "ArrowDown") && e.shiftKey && flock.presence) {
+        const d = (e.code === "ArrowUp") ? 4 : -4;
+        flock.presence.r = clamp(flock.presence.r + d, 1, 200);
+        H.line("status", "BEE REACH " + flock.presence.r.toFixed(0) +
+          " — she is felt by everything within " + flock.presence.r.toFixed(0) + " of her");
+        e.preventDefault();
+      }
+      if (e.code === "ArrowUp" && !e.shiftKey)   { dial.rim = Math.min(3, dial.rim + 0.12); e.preventDefault();
         H.line("status", "SILHOUETTE RIM " + dial.rim.toFixed(2) + " — the outline draws the concave side too"); }
-      if (e.code === "ArrowDown") { dial.rim = Math.max(0, dial.rim - 0.12); e.preventDefault();
+      if (e.code === "ArrowDown" && !e.shiftKey) { dial.rim = Math.max(0, dial.rim - 0.12); e.preventDefault();
         H.line("status", dial.rim > 0.001 ? "SILHOUETTE RIM " + dial.rim.toFixed(2) + " — outlines the letters against the void" : "SILHOUETTE RIM OFF"); }
       if (e.code === "ArrowRight"){ dial.rimSharp = Math.min(12, dial.rimSharp + 0.5); e.preventDefault(); H.line("status", "rim edge THINNER — sharpness " + dial.rimSharp.toFixed(1)); }
       if (e.code === "ArrowLeft") { dial.rimSharp = Math.max(0.5, dial.rimSharp - 0.5); e.preventDefault(); H.line("status", "rim edge WIDER — sharpness " + dial.rimSharp.toFixed(1)); }

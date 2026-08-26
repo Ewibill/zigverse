@@ -4095,6 +4095,12 @@ struct StOut { @builtin(position) cp: vec4f, @location(0) wp: vec2f };
         return true;
       }
     };
+    /* PRESENCE live handle. The per-frame pack already reads PRESENCE.r / .k /
+       .agit out of this object, so handing the same reference to the species
+       makes every one of them a LIVE dial with no recompile and no reload —
+       radius and strength are uniform floats, not spliced text. Absent when the
+       law is absent, so nothing new appears on a flock that never armed it. */
+    if (PRESENCE) flock.presence = PRESENCE;
     return flock;
   };
 

@@ -50,6 +50,7 @@
   <div class="med"><label>CURRENT</label> <select id="curpick" title="the world's flow — drift · gyre · eddy"></select></div>
   <div class="med"><label>FLASH</label> <select id="nfpick" title="Each note flashes the shards. The cupped INSIDE takes the note's own colour — twelve pitch classes around the hue wheel, the same mapping the melodic strata use — while the OUTSIDE flashes one fixed colour. A turning field alternates a constant skin with an interior that is different for every pitch."></select></div>
   <div class="med"><label>BEE</label> <select id="beepick" title="She lands with a note and NOTHING happens. Only a HELD note earns the field's attention, and it grows with the dwell — nearest shards first, then the cluster, then the mass. Release and it breaks. She is agent #0: the same letterform as every shard, only larger and lit. A queen is the same species as her workers."></select></div>
+  <div class="med"><label>MOOD</label> <select id="bmpick" title="the Bee's BEHAVIOUR toward the field. off = she is a costume, drawn larger but the compute kernel has never heard of her. cozy = the field is drawn IN to her. agitate = the field is driven OFF. Breath drives only the MAGNITUDE, so the mode is your decision and a fierce cozy or a gentle agitation are each playable. Requires BEE above to be anything but off."></select></div>
   <div class="med"><label>CROWD</label> <select id="cntpick" title="how many shards exist. At 6000 on a 2560x1440 glass each gets roughly 10x10 pixels — a coloured dot, with no room to show an edge, a facing or a depth. Fewer means bigger and legible; more means the murmur has more to travel through."></select></div>
   <div class="med"><label>UNSEEN</label> <select id="unspick" title="a share of the crowd that is PRESENT but not DRAWN. They still flock, collide, carry contagion and count as neighbours — you just cannot see them. The shards you DO see are moved by neighbours you cannot, so the crowd keeps its numbers while the eye gets a thinner field."></select></div>
   <div class="med"><label>HEFT</label> <select id="heftpick" title="the shard's cross-section. foil = a single cambered sheet, which is what it has always been. Above that a back centre dips below the edges, closing it into a LENS — thick in the middle, sharp at the rim — so the blade reads as matter. cupped curves the back the same way as the front instead: a concave shell. Baked into the mesh, so this one RELOADS."></select></div>
@@ -201,6 +202,14 @@
   window.ZIG_BEENAME = (function () { var v = (location.hash.match(/bee=([a-z]+)/i) || [])[1];
     return ["off","shy","curious","magnetic"].includes(v) ? v : "off"; })();
   window.ZIG_BEE = ({ off: 0, shy: 3, curious: 6, magnetic: 11 })[window.ZIG_BEENAME];
+  /* PRESENCE 0.47 mood. Hand-typed hashes were the ONLY way to reach this on
+     2026-08-25, and the panel silently erased them on every dropdown change
+     because its builder predates the law — three sessions of "the Bee does
+     nothing" traced to a setting that was never armed. A capability with no
+     dial is a capability nobody can find. */
+  window.ZIG_BEEMODENAME = (function () { var v = (location.hash.match(/beemode=([a-z]+)/i) || [])[1];
+    return ["off","cozy","agitate"].includes(v) ? v : "off"; })();
+  window.ZIG_BEEMODE = (window.ZIG_BEEMODENAME === "off") ? null : window.ZIG_BEEMODENAME;
   window.ZIG_BEEIGNORE = 0.28;   // seconds below which a note is simply ignored
   window.ZIG_BEEFULL   = 1.9;    // seconds at which the whole field has committed
   window.ZIG_AVATAR = (window.ZIG_BEE > 0) ? 1 : 0;
@@ -292,12 +301,13 @@
        dials MEDIUM × FORCES × CURRENT, plus SURFACE. Each recompiles the shader → reload,
        carrying the state in the URL hash. WORLD takes precedence when it names a place. */
     const wsel = document.getElementById("worldpick"), msel = document.getElementById("medpick"), fsel = document.getElementById("forcepick"), csel = document.getElementById("curpick"), bnsel = document.getElementById("boundpick"), bdsel = document.getElementById("bondpick"), spsel = document.getElementById("spreadpick"), stsel = document.getElementById("stillpick"), ctsel = document.getElementById("ctpick"), onsel = document.getElementById("onpick"), cwsel = document.getElementById("cwpick"), susel = document.getElementById("sumpick"), hfsel = document.getElementById("heftpick"), cnsel = document.getElementById("cntpick"), besel = document.getElementById("beepick"), nfsel = document.getElementById("nfpick"), unsel = document.getElementById("unspick"), ssel = document.getElementById("matpick"), bsel = document.getElementById("breathpick"), vsel = document.getElementById("stagepick");
+    const bmsel = document.getElementById("bmpick");   // PRESENCE mood — declared with the other selects so btail() can never hit a dead zone
     const lsel = document.getElementById("lightpick");
     const gsel = document.getElementById("gempick"), fbsel = document.getElementById("fabpick"), gfsel = document.getElementById("gemfacepick");
     const fill = (sel, names, cur) => { if (!sel) return; for (const n of names) { const o = document.createElement("option"); o.value = n; o.textContent = n; if (n === cur) o.selected = true; sel.appendChild(o); } };
     const skinTail = () => "&gem=" + (gsel ? gsel.value : "none") + "&fab=" + (fbsel ? fbsel.value : "none") + "&gface=" + (gfsel ? gfsel.value : "both");   // GEM · GEM FACE · FABRIC persist across every reload
     const bondTail = () => "&bond=" + (bdsel ? bdsel.value : "none") + "&spread=" + (spsel ? spsel.value : "field") + "&still=" + (stsel ? stsel.value : "restless") + "&contact=" + (ctsel ? ctsel.value : "off") + "&onset=" + (onsel ? onsel.value : "snap") + "&crowding=" + (cwsel ? cwsel.value : "loose") + "&summon=" + (susel ? susel.value : "note") + "&heft=" + (hfsel ? hfsel.value : "cupped") + "&crowd=" + (cnsel ? cnsel.value : "6000") + "&unseen=" + (unsel ? unsel.value : "all") + "&bee=" + (besel ? besel.value : "off") + "&flash=" + (nfsel ? nfsel.value : "off");   // BOND rides along in either mode
-    const btail = () => bondTail() + "&breath=" + (bsel ? bsel.value : "easy") + "&stage=" + (vsel ? vsel.value : "soft") + "&radiance=" + (lsel ? lsel.value : "dark") + skinTail();   // presentation + skins ride along in either mode
+    const btail = () => "&beemode=" + (bmsel ? bmsel.value : "off") + bondTail() + "&breath=" + (bsel ? bsel.value : "easy") + "&stage=" + (vsel ? vsel.value : "soft") + "&radiance=" + (lsel ? lsel.value : "dark") + skinTail();   // presentation + skins ride along in either mode
     const dialsHash = () => "world=custom&med=" + msel.value + "&force=" + fsel.value + "&cur=" + csel.value + "&bound=" + (bnsel ? bnsel.value : "none") + "&mat=" + ssel.value + btail();
     /* a named world reloads BARE unless a sub-dial deviates from the world's NATIVE value — then
        only the deviating override rides in the hash (native skin & shape keep following the world). */
@@ -322,6 +332,7 @@
     // eel (and whatever the core learns next) show up here with no edit to this host.
     fill(nfsel, ["off", "hint", "lit", "vivid"], window.ZIG_FLASHNAME);
     fill(besel, ["off", "shy", "curious", "magnetic"], window.ZIG_BEENAME);
+    fill(bmsel, ["off", "cozy", "agitate"], window.ZIG_BEEMODENAME);
     fill(cnsel, ["600", "1500", "3000", "6000", "12000"], window.ZIG_CROWDNAME);
     fill(unsel, ["all", "third", "half", "most"], window.ZIG_UNSEENNAME);
     fill(hfsel, ["foil", "cupped", "leaf", "blade", "stone"], window.ZIG_HEFTNAME);
@@ -374,7 +385,7 @@
        rate. They cannot be applied to a running flock from here (the species reads
        its globals at boot), so for honesty they reload too rather than pretending
        to take effect. Better a visible reload than a dial that lies. */
-    for (const s of [hfsel, bdsel, ctsel, onsel, spsel, stsel, susel, cnsel, unsel, besel, nfsel, cwsel])
+    for (const s of [hfsel, bdsel, ctsel, onsel, spsel, stsel, susel, cnsel, unsel, besel, bmsel, nfsel, cwsel])
       if (s) s.addEventListener("change", () => { location.hash = curHash(); location.reload(); });
 
     /* RADIANCE: the room's four numbers are COMPILED into the fragment shader as consts

@@ -2081,3 +2081,175 @@ already computed and discarded there. Underside migration and Emission come firs
 **Changed:** `engine/zigwebgpu.js` · `tools/boot_gate.mjs` · `briefs/law_ground.md` ·
 `briefs/Session_Log.md` · `species/sickleswarm.js` · `engine/zigcore.js`
 **Added:** `tools/ground_clear.mjs` · `dist/Zigverse_Engine_v4_5_Ground.html`
+
+## 2026-08-23 · PRESENCE 0.47 — the Bee's first behaviour (logged in arrears 2026-08-25)
+
+Written, spliced, bundled, played — and **never returned to source**. Found on 2026-08-25
+living only inside `Zigverse_Engine_v4_6_Presence_2.html` in Downloads. Recovered via
+`unbundle.mjs --force`, verified 42/42 + byte-identity 5/5, committed as `b059a71`.
+
+**Mechanism.** The Bee was a costume until this: drawn 1.45×, her own note-flash hue, a bigger
+lantern — and not one line of the compute kernel knew she existed. Charisma already weighted
+her in the PHASE kernel, so she pulled the field's *timing*; PRESENCE is the half that pulls
+their *bodies*.
+
+- `zigwebgpu.js` +39/−2 — `PRESENCE_WGSL`, resolver, View field, `SIMF` 212 → 216, the splice,
+  per-frame writes to `simArr[212..215]`
+- `sickleswarm.js` +17 — `ZIG_BEEMODE` / `#beemode=` parse, `presence` opt on both call sites
+- mode is Bill's decision (`cozy` draws the field in, `agitate` drives it off); **breath drives
+  only the magnitude**, so a fierce cozy and a gentle agitation are each playable
+- absent → not one character spliced
+
+**Bill's verdict, 2026-08-25:** *"Hold was necessary."* The dwell curve lands — the field's
+attention is **earned by the performance**, not handed over by a slider. That is the law's
+actual claim and it passes. Cozy at default reach read as *"a card dealer dealing out dozens of
+cards in a quick fan"* — see the FINDINGS below; agitate remains unjudged.
+
+---
+
+## 2026-08-25 · Opus-Glyph · THREE INVISIBILITIES, A DIAL, AND A MISSING MENU
+
+### THE BUNDLE TRAP — the close protocol has a hole
+
+The 8/23 session ended with a **delivery**, not a push. Delivering *feels* like closing: it
+produces an artifact you can hold. But `bundle.mjs` reads from source and writes to `dist/` —
+it never writes back, so **a delivery can complete perfectly while source stays untouched**.
+Same class as the 2026-08-16 incident where four releases were found living only inside
+delivered bundles. That was recovered; the hole was not plugged.
+
+> **Proposed rule (not yet written into ZIGVERSE_SAVE_PROTOCOL.md): run `git status` before
+> any bundle is delivered. If the tree is clean and the bundle contains new work, the bundle is
+> a trap.**
+
+### THREE SEPARATE REASONS PRESENCE LOOKED DEAD — none of them the law
+
+Bill: *"I don't see any relationship between the Bee and the shards around it."* True every
+time, and the law was fine every time.
+
+1. **Never armed.** `PRESENCE` is null unless `ZIG_BEEMODE` is set. Opened without the hash →
+   zero characters spliced. He was watching the 0.46.0 costume.
+2. **Multiplied by zero.** HUD read `MIDI blocked: NotAllowedError` · `msgs 0` ·
+   `breathRaw 0.00`. No notes → no dwell → charisma 0 → the force is `… * U.avatarB.w * …`
+   with `avatarB.w = 0`. **Every breath-driven law in the engine was silently dead**, at 165fps,
+   under a green probe. Cause was a Chrome MIDI permission not yet granted; fixed by granting
+   it and reloading. (`file://` is *not* categorically blocked — an earlier diagnosis of mine
+   was wrong. `tools/serve.mjs` was written as a localhost fallback and **not** installed,
+   because it turned out not to be needed. Held in reserve.)
+3. **No menu.** Once armed and fed, `beemode` still could not be reached: the host panel's hash
+   builder predates PRESENCE, so **any dropdown change silently deleted it**. Three rounds of
+   URL-syntax debugging chased a defect that was in the build.
+
+> **`PROBE ● GREEN` reported healthy through all three.** Same shape as the boot gate that read
+> LIVE at 60fps through 32,750 driver rejections: a green light measuring the wrong thing.
+> **Silence and deafness are currently indistinguishable.** The probe should carry a
+> `breath ever seen` bit. Not built.
+
+### SHIPPED
+
+**`flock.presence` — the live handle** (`zigwebgpu.js`, +6). The per-frame pack already reads
+`PRESENCE.r/.k/.agit` out of one object; handing the species that same reference makes every
+one of them a live dial with **no recompile and no reload** — they are uniform floats, not
+spliced text. Absent when the law is absent.
+
+**BEE REACH — Shift+↑/↓** (`sickleswarm.js`). All 26 letters and all 10 digits were already
+bound, so the reach took the **shift layer of the arrow cluster**. The unshifted rim handlers
+did not test `shiftKey` and are now guarded, or Shift+↑ would move rim *and* reach. HUD dials
+line now prints `· BEE cozy reach 14`, so the found number **survives the tab closing** — the
+same argument GROUND makes one line above it.
+
+**MOOD dropdown** (`Zigverse_Engine_v4_0_Radiance_host.html`, 5 edits). `beemode` is now a menu
+like every other capability, riding in `btail()` so **no dropdown can erase it**. This is the
+Canon §3 obligation PRESENCE shipped without: *every law ships with a hash override so you can
+A/B it live on eyeZ*. Parse proven independent — `bee=` and `beemode=` do not collide.
+
+> **A capability with no dial is a capability nobody can find.** Worth generalising: a law that
+> ships without its override is not shipped.
+
+### FINDINGS — not yet acted on
+
+- **Attraction with no capture term is a slingshot, not a gather.** `fall = 1 − dB/r` peaks at
+  *zero distance*, so a shard arriving is accelerated hardest exactly where it should settle:
+  it overshoots, exits, decelerates outside the radius, returns. Dozens of those staggered by
+  arrival time is Bill's **card fan**. A gathering force should fall to zero at the centre.
+- **`agit` peaks at her too, at 0.55 in BOTH modes**, and agit drives `vmax` (per the 0.39 ONSET
+  note) — so shards near her get *faster* regardless of direction. Cozy and agitate may
+  currently look alike because both are dominated by a speed injection rather than a direction.
+- **Agitate may be weaker than cozy by construction.** Push has an escape hatch pull does not:
+  driven outward, shards leave the radius, `fall` → 0, force stops. Cozy pulls them *into* the
+  strong zone; agitate pushes them *out of* it, self-limiting into a thin shell.
+- **Scale correction.** The camera measured the flock radius at **13**, not 130. Default reach
+  14 is therefore roughly the **whole organism**, not the whisper-in-a-stadium first diagnosed.
+  Reach hunting should start well below 20.
+- **`K 2.50 ← LOCKED`** observed in the HUD — part of the breath response is pinned rather than
+  played. Unexplained.
+- **`tools/splice_anchors.mjs` line 5** defaults to `/home/claude/live/engine/zigwebgpu.js`, a
+  stale sandbox path. On eyeZ it dies ENOENT unless the path is passed explicitly — **the
+  shader audit in the commit-gate sequence has never been runnable by default on Bill's own
+  machine.** One-line fix, own change.
+
+### DESIGN — decided, not built
+
+**The brinicle.** Antarctic brine rejection: expelled brine sinks, freezes a tube around its
+own plume, the tube insulates and channels the flow so the descent *accelerates itself*; on the
+seafloor it spreads radially and freezes urchins and stars in place. **Every species we have
+renders its population; this one renders its residue.** New axis, not a new creature.
+Candidates: **Accretion** (new — persistent geometry later frames read *and* write; needs a
+rail that is not `frame.light`), **Terrain**, **Stigmergy**, **Phase** (new — motile → frozen).
+Breath is brine flow; **silence here is brittleness, not rest**, and the causal chain reads
+*backwards in time* — the audience sees what he played thirty seconds ago, still hanging there.
+Order: **A** the Finger · **B** the Floor (freezing a sickleswarm — most legible) · **C** the
+Feedback. *The brinicle is the anti-spa piece; run gently, it is a spa piece.*
+
+**ZigListen.** Scout's ZigMusic document read against the prime directive: **ZigCompose and
+ZigVoice are a project; ZigListen is the capability.** Consequence already true today —
+**charisma is a ZigListen quantity living in the wrong place.** PRESENCE derives dwell-earned
+attention *inside the Bee*; that is an interpretation of the performer, not Bee behaviour. Move
+it and Rootwhale inherits charisma for free.
+
+**The tiering.** `now` (breath, attack, bend, register — zero latency; **visual pulse consumes
+this tier only**) vs `read` (phrase, tension, density, tonal centre — latency-stamped; music,
+plus visual only where slow response is correct). Inference costs time *structurally*. Bill's
+*"This is it"* — the childhood compulsion, the past arriving instantly upon the moment —
+settles this harder than first proposed: **zero latency on the visual pulse is the content.**
+
+**The seed rule.** *"Swimming with the sharks or goldfish… I need no prep. The surprise is the
+energy."* → **External data may set the room and may set the ensemble's disposition. It may
+never set Bill's pulse or the agents' pulse. Disposition is a seed, not a controller.**
+A disposition is a handful of scalars; no live telemetry required.
+
+**Prior art** (so it is not rediscovered): Rowe, *Interactive Music Systems* (1993) — Cypher's
+listener/player split · Lewis, Voyager — built *not* to follow · Pachet, Continuator (2002) —
+Scout's prototype, already evaluated with musicians · IRCAM Somax2 *(status unverified)* ·
+Wotja 26 for density management.
+
+**The RC-600 finding.** Minimal ROI, and the mechanism is **rehearsal debt**: those hours
+maintain a skill whose only purpose is performing against material already made, while the
+skill actually being sharpened is entering any sound and being melodic *immediately*. One
+requires a past. The other requires nothing but now.
+
+### NEXT — recommended order
+
+1. **`ZigCore.Session`** — the performance capsule. Canon §4 already names it as a gap that
+   *blocks law work*. Would have answered every question in this session directly: with a
+   capsule, her distance, charisma and dwell are read off a recording instead of asked for over
+   console. **Session and ZigListen are the same axis** — Session captures, ZigListen
+   interprets. Highest leverage on the board.
+2. **PRESENCE fall-off shape** — add a capture term so cozy settles instead of slinging; split
+   `agit` between modes. Small, and it is what the card fan is asking for.
+3. **Save-protocol fix** — `git status` before delivery. Twenty minutes.
+4. **Underside migration** — four owners, gem `REPLACE`s last; with `gemFace="inside"` three are
+   computed every frame and thrown away. Recovers capability already paid for. Blocked on
+   Bill's eye, not on code.
+5. **Ambience** — unblocked, ordering pre-settled at `frame.light/medium`.
+
+**Still open:** version stamps (`ZigWebGPU.VERSION` reads `0.46.0` while both files say
+PRESENCE 0.47 — is it `0.47.0`, or does the capability generalise to *any designated agent* and
+become a Canon law with `presence 0.1.0` that Rootwhale and Kelp inherit?) · agitate unjudged ·
+`white` room stage inversion · `spec` fabrics rendering `sunCol` · `ZIG_BOUNDSCALE`.
+
+**Changed:** `engine/zigwebgpu.js` · `species/sickleswarm.js` ·
+`Zigverse_Engine_v4_0_Radiance_host.html` · `briefs/Session_Log.md`
+**Added:** `dist/Zigverse_Engine_v4_8_BeeMood.html`
+**Passed:** `node --check` clean · reference gate **42/42** · byte-identity **5/5 IDENTICAL**
+(+665 chars when declared) · shader audit clean, 0 FAIL · Metal gate **not run** — no delivery
+to a Mac this session.
