@@ -64,7 +64,7 @@
     heldT: new Map(), lastNote: -1, holdSec: 0,   // note start-times · most recent note-on · longest current hold (s)
     // diagnostics (for a monitor readout)
     inputs: "none", msgCount: 0, allMsg: 0, lastCC: "—", rawLog: [],
-    _sim: 0, _last: 0, _midi: null,
+    _sim: 0, _last: 0, _midi: null, _touch: false,
     // gain/curve/smooth: the breath RESPONSE — how the instrument feels.
     // gain scales input · curve is gamma (>1 = more headroom at the top,
     // <1 = touchy) · smooth is the lag rate (higher = snappier)
@@ -120,6 +120,33 @@
 
     // hold-key / test breath (e.g. hold "B") — proves routing when the EWI is silent
     sim(v) { this._sim = clamp(v || 0, 0, 1); },
+
+    /* HOLD — a SUSTAINED note from something that is not MIDI: a finger, a
+       kiosk button, a bridge from OSC. Breath alone is not enough to make the
+       engine feel played. Charisma reads heldT and NOTHING else, so the idle
+       auto-breath below — which creates no notes — leaves dwell at 0 and every
+       dwell-earned law silent forever, however hard the organism appears to be
+       breathing. That is exactly why the Bee did nothing on 2026-08-25.
+       So a held finger must post a real note-on, accumulate real dwell, and
+       release it. Any input source that can say "pressed / how hard / released"
+       now drives the full causal chain, and a phone becomes a performer.
+       Deliberately does NOT set live: update() lets _sim set breathRaw only
+       while live is false, and marking touch as live would decay it to nothing
+       after 120ms. */
+    hold(on, v) {
+      const NOTE = 60;                                   // one voice, middle C — a plausible pitch for hue/flash consumers
+      if (on) {
+        this._touch = true;
+        this._sim = clamp(v == null ? 0.72 : v, 0, 1);
+        if (!this.heldT.has(NOTE)) {                     // press once; re-pressing must not restart the dwell
+          this.held.add(NOTE); this.heldT.set(NOTE, this._nowMs());
+          this.lastNote = NOTE; this.attack = Math.max(this.attack, this._sim);
+        }
+      } else if (this._touch) {                          // guarded so a released finger cannot cancel a held B key
+        this._touch = false; this._sim = 0;
+        this.held.delete(NOTE); this.heldT.delete(NOTE);
+      }
+    },
 
     update(dt, t) {
       const now = this._nowMs();

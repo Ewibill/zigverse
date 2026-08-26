@@ -1461,15 +1461,43 @@
       applyDials();
     });
     global.addEventListener("keyup", (e) => { if (e.code === "KeyB") ZC.Perf.sim(0); });
-    canvas.addEventListener("pointerdown", (e) => {
+    /* TOUCH AS BREATH. A phone has no MIDI and no keyboard, so without this the
+       organism drifts on idle auto-breath and NOTHING is caused — the opposite
+       of the one thing the summit said had to read: the chain from a person to
+       the creature. A held finger is a held note: breath while it is down,
+       dwell accumulating underneath it, released on lift. Vertical position
+       shapes pressure so the gesture has a dynamic, not just an on. A quick tap
+       is still the stone in the pond it always was. */
+    let downAt = 0, downId = -1;
+    const touchBreath = (e) => {
       const r = canvas.getBoundingClientRect();
-      const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
-      const ny = 1 - ((e.clientY - r.top) / r.height) * 2;
-      Sickle.strike(ANCHOR[0] + nx * 70, ANCHOR[1] + ny * 50, ANCHOR[2], 0.85);
+      const ny = 1 - ((e.clientY - r.top) / r.height) * 2;      // -1 bottom … +1 top
+      ZC.Perf.hold(true, 0.42 + 0.5 * (ny * 0.5 + 0.5));        // low on the glass = gentle · high = full
+    };
+    canvas.style.touchAction = "none";                          // or the browser scrolls the page instead of playing it
+    canvas.addEventListener("pointerdown", (e) => {
+      downAt = (global.performance && performance.now) ? performance.now() : 0;
+      downId = e.pointerId;
+      if (canvas.setPointerCapture) { try { canvas.setPointerCapture(e.pointerId); } catch (_) {} }
+      touchBreath(e); e.preventDefault();
     });
+    canvas.addEventListener("pointermove", (e) => { if (e.pointerId === downId) touchBreath(e); });
+    const lift = (e) => {
+      if (e.pointerId !== downId) return;
+      downId = -1; ZC.Perf.hold(false);
+      const held = ((global.performance && performance.now) ? performance.now() : 0) - downAt;
+      if (held < 220) {                                         // a TAP is a strike; a HOLD was a note
+        const r = canvas.getBoundingClientRect();
+        const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
+        const ny = 1 - ((e.clientY - r.top) / r.height) * 2;
+        Sickle.strike(ANCHOR[0] + nx * 70, ANCHOR[1] + ny * 50, ANCHOR[2], 0.85);
+      }
+    };
+    canvas.addEventListener("pointerup", lift);
+    canvas.addEventListener("pointercancel", lift);
 
     Sickle.stage = "alive"; Sickle.booted = true;
-    H.line("status", "alive — hold B to breathe · click or Space to strike · watch for faces");
+    H.line("status", "alive — hold B or PRESS THE GLASS to breathe · tap or Space to strike · watch for faces");
     return { ok: true, flock };
   };
 
