@@ -2253,3 +2253,89 @@ become a Canon law with `presence 0.1.0` that Rootwhale and Kelp inherit?) · ag
 **Passed:** `node --check` clean · reference gate **42/42** · byte-identity **5/5 IDENTICAL**
 (+665 chars when declared) · shader audit clean, 0 FAIL · Metal gate **not run** — no delivery
 to a Mac this session.
+
+## 2026-08-26 · Opus-Glyph · TOUCH AS BREATH — the engine gains an input source
+
+### CORRECTION to the 2026-08-25 entry
+
+That entry says *"every breath-driven law in the engine was silently dead."* **That is wrong.**
+`ZC.Perf.init({ idle: true, … })` runs a gentle auto-breath sine whenever no performer is
+live — breath was never zero, and the second HUD screenshot that day showed roughly six of ten
+bars filled, which was exactly that.
+
+**The true finding is narrower and more useful.** Charisma reads `Perf.heldT` — the note-hold
+map — and **nothing else**:
+
+```
+dwell  = longest entry in heldT
+reach  = smoothstep(BEE_IGNORE 0.28, BEE_FULL 1.9, dwell)
+avatarB[3] = BEE * beeAttn        // charisma
+```
+
+The idle auto-breath creates **no notes**, so `heldT` stays empty, dwell never starts, and every
+dwell-earned law is silent forever **however hard the organism appears to be breathing**. An
+organism can look completely alive and be earning nothing. That is the real reason the Bee did
+nothing on 08-25, and it is the reason this build works.
+
+### SHIPPED — `ZigCore.Perf.hold(on, v)`
+
+A **sustained note from a non-MIDI source**. Any input that can say *pressed / how hard /
+released* now drives the full causal chain: breath, a real note-on, real dwell, real charisma,
+real release. Touch, kiosk button, an OSC bridge, a recorded performer — all inherit it.
+
+- posts note 60 into `held`/`heldT` once per press (re-press must not restart the dwell)
+- sets `_sim`; deliberately does **not** set `live`, because `update()` lets `_sim` set
+  `breathRaw` only while `live` is false — marking touch as live would decay it after 120 ms
+- release guarded by a `_touch` flag so a lifted finger cannot cancel a held **B** key
+
+### SHIPPED — touch as breath (`sickleswarm.js`)
+
+- **press and hold the glass** → breath rises, dwell accumulates underneath
+- **vertical position shapes pressure** (`0.42 + 0.5·y`) — low on the glass is gentle, high is
+  full, so the gesture has a dynamic rather than an on/off
+- **quick tap under 220 ms** → still the strike it always was
+- `touchAction = "none"` and `setPointerCapture`, or the browser scrolls the page instead of
+  playing it; `pointercancel` releases as well as `pointerup`
+
+**Proven by CPU sim, not by eye** (no canvas here): idle with no finger → breath 0.337,
+charisma **0.00**; held 2 s → breath 0.800, dwell 2.00, charisma **9.15 / 11**; 1 s after
+release → charisma **0.00**, idle breath resumes. Identical curve to a held EWI note.
+
+> **Why this is a capability and not a demo hack.** A phone has no MIDI and no keyboard, so
+> without it the organism drifts on idle breath and *nothing is caused* — the exact opposite of
+> the one thing the summit identified as mattering, the legible chain from a person to the
+> creature. This is also the **first time anyone but Bill has been a source of life in the
+> engine.**
+
+### BILL'S VERDICT — PRESENCE closed
+
+*"I played the file and agitate and calm both work well."* Both modes read. Combined with
+*"hold was necessary"* on 08-25, **PRESENCE 0.47 is judged good** — the last open verdict on it.
+The fall-off refinement (capture term, per-mode `agit`) remains a wanted improvement, **not** a
+blocker.
+
+### GITHUB PAGES — the demo path
+
+Repo is public; Pages enabled from `main` / root. Bundles in `dist/` become URLs over HTTPS,
+which is a trusted origin, so no `file://` permission problem.
+
+`https://ewibill.github.io/zigverse/dist/<bundle>.html#crowd=1500&bee=magnetic&beemode=cozy`
+
+Mobile WebGPU is viable: **iOS 26+** (all iOS browsers are WebKit, so this is an OS gate, not a
+browser one) and **Chrome 121+ on Android 12+** with Qualcomm/ARM GPUs. Use `crowd=1500` or
+`600` — 6000 shards will likely choke a phone.
+
+> **Privacy note:** Pages makes the whole repo browsable, including `briefs/Session_Log.md` —
+> internal notes, decisions, and contacts. Already technically public; Pages makes it findable.
+> Not yet reviewed.
+
+**Target:** Labor Day weekend demo, on the phone, handed to other people.
+
+**Changed:** `engine/zigcore.js` · `species/sickleswarm.js` · `briefs/Session_Log.md`
+**Added:** `dist/Zigverse_Engine_v4_9_Touch.html`
+**Passed:** `node --check` clean · reference gate **42/42** · byte-identity **5/5 IDENTICAL** ·
+shader audit clean, 0 FAIL · CPU sim of the dwell chain (above) · Metal gate **not run**.
+
+**Open:** version stamps (`ZigWebGPU.VERSION` still 0.46.0 while both files say PRESENCE 0.47) ·
+PRESENCE fall-off shape (the card-fan slingshot) · `ZigCore.Session` · Logic Pro sound cleanup
+and glitch fix still unlogged · RC-600 + OBS session · `splice_anchors.mjs` stale default path.
