@@ -3,7 +3,19 @@
 <head>
 <meta charset="utf-8">
 <title>ZIGVERSE ENGINE — RADIANCE</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<!-- INSTALLABLE. Add to Home Screen opens with NO browser chrome: no address bar,
+     no toolbar, no tab strip — the organism edge to edge. Without these the same
+     link merely opens in Safari and the audience looks at a URL. user-scalable=no
+     and maximum-scale=1 matter as much: pinch-zoom and double-tap-zoom fight the
+     press-and-hold that IS the breath, and a gesture that sometimes zooms instead
+     of playing is not an instrument. viewport-fit=cover lets the canvas fill past
+     the notch; the safe-area inset below keeps the toggle off the home indicator. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Zigverse">
+<meta name="theme-color" content="#010204">
 <style>
   html, body { margin: 0; height: 100%; background: #010204; overflow: hidden;
                font: 12px/1.5 "Cascadia Code", "SF Mono", Consolas, monospace; color: #a8a89a; }
@@ -30,10 +42,25 @@
   #picks .skin { margin-top: 6px; padding-top: 5px; border-top: 1px solid #1c2128; }
   #picks .skin select { border-color: #3f4a3a; color: #d6ead0; }
   #picks .gem select { border-color: #4a3f5a; color: #d8cfea; }
+  /* BARE — presentation mode. The instrument panel is for BUILDING; an audience,
+     an installation, a projection and a phone all want the organism and nothing
+     else. #bare in the hash, or the dot bottom-left, or a two-finger tap. */
+  body.bare #picks, body.bare #hud, body.bare #hint { display: none; }
+  #bare-t { position: fixed; left: calc(10px + env(safe-area-inset-left)); bottom: calc(10px + env(safe-area-inset-bottom)); width: 30px; height: 30px;
+            border-radius: 50%; border: 1px solid #2a323c; background: #0c0f13cc;
+            color: #5f5f57; font: 15px/28px "Cascadia Code",monospace; text-align: center;
+            z-index: 20; cursor: pointer; opacity: .5; -webkit-tap-highlight-color: transparent; }
+  body.bare #bare-t { opacity: .16; }
+  @media (max-width: 820px) {            /* a phone in portrait: the panel is unreadable anyway */
+    #picks { font-size: 10px; line-height: 1.5; }
+    #hud { font-size: 9px; }
+    #bare-t { width: 38px; height: 38px; font-size: 18px; line-height: 36px; opacity: .7; }
+  }
 </style>
 </head>
 <body>
 <canvas id="stage"></canvas>
+<div id="bare-t" title="show / hide the instrument panel">○</div>
 <div id="hud">
   <div class="title">ZIGVERSE ENGINE <span class="dim">— worlds · skins · gems · fabrics · cupped shells · silhouette rim · melodic strata · audio-as-life</span></div>
   <div id="probe"><span class="pill bad">PROBE …</span> <span class="dim">asking the GPU</span></div>
@@ -207,6 +234,11 @@
      because its builder predates the law — three sessions of "the Bee does
      nothing" traced to a setting that was never armed. A capability with no
      dial is a capability nobody can find. */
+  /* BARE reads the hash so a demo link can arrive already clean, and the dot
+     toggles it live so nobody has to retype a URL on a phone. Deliberately NOT
+     in the hash tail: it is how you are LOOKING at the organism, not what the
+     organism IS, and a dropdown rewrite must not smuggle it into a shared link. */
+  window.ZIG_BARE = /(^|[#&])bare(=1|=on|=true)?(&|$)/i.test(location.hash || "");
   window.ZIG_BEEMODENAME = (function () { var v = (location.hash.match(/beemode=([a-z]+)/i) || [])[1];
     return ["off","cozy","agitate"].includes(v) ? v : "off"; })();
   window.ZIG_BEEMODE = (window.ZIG_BEEMODENAME === "off") ? null : window.ZIG_BEEMODENAME;
@@ -301,6 +333,9 @@
        dials MEDIUM × FORCES × CURRENT, plus SURFACE. Each recompiles the shader → reload,
        carrying the state in the URL hash. WORLD takes precedence when it names a place. */
     const wsel = document.getElementById("worldpick"), msel = document.getElementById("medpick"), fsel = document.getElementById("forcepick"), csel = document.getElementById("curpick"), bnsel = document.getElementById("boundpick"), bdsel = document.getElementById("bondpick"), spsel = document.getElementById("spreadpick"), stsel = document.getElementById("stillpick"), ctsel = document.getElementById("ctpick"), onsel = document.getElementById("onpick"), cwsel = document.getElementById("cwpick"), susel = document.getElementById("sumpick"), hfsel = document.getElementById("heftpick"), cnsel = document.getElementById("cntpick"), besel = document.getElementById("beepick"), nfsel = document.getElementById("nfpick"), unsel = document.getElementById("unspick"), ssel = document.getElementById("matpick"), bsel = document.getElementById("breathpick"), vsel = document.getElementById("stagepick");
+    if (window.ZIG_BARE) document.body.classList.add("bare");
+    (function () { const t = document.getElementById("bare-t");
+      if (t) t.addEventListener("click", (e) => { document.body.classList.toggle("bare"); e.stopPropagation(); }); })();
     const bmsel = document.getElementById("bmpick");   // PRESENCE mood — declared with the other selects so btail() can never hit a dead zone
     const lsel = document.getElementById("lightpick");
     const gsel = document.getElementById("gempick"), fbsel = document.getElementById("fabpick"), gfsel = document.getElementById("gemfacepick");
