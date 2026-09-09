@@ -998,7 +998,7 @@
       { id: "shape-memory", pillar: "physics", since: "0.17(core)", enables: "a body REMEMBERS the angle it grew at - per-joint rest curvature recorded at growth (state.kap0), so a spiral holds its spiral instead of straining to unwind. Without it a shell creeps forever (motion still 5.6/s after 1500 frames of silence); with it, 0.4. This is what lets a performed shape persist rather than relaxing away", proof: "shell_species_ref" },
       { id: "framing", pillar: "experience", since: "0.21(core)", enables: "A CAMERA THAT HOLDS ITS SUBJECT - the distance at which a body of known radius is exactly TANGENT to the view frustum, for the current field of view and ASPECT. A fixed distance is a promise about one screen: measured on a 2560x1440 capture the field was cropped on all four edges while filling 26% of the frame. Aspect is the crux - a vertical fov means the binding axis SWAPS between wide and tall windows, which is why a piece composed on one monitor is cropped on the next. Pure arithmetic, no readback", proof: "frame_ref" },
       { id: "escapement", pillar: "physics", since: "0.20(core)", enables: "FILL UNTIL IT IS ENOUGH, THEN ALL AT ONCE - a store, a threshold, a release, a reset. The pattern behind a tipping-bucket gauge, a geyser, a seed pod, a heart, a neuron reaching action potential and the escapement in a clock. Turns a CONTINUOUS supply into a COUNTABLE event, so period = threshold / rate and a chain of stages with different thresholds gives seconds, minutes and hours from one supply. HYSTERESIS is the law, not a detail: without a reset level the store chatters at the frame rate instead of ticking", proof: "escapement_ref" },
-      { id: "relay", pillar: "physics", since: "0.22(core)", enables: "WHAT HAPPENS HERE HAPPENS THERE, LATER - an ordered chain of escapements where a tick SCHEDULES the next stage after a lag instead of filling it. Escapement gears; relay gives the gearing GEOGRAPHY. Simultaneity reads as a mechanism, delay reads as CAUSE: segment 4 is still moving after segment 1 has stopped, which is the whole difference between a row of twitching things and a spine. BLEED is why silence works - stores leak toward empty, so the last wave finishes travelling (the body follows through) and then the chain decompresses to rest rather than freezing mid-pose. GAIN is the gearing in units of the downstream threshold. Pure CPU, no shader path", proof: "vertebra_ref" },
+      { id: "relay", pillar: "physics", since: "0.24(core)", enables: "WHAT HAPPENS HERE HAPPENS THERE, LATER - an ordered chain of escapements where a tick SCHEDULES the next stage after a lag instead of filling it. Escapement gears; relay gives the gearing GEOGRAPHY. Simultaneity reads as a mechanism, delay reads as CAUSE: segment 4 is still moving after segment 1 has stopped, which is the whole difference between a row of twitching things and a spine. BLEED is why silence works - stores leak toward empty, so the last wave finishes travelling (the body follows through) and then the chain decompresses to rest rather than freezing mid-pose. GAIN is the gearing in units of the downstream threshold. Pure CPU, no shader path. 0.23 makes the lag LIVE from the rate of NOTE CHANGE - and because lag is read only when a stage schedules the next, a wave already travelling keeps the lag it launched with, so accelerating makes a later wave CATCH UP to an earlier one and the body compresses. Emergent, and only possible with a per-EVENT driver. Pacemaker deliberately does not measure note-to-note time (its PLL takes only gap-preceded onsets), so Relay measures the interval itself and `snap` blends toward the phrase pulse", proof: "vertebra_ref" },
       { id: "coalescence", pillar: "physics", since: "0.19(core)", enables: "WHEN TWO TOUCH THEY BECOME ONE - the exact counterpart to contact, sharing its broadphase and pair test with the opposite resolution. VOLUME is conserved (r = cbrt(r1^3+r2^3)), not radius, which is what makes a merged body rise FASTER than either parent while the event rate collapses: motion accelerating as events decelerate. Momentum conserved with volume as mass. Absorbed agents are PARKED at radius 0 rather than deleted, so a fixed agent count needs no allocation. Lower index survives, so a run is deterministic", proof: "coalesce_ref" },
       { id: "contact", pillar: "physics", since: "0.16(core)", enables: "MATTER THAT OCCUPIES SPACE - static exclusion AND a body that cannot pass through ITSELF (uniform-grid broadphase, bonded near-neighbours exempt, every pair resolved once so a body cannot push itself; coils PACK instead of interpenetrating - measured overlap 0.84 -> 0.03). Flocking separation is a force between strangers, a preference that can be overpowered; this is a body that cannot be entered. A stone, a pillar, a reef: something a creature must go AROUND, which turns a drawing into a creature in a PLACE. The general case (a body against itself) is the same mathematics with both sides moving", proof: "contact_ref" },
       { id: "allometry", pillar: "physics", since: "0.15(core)", enables: "per-segment REST LENGTH - one body whose segments differ in size. A kelp frond tapers, a whale tapers, and a SHELL is a body whose every segment slightly outgrows the last", proof: "structure_ref" },
@@ -1904,7 +1904,23 @@
      no shader path, so nothing here can black-screen Metal.
      ====================================================================== */
   ZigCore.Relay = {
-    VERSION: "0.22.0",
+    VERSION: "0.24.0",
+
+    /* 0.23 — THE LAG IS ALIVE. Lag is read at exactly ONE moment: when a stage
+       fires and schedules the next. So making it live costs one multiplier and
+       buys something nobody wrote: a delivery already travelling KEEPS the lag
+       it launched with. Speed up, and a fast wave launched behind a slow one
+       CATCHES UP to it — the body compresses. Slow down and the waves spread.
+       This exists only because the driver is per-EVENT. A continuous driver
+       (breath) would give every wave in flight the same speed and throw it away.
+
+       A NOTE ON PACEMAKER, since the obvious assumption is wrong: Pacemaker does
+       NOT measure note-to-note time. By design it feeds its PLL only from notes
+       that FOLLOW SILENCE (> ribbonGap 0.35s) — "the pulse lives in the gaps,
+       not the notes" — so `period` is the PHRASE pulse, and the fast notes inside
+       a ribbon reach it only as `flow`. Relay therefore measures raw interval
+       itself (one subtraction, not a second estimator) and offers `snap` to
+       blend toward Pacemaker's pulse when the slower body is wanted. */
 
     /* n stages, head is 0. `full`/`reset`/`spill`/`lag` accept a number (all
        stages alike) or an array (per stage — an uneven body, a stiff neck). */
@@ -1926,10 +1942,22 @@
         lag.push(Math.max(0, per(o.lag, 0.12, i)));
         q.push([]); pose.push(0); first.push(-1);
       }
+      /* the per-stage SHAPE is kept as ratios, so a live lag change rescales a
+         stiff-neck/loose-tail body instead of flattening it to uniform */
+      const base0 = Math.max(1e-6, lag[0] || 0.12);
+      const shape = lag.map((L) => L / base0);
       return {
         n, st, lag, q, pose, first,
+        base: base0, shape,
+        ratio:  (o.ratio  === undefined) ? 1    : +o.ratio,
+        snap:   (o.snap   === undefined) ? 0    : +o.snap,
+        lagMin: (o.lagMin === undefined) ? 0.03 : +o.lagMin,
+        lagMax: (o.lagMax === undefined) ? 0.60 : +o.lagMax,
+        interval: base0 / Math.max(1e-6, (o.ratio === undefined ? 1 : +o.ratio)),
+        _lastNote: -1,
         gain:  (o.gain  === undefined) ? 1    : +o.gain,   /* delivery, in units of the next threshold */
         bleed: (o.bleed === undefined) ? 0.25 : +o.bleed,  /* store leak per second — silence decompresses */
+        headBleed: (o.headBleed === undefined) ? 0 : +o.headBleed, /* the SUPPLY POINT does not leak — see below */
         tau:   (o.tau   === undefined) ? 0.45 : +o.tau,    /* pose decay after a tip */
         fired: [],      /* indices that fired THIS frame — reused, never reallocated */
         ticks: 0,       /* every stage, every fire */
@@ -1950,10 +1978,21 @@
       /* A) LEAK FIRST. If this ran after delivery, a delivery of exactly one
          threshold would be bled just below it and the stage would never trip —
          the wave would die one segment in, silently, for any bleed > 0. */
-      if (r.bleed > 0) {
-        for (let i = 0; i < r.n; i++) {
+      for (let i = 0; i < r.n; i++) {
+        /* THE SUPPLY POINT MUST NOT LEAK, or the instrument acquires a MINIMUM.
+           Bleed exists so the body decompresses when the performer stops. But
+           stage 0 is where breath ENTERS, and a constant leak there sets a hard
+           floor: with fill rate g and leak b, anything softer than b/g can never
+           reach threshold however long it is held — not slow, IMPOSSIBLE. Bill
+           found this by playing (2026-09-09): the scope's 1.6 and 0.35 put the
+           wall at breath 0.219, killing his entire soft range. So the head is an
+           INTEGRATOR by default (headBleed 0) and every soft breath eventually
+           speaks; downstream stages still leak, which is what makes silence
+           decompress. Raise headBleed only if you want the head to forget. */
+        const rate = (i === 0) ? r.headBleed : r.bleed;
+        if (rate > 0) {
           const e = r.st[i];
-          if (!e.tipping) e.level = Math.max(0, e.level - r.bleed * dt);
+          if (!e.tipping) e.level = Math.max(0, e.level - rate * dt);
         }
       }
 
@@ -1987,6 +2026,31 @@
         r.pose[i] = Math.max(drive, r.pose[i] * k);
       }
       return fired;
+    },
+
+    /* ---- 0.23 · THE LIVE LAG -------------------------------------------
+       setInterval: the raw driver. Any measure of "how fast is this being
+       played" can be handed in; the law does not care where it came from. */
+    setInterval(r, seconds, pulse) {
+      if (!(seconds > 0)) return r;
+      const sn = Math.max(0, Math.min(1, r.snap));
+      const p = (pulse > 0) ? pulse : seconds;
+      r.interval = seconds * (1 - sn) + p * sn;
+      const b = Math.max(r.lagMin, Math.min(r.lagMax, r.ratio * r.interval));
+      r.base = b;
+      for (let i = 0; i < r.n; i++) r.lag[i] = b * r.shape[i];
+      return r;
+    },
+
+    /* note: call on every note CHANGE with the time in seconds. The interval is
+       measured here — one subtraction. A held note makes no call, so the body
+       keeps the tempo of the last transition rather than stalling. Pass a
+       Pacemaker to make `snap` mean anything. */
+    note(r, tSec, pm) {
+      const prev = r._lastNote;
+      r._lastNote = tSec;
+      if (prev < 0) return r;
+      return ZigCore.Relay.setInterval(r, tSec - prev, pm ? pm.period : 0);
     },
 
     /* 0..1 displacement for stage i — the drawing surface of this law */

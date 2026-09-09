@@ -20,7 +20,7 @@ const ok = (c, m) => { if (!c) { console.log("  FAIL:", m); fail++; } };
 const DT = 1 / 120;
 
 ok(!!RL, "ZigCore.Relay exists");
-ok(RL.VERSION === "0.22.0", `version stamp is 0.22.0 (${RL && RL.VERSION})`);
+ok(RL.VERSION === "0.24.0", `version stamp is 0.24.0 (${RL && RL.VERSION})`);
 
 // ---------------------------------------------------------------- 1) CAUSATION HAS A FLOOR
 // A tail segment may move only because a head segment did. With no supply, nothing anywhere.
@@ -113,7 +113,7 @@ ok(RL.VERSION === "0.22.0", `version stamp is 0.22.0 (${RL && RL.VERSION})`);
   for (let s = 0; s < 120 * 20; s++) RL.step(r, DT);
   ok(RL.inflight(r) === 0, "nothing is left travelling");
   ok(r.pose.every((p) => p < 0.02), `every segment has decompressed to rest (max pose ${Math.max(...r.pose).toExponential(1)})`);
-  ok(r.st.every((e) => e.level < 1e-6), "and no store is holding charge it will never spend");
+  ok(r.st.slice(1).every((e) => e.level < 1e-6), "no downstream store is holding charge it will never spend");
   ok(r.ticks > ticksAtStop, "the gesture completed rather than being cut off");
 }
 
@@ -166,6 +166,142 @@ ok(RL.VERSION === "0.22.0", `version stamp is 0.22.0 (${RL && RL.VERSION})`);
   ok(a.length > 40, `the run produced events (${a.split("|").length})`);
   ok(a === b, "two runs of the same supply are identical event for event");
 }
+
+// ---------------------------------------------------------------- 8) THE LAG IS DRIVEN BY NOTE CHANGES
+// Not breath, not attack: the time from one note to the next. `ratio` 1 means the body's
+// conduction speed IS your note rate — one hop per note, so the wave is a moving record of
+// roughly the last n notes you played.
+{
+  const r = RL.create({ n: 6, full: 1, lag: 0.12, spill: 0.05 });
+  let t = 0;
+  for (const gap of [0.17, 0.17, 0.17]) { t += gap; RL.note(r, t); }
+  ok(Math.abs(r.base - 0.17) < 1e-9, `three notes 0.17s apart set the lag to 0.17 (${r.base.toFixed(4)})`);
+  ok(r.lag.every((L) => Math.abs(L - 0.17) < 1e-9), "and every hop inherits it");
+
+  /* Bill judged 0.17 by eye on 2026-09-08. At ratio 1 that is simply the note rate it
+     corresponds to — his number is a tempo, not a magic constant. */
+  t += 0.42; RL.note(r, t);
+  ok(Math.abs(r.base - 0.42) < 1e-9, `slowing to 0.42s notes lengthens the body's conduction (${r.base.toFixed(3)})`);
+}
+
+// ---------------------------------------------------------------- 9) CLAMPS AND HELD NOTES
+// A trill must not collapse the body to zero, a long note must not stall it, and a note being
+// HELD makes no call at all — the body keeps the tempo of the last transition.
+{
+  const r = RL.create({ n: 4, lag: 0.12, lagMin: 0.03, lagMax: 0.6 });
+  let t = 0;
+  t += 0.004; RL.note(r, t);
+  t += 0.004; RL.note(r, t);
+  ok(r.base === 0.03, `a trill floors at lagMin rather than collapsing (${r.base})`);
+  t += 9; RL.note(r, t);
+  ok(r.base === 0.6, `a nine-second gap ceils at lagMax rather than stalling (${r.base})`);
+  const held = r.base;
+  for (let s2 = 0; s2 < 600; s2++) RL.step(r, DT);      // five seconds of holding, no note events
+  ok(r.base === held, "and holding a note leaves the lag exactly where the last change put it");
+}
+
+// ---------------------------------------------------------------- 10) THE PER-STAGE SHAPE SURVIVES
+// A stiff neck and a loose tail must stay a stiff neck and a loose tail when the tempo changes,
+// not flatten to uniform.
+{
+  const r = RL.create({ n: 3, lag: [0.2, 0.1, 0.05] });
+  const before = r.lag.map((L) => L / r.lag[0]);
+  let t = 0; t += 0.3; RL.note(r, t); t += 0.3; RL.note(r, t);
+  const after = r.lag.map((L) => L / r.lag[0]);
+  ok(after.every((v, i) => Math.abs(v - before[i]) < 1e-9),
+     `the 4:2:1 taper is preserved through a tempo change (${after.map((v) => v.toFixed(2)).join(":")})`);
+  ok(Math.abs(r.lag[0] - 0.3) < 1e-9, "and the head hop tracks the new interval");
+}
+
+// ---------------------------------------------------------------- 11) SNAP BLENDS TOWARD THE PULSE
+// Pacemaker does NOT measure note-to-note time — its PLL takes only gap-preceded onsets, so
+// `period` is the PHRASE pulse. `snap` is the blend between the two bodies.
+{
+  const fake = { period: 0.9 };
+  const raw  = RL.create({ n: 3, lag: 0.12, snap: 0, lagMax: 5 });
+  const pull = RL.create({ n: 3, lag: 0.12, snap: 1, lagMax: 5 });
+  const mid  = RL.create({ n: 3, lag: 0.12, snap: 0.5, lagMax: 5 });
+  for (const r of [raw, pull, mid]) { let t = 0; t += 0.1; RL.note(r, t, fake); t += 0.1; RL.note(r, t, fake); }
+  ok(Math.abs(raw.base  - 0.1) < 1e-9, `snap 0 follows the raw note change (${raw.base.toFixed(3)})`);
+  ok(Math.abs(pull.base - 0.9) < 1e-9, `snap 1 follows the phrase pulse (${pull.base.toFixed(3)})`);
+  ok(Math.abs(mid.base  - 0.5) < 1e-9, `snap 0.5 sits between them (${mid.base.toFixed(3)})`);
+  ok(pull.base > raw.base, "the pulse body is the slower creature — two different animals, one law");
+}
+
+// ---------------------------------------------------------------- 12) THE CATCH-UP
+// The payoff, and nobody wrote it. A delivery already travelling keeps the lag it launched with,
+// so a fast wave launched behind a slow one CLOSES THE GAP by the time both reach the tail.
+{
+  const arrivals = (secondInterval) => {
+    const r = RL.create({ n: 6, full: 1, lag: 0.25, spill: 0.03, bleed: 0, lagMax: 5 });
+    let t = 0; const tailAt = [];
+    const launch = () => RL.fill(r, 1.2);
+    launch();                                   // wave A at the slow lag it was created with
+    for (let s2 = 0; s2 < 120 * 12; s2++) {
+      t += DT;
+      if (Math.abs(t - 0.5) < DT / 2) {         // half a second later: a note change, then wave B
+        RL.setInterval(r, secondInterval);
+        launch();
+      }
+      const f = RL.step(r, DT);
+      if (f.includes(r.n - 1)) tailAt.push(t);
+    }
+    return tailAt;
+  };
+
+  const fast = arrivals(0.08);                  // B launched into a much faster body
+  const same = arrivals(0.25);                  // B launched at the same speed
+
+  ok(fast.length >= 2, `both waves reached the tail (${fast.length} arrivals)`);
+  ok(same.length >= 2, `and in the control too (${same.length})`);
+  const gapFast = fast[1] - fast[0], gapSame = same[1] - same[0];
+  ok(gapFast < gapSame * 0.6,
+     `accelerating COMPRESSES the body — arrivals ${gapFast.toFixed(2)}s apart vs ${gapSame.toFixed(2)}s at constant tempo`);
+  ok(gapFast < 0.5,
+     `the second wave closed on the first: launched 0.50s behind, arrived ${gapFast.toFixed(2)}s behind`);
+
+  const slow = arrivals(0.45);                  // and the reverse
+  const gapSlow = slow[1] - slow[0];
+  ok(gapSlow > gapSame, `decelerating SPREADS them (${gapSlow.toFixed(2)}s vs ${gapSame.toFixed(2)}s)`);
+}
+
+
+// ---------------------------------------------------------------- 13) NO DEAD ZONE ON BREATH
+// Found by Bill playing the EWI, 2026-09-09: he had to reach a minimum breath before anything
+// happened at all. The cause was arithmetic, not taste — a constant leak on the SUPPLY POINT.
+// With fill rate g and head leak b, anything softer than b/g can never reach threshold however
+// long it is held. Not slow: impossible. So the head is an integrator and every breath speaks.
+{
+  const G = 1.6, LEAK = 0.35;                 // the numbers the scope was using
+  const firstEvent = (breath, headBleed) => {
+    const r = RL.create({ n: 6, full: 1, reset: 0.12, spill: 0.14, lag: 0.17,
+                          bleed: LEAK, headBleed: headBleed });
+    let t = 0;
+    for (let s = 0; s < 120 * 30; s++) {
+      t += DT; RL.fill(r, G * breath * DT);
+      if (RL.step(r, DT).includes(0)) return t;
+    }
+    return -1;                                 // never spoke
+  };
+
+  /* the fault, preserved so it cannot come back unnoticed */
+  ok(firstEvent(0.15, LEAK) < 0, `with a leaking head, breath 0.15 NEVER speaks (wall at ${(LEAK / G).toFixed(3)})`);
+  ok(firstEvent(0.20, LEAK) < 0, "nor 0.20 — the whole soft range was mathematically dead");
+
+  /* the fix */
+  const soft = firstEvent(0.15, 0), fainter = firstEvent(0.05, 0), full = firstEvent(1.0, 0);
+  ok(soft > 0,    `with an integrating head, breath 0.15 speaks (${soft.toFixed(2)}s)`);
+  ok(fainter > 0, `and so does 0.05 — there is no floor, only patience (${fainter.toFixed(2)}s)`);
+  ok(full > 0 && full < soft,
+     `while hard breath still speaks sooner — the ORDER is preserved (${full.toFixed(2)}s vs ${soft.toFixed(2)}s)`);
+
+  /* and the head still spends what it takes in: it is an integrator, not a hoard */
+  const r = RL.create({ n: 4, full: 1, spill: 0.1, bleed: 0.35, headBleed: 0 });
+  for (let s = 0; s < 120 * 4; s++) RL.fill(r, G * 0.5 * DT), RL.step(r, DT);
+  const banked = r.st[0].level;
+  ok(banked < 1.0, `the head never holds more than one threshold (${banked.toFixed(3)})`);
+}
+
 
 console.log(fail ? `vertebra_ref: ${fail} FAIL` : "vertebra_ref: PASS");
 process.exit(fail ? 1 : 0);

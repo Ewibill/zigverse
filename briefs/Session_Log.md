@@ -2464,3 +2464,122 @@ scripted, and it exists *only* because the driver is per-event rather than conti
 **Open design fork for Bill:** raw `ioi` (every fingering change moves the lag; a trill makes the
 body frantic) vs Pacemaker's smoothed `period` (the body learns the tempo; ornaments don't disturb
 it). To be built as a `snap` blend knob so it is judged live rather than chosen blind.
+
+---
+
+## 2026-09-09 · Opus-Glyph · RELAY 0.23 / 0.24 — the lag learns the tempo, and the wall comes down
+
+Continues the 0.22 session. Base was `5d487fb`, tagged **`relay/0.22`**.
+
+### 0.23 — THE LIVE LAG, driven by the rate of NOTE CHANGE
+
+Bill: *"the telemetry that fits my playing… not tonguing or breathing, just the exact time each
+note changes to the next."*
+
+**A correction to what I claimed at the end of the 0.22 session.** I said Pacemaker already
+measured this. It does not. Reading the source properly: its PLL accepts only onsets that FOLLOW
+SILENCE (gap > `ribbonGap` 0.35s) — its own header says *"the pulse lives in the gaps, not the
+notes."* The fast notes inside one of Bill's ribbons never reach `period` at all; they only raise
+`flow`. So `period` is the PHRASE pulse, and note-to-note time is exactly the thing Pacemaker
+deliberately discards. The `ratio 0.227` calibration built on it was scrapped.
+
+Relay therefore measures the interval itself — one subtraction in `note()`, not a second estimator.
+
+- **`ratio`**, default **1**: lag IS the interval. One hop per note. The body's conduction speed
+  equals the note rate, and the wave becomes a moving record of roughly the last *n* notes played.
+  Under this scheme Bill's judged 0.17 is not a constant — it is simply the tempo it corresponds to.
+- **`snap`** 0..1 — blend from raw note interval toward Pacemaker's phrase pulse. Two genuinely
+  different creatures, one law. Left as a live dial rather than a chosen default.
+- **`lagMin` / `lagMax`** (0.03 / 0.60) — a trill cannot collapse the body, a held note cannot
+  stall it. A held note makes no call at all, so the body keeps the tempo of the last transition.
+- Per-stage **`shape`** kept as ratios, so a tapered body (stiff neck, loose tail) rescales through
+  a tempo change instead of flattening to uniform.
+
+**THE CATCH-UP — emergent, nobody wrote it.** Lag is read at exactly one moment: when a stage
+schedules the next. A delivery already travelling keeps the lag it launched with. Two waves
+launched **0.50s apart**, measured at the tail:
+
+| 2nd note interval | arrivals apart |
+|---|---|
+| 0.08s | **0.14s** |
+| 0.15s | 0.29s |
+| 0.25s (no change) | 0.49s |
+| 0.45s | **0.88s** |
+
+Accelerate and the body compresses to under a third of the launch gap; decelerate and it spreads to
+nearly double. **This exists only because the driver is per-EVENT.** A continuous driver (breath)
+would give every wave in flight the same speed and destroy it. That is the argument for note
+changes over breath, stated as a number rather than a preference.
+
+### THE SCOPE GETS THE EWI
+
+`tools/relay_scope.html` — Web MIDI. Note-on = a note change (drives the lag AND feeds
+`Pacemaker.noteOn`, so `snap` blends toward a real pulse); CC2 = the supply into the head; live
+readout of Pacemaker `period` / `confidence` / `flow`.
+
+`tools/serve.mjs` — NEW, dependency-free local server. **Web MIDI is only granted on a SECURE
+CONTEXT.** Opened as `file://` the page can never see the EWI: no prompt, no error, just silence.
+`http://localhost` is a secure context. The same trap was met from the other side when Pages became
+the route for the Bee's MIDI permission; this is the local version, no push required.
+
+### 0.24 — NO MINIMUM BREATH. Found by playing.
+
+Bill, first session on the EWI: *"What I don't like is having to hit a minimum threshold on breath
+to activate it."*
+
+**It was arithmetic, not taste.** The head filled at `g × breath` and bled at a constant `b`. Net
+accumulation is zero at `breath = b/g` — and below that the head can NEVER reach threshold, however
+long it is held. Not slow: **impossible**. With the scope's 1.6 and 0.35 the wall sat at **0.219**,
+killing Bill's entire soft range, and 0.25–0.35 was so slow (7.7s to first event) it may as well
+have been dead too.
+
+**THE PRINCIPLE: the supply point must not leak, or the instrument acquires a minimum.** Bleed
+exists so the body decompresses when the performer stops. But stage 0 is where breath ENTERS, and
+draining the entry point is precisely what turns an instrument into a switch.
+
+Fix: **`headBleed`, default 0** — the head is an integrator. Downstream stages leak exactly as
+before, so follow-through and rest are unchanged. One conditional, no shader path.
+
+With breath gain 8: breath 0.03 speaks in 4.2s, 0.10 in 1.3s, 0.20 in 0.6s, 1.00 in 0.13s. **No
+floor, only patience** — and the order is preserved, harder always speaks sooner. At the top the
+escapement's own `spill` caps the rate at ~3.6/s, so hard blowing saturates into a stream rather
+than a machine gun. That ceiling came free from a law already present.
+
+The fault is preserved in `vertebra_ref` as an assertion — a leaking head is proven to make breath
+0.15 *never* speak — so it cannot come back unnoticed.
+
+**Bill's verdict on 0.24: "This is a new level of response."** Not yet tagged; more playing first.
+
+### Findings that outlive Relay
+
+- **A supply point must not leak.** Any accumulate-then-trip mechanism fed by a continuous source
+  acquires a hard minimum at `leak/gain` if the accumulator is drained. **Worth auditing elsewhere
+  in the engine — charisma dwell is the obvious candidate**, since it accumulates, has a release,
+  and the Bee has a long history of appearing inert.
+- **A store that leaks cannot also count** (from 0.22, reconfirmed): gearing needs charge to survive
+  between deliveries. Per stage, a body is a counting spine or a breathing one.
+- **Per-event drivers produce behaviour continuous drivers cannot.** Any parameter read at a
+  discrete moment rather than every frame has the catch-up property available. General technique.
+
+**Changed:** `engine/zigcore.js` (Relay 0.22 → 0.24) · `tools/relay_scope.html` · `briefs/Session_Log.md`
+**Added:** `tools/serve.mjs` · `tools/apply_relay023.mjs` · `tools/apply_ewi_scope.mjs` · `tools/apply_relay024.mjs`
+**Passed:** `node --check` clean (4 files) · reference gate **43/43**, `vertebra_ref` now 37 checks ·
+byte-identity **5/5 IDENTICAL** · installer self-verify 3/3 sha256 OK on eyeZ · Metal gate **not run**,
+**not required** — no WGSL changed.
+
+**Open:** tag `relay/0.24` once Bill has played it properly · `snap` default still unchosen ·
+`breath gain` is a scope dial at 8, not yet a judged number · **no Vertebra specimen** — Relay needs
+an ORDER and the engine's agents are a field with no index; the three candidates are spatial bands,
+`Env.bonds` topology, or `lifeHash` groups, and that is a design call for Bill · the drawn-membrane
+primitive for Gill/Alveolus, still unbuilt and still the expensive item · a named defect slot on
+`ZIGAGE` · `ZigWebGPU.VERSION` still 0.46.0.
+
+### An installer fault worth keeping
+
+The first `apply_vertebra.mjs` resolved its root with `new URL(import.meta.url).pathname`. On
+Windows that yields `/C:/Users/...` and joining produces `C:\C:\Users\...`. It passed on the Linux
+container and **could not** pass on eyeZ. Fixed with `fileURLToPath`, then made structural: every
+installer since **proves its root** — accepting a candidate only if `engine/zigcore.js`, `test/` and
+`tools/` are actually there, and refusing to write at all otherwise.
+
+*The machine that tests is not the machine that runs.* Same shape as the Metal lesson.
