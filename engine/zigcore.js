@@ -998,6 +998,7 @@
       { id: "shape-memory", pillar: "physics", since: "0.17(core)", enables: "a body REMEMBERS the angle it grew at - per-joint rest curvature recorded at growth (state.kap0), so a spiral holds its spiral instead of straining to unwind. Without it a shell creeps forever (motion still 5.6/s after 1500 frames of silence); with it, 0.4. This is what lets a performed shape persist rather than relaxing away", proof: "shell_species_ref" },
       { id: "framing", pillar: "experience", since: "0.21(core)", enables: "A CAMERA THAT HOLDS ITS SUBJECT - the distance at which a body of known radius is exactly TANGENT to the view frustum, for the current field of view and ASPECT. A fixed distance is a promise about one screen: measured on a 2560x1440 capture the field was cropped on all four edges while filling 26% of the frame. Aspect is the crux - a vertical fov means the binding axis SWAPS between wide and tall windows, which is why a piece composed on one monitor is cropped on the next. Pure arithmetic, no readback", proof: "frame_ref" },
       { id: "escapement", pillar: "physics", since: "0.20(core)", enables: "FILL UNTIL IT IS ENOUGH, THEN ALL AT ONCE - a store, a threshold, a release, a reset. The pattern behind a tipping-bucket gauge, a geyser, a seed pod, a heart, a neuron reaching action potential and the escapement in a clock. Turns a CONTINUOUS supply into a COUNTABLE event, so period = threshold / rate and a chain of stages with different thresholds gives seconds, minutes and hours from one supply. HYSTERESIS is the law, not a detail: without a reset level the store chatters at the frame rate instead of ticking", proof: "escapement_ref" },
+      { id: "relay", pillar: "physics", since: "0.22(core)", enables: "WHAT HAPPENS HERE HAPPENS THERE, LATER - an ordered chain of escapements where a tick SCHEDULES the next stage after a lag instead of filling it. Escapement gears; relay gives the gearing GEOGRAPHY. Simultaneity reads as a mechanism, delay reads as CAUSE: segment 4 is still moving after segment 1 has stopped, which is the whole difference between a row of twitching things and a spine. BLEED is why silence works - stores leak toward empty, so the last wave finishes travelling (the body follows through) and then the chain decompresses to rest rather than freezing mid-pose. GAIN is the gearing in units of the downstream threshold. Pure CPU, no shader path", proof: "vertebra_ref" },
       { id: "coalescence", pillar: "physics", since: "0.19(core)", enables: "WHEN TWO TOUCH THEY BECOME ONE - the exact counterpart to contact, sharing its broadphase and pair test with the opposite resolution. VOLUME is conserved (r = cbrt(r1^3+r2^3)), not radius, which is what makes a merged body rise FASTER than either parent while the event rate collapses: motion accelerating as events decelerate. Momentum conserved with volume as mass. Absorbed agents are PARKED at radius 0 rather than deleted, so a fixed agent count needs no allocation. Lower index survives, so a run is deterministic", proof: "coalesce_ref" },
       { id: "contact", pillar: "physics", since: "0.16(core)", enables: "MATTER THAT OCCUPIES SPACE - static exclusion AND a body that cannot pass through ITSELF (uniform-grid broadphase, bonded near-neighbours exempt, every pair resolved once so a body cannot push itself; coils PACK instead of interpenetrating - measured overlap 0.84 -> 0.03). Flocking separation is a force between strangers, a preference that can be overpowered; this is a body that cannot be entered. A stone, a pillar, a reef: something a creature must go AROUND, which turns a drawing into a creature in a PLACE. The general case (a body against itself) is the same mathematics with both sides moving", proof: "contact_ref" },
       { id: "allometry", pillar: "physics", since: "0.15(core)", enables: "per-segment REST LENGTH - one body whose segments differ in size. A kelp frond tapers, a whale tapers, and a SHELL is a body whose every segment slightly outgrows the last", proof: "structure_ref" },
@@ -1865,6 +1866,140 @@
 
     /* 0..1 — how full, for drawing */
     charge(e) { return Math.max(0, Math.min(1, e.level / Math.max(1e-9, e.full))); }
+  };
+
+  /* ==========================================================================
+     ZigCore.Relay — WHAT HAPPENS HERE HAPPENS THERE, LATER. (v0.22)
+
+     Escapement turns a continuous supply into a countable event. It says
+     nothing about WHERE. Chain its stages directly, as `escapement_ref` does,
+     and the whole chain fires on the same frame: gearing without geography.
+     A body is not a clock — it has an ORDER, and an event entering one end
+     arrives at the other end LATE. That lateness is the entire difference
+     between a row of things that twitch together and a spine.
+
+     LATENCY IS THE LAW. A tick does not fill the next stage; it SCHEDULES a
+     delivery for `lag` seconds from now. Everything else follows: the wave has
+     a speed (length / sum of lags), it is visible in transit, and — the part
+     that matters to the eye — segment 4 is still moving after segment 1 has
+     stopped. Simultaneity reads as a mechanism. Delay reads as CAUSE.
+
+     BLEED IS WHY SILENCE WORKS. Every store leaks toward empty when it is not
+     being supplied. Without it, a chain holds its charge forever and a body
+     stops mid-pose the instant the performer stops — frozen, not resting. With
+     it, the last wave finishes travelling (already-scheduled deliveries still
+     arrive: the body follows through), then the whole chain decompresses to
+     rest. Rest is not the absence of the law, it is the law running empty.
+
+     GAIN IS THE GEARING, in units of the downstream threshold. At 1 every tick
+     travels the full length — a pulse. At 0.5 each stage needs two upstream
+     ticks, so the far end answers every fourth breath and the body reads as
+     having depth rather than reflexes. Escapement's hysteresis is inherited
+     whole, so a flooded head still ticks rather than streaming.
+
+     WHAT IT IS FOR: Vertebra is the specimen. Zigpede's walking wave, a bend
+     travelling up a kelp stalk, a swallow moving down a throat, and the staged
+     collapse of a lung emptying sac by sac are all the same law at different
+     lags. Pure, deterministic, no allocation past construction, Node-testable —
+     no shader path, so nothing here can black-screen Metal.
+     ====================================================================== */
+  ZigCore.Relay = {
+    VERSION: "0.22.0",
+
+    /* n stages, head is 0. `full`/`reset`/`spill`/`lag` accept a number (all
+       stages alike) or an array (per stage — an uneven body, a stiff neck). */
+    create(opts) {
+      const o = opts || {};
+      const ES = ZigCore.Escapement;
+      const n = Math.max(1, (o.n | 0) || 4);
+      const per = (v, d, i) => {
+        const x = Array.isArray(v) ? v[Math.min(i, v.length - 1)] : v;
+        return (x === undefined || +x !== +x) ? d : +x;
+      };
+      const st = [], lag = [], q = [], pose = [], first = [];
+      for (let i = 0; i < n; i++) {
+        st.push(ES.create({
+          full:  per(o.full,  1,    i),
+          reset: per(o.reset, 0.12, i),
+          spill: per(o.spill, 0.25, i)
+        }));
+        lag.push(Math.max(0, per(o.lag, 0.12, i)));
+        q.push([]); pose.push(0); first.push(-1);
+      }
+      return {
+        n, st, lag, q, pose, first,
+        gain:  (o.gain  === undefined) ? 1    : +o.gain,   /* delivery, in units of the next threshold */
+        bleed: (o.bleed === undefined) ? 0.25 : +o.bleed,  /* store leak per second — silence decompresses */
+        tau:   (o.tau   === undefined) ? 0.45 : +o.tau,    /* pose decay after a tip */
+        fired: [],      /* indices that fired THIS frame — reused, never reallocated */
+        ticks: 0,       /* every stage, every fire */
+        head: 0,        /* fires at stage 0 only */
+        t: 0
+      };
+    },
+
+    /* supply the head — breath, pressure, whatever the world is offering */
+    fill(r, amount) { ZigCore.Escapement.fill(r.st[0], amount); return r; },
+
+    /* advance. Returns the (reused) array of stage indices that fired. */
+    step(r, dt) {
+      const ES = ZigCore.Escapement;
+      const fired = r.fired; fired.length = 0;
+      r.t += dt;
+
+      /* A) LEAK FIRST. If this ran after delivery, a delivery of exactly one
+         threshold would be bled just below it and the stage would never trip —
+         the wave would die one segment in, silently, for any bleed > 0. */
+      if (r.bleed > 0) {
+        for (let i = 0; i < r.n; i++) {
+          const e = r.st[i];
+          if (!e.tipping) e.level = Math.max(0, e.level - r.bleed * dt);
+        }
+      }
+
+      /* B) deliver whatever has finished travelling, BEFORE the step, so a
+         delivery can trip its stage on the frame it actually arrives */
+      for (let i = 1; i < r.n; i++) {
+        const qi = r.q[i];
+        for (let k = qi.length - 1; k >= 0; k--) {
+          qi[k].t -= dt;
+          if (qi[k].t <= 0) { ES.fill(r.st[i], qi[k].a); qi.splice(k, 1); }
+        }
+      }
+
+      /* C) step. A tick SCHEDULES the next stage — it does not fill it. */
+      for (let i = 0; i < r.n; i++) {
+        if (ES.step(r.st[i], dt)) {
+          fired.push(i); r.ticks++;
+          if (i === 0) r.head++;
+          if (r.first[i] < 0) r.first[i] = r.t;
+          if (i + 1 < r.n) r.q[i + 1].push({ t: r.lag[i], a: r.gain * r.st[i + 1].full });
+        }
+      }
+
+      /* D) pose — what the body is DRAWN from. Rises through the tip (half a
+         sine, so the extreme is mid-tip, the most legible moment), then decays
+         at tau. Read this, not `level`, or the body twitches instead of moving. */
+      const k = (r.tau > 0) ? Math.exp(-dt / r.tau) : 0;
+      for (let i = 0; i < r.n; i++) {
+        const e = r.st[i];
+        const drive = e.tipping ? Math.sin(Math.PI * Math.min(1, e.phase)) : 0;
+        r.pose[i] = Math.max(drive, r.pose[i] * k);
+      }
+      return fired;
+    },
+
+    /* 0..1 displacement for stage i — the drawing surface of this law */
+    pose(r, i) { return r.pose[i] || 0; },
+
+    /* 0..1 how charged stage i is — for a body that swells before it moves */
+    charge(r, i) { return ZigCore.Escapement.charge(r.st[i]); },
+
+    /* seconds an event takes to cross the whole body, head to tail */
+    transit(r) { let s = 0; for (let i = 0; i < r.n - 1; i++) s += r.lag[i]; return s; },
+
+    /* is anything still travelling? a body mid-follow-through is not at rest */
+    inflight(r) { let c = 0; for (let i = 1; i < r.n; i++) c += r.q[i].length; return c; }
   };
 
   /* ==========================================================================

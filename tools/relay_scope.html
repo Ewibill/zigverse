@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<!-- tools/relay_scope.html — THE RELAY SCOPE (ZigCore.Relay 0.22)
+     A diagnostic, not an organism. Canvas 2D on purpose: no WebGPU, no shader
+     path, nothing here can black-screen anything. It exists to answer ONE
+     question with your eye, which is the only instrument that can answer it —
+     DOES THE DELAY READ AS CAUSATION, OR AS WOBBLE?
+     Hold the mouse / a finger / a key to supply the head. Same law, same file
+     as the engine: this page loads engine/zigcore.js unmodified.  -->
+<meta charset="utf-8"><title>Relay scope — 0.22</title>
+<style>
+  html,body{margin:0;height:100%;background:#07080a;color:#8a8f98;
+    font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;overflow:hidden}
+  #c{display:block;width:100vw;height:100vh;touch-action:none}
+  #ui{position:fixed;left:16px;top:14px;z-index:2;user-select:none}
+  #ui b{color:#d8dde4;font-weight:500}
+  label{display:block;margin:6px 0 0}
+  input[type=range]{width:150px;vertical-align:middle;accent-color:#c98a6a}
+  span.v{color:#c98a6a}
+  #hint{position:fixed;left:16px;bottom:14px;z-index:2}
+</style>
+<canvas id="c"></canvas>
+<div id="ui">
+  <b>RELAY 0.22 — the spine</b>
+  <label>lag <input id="lag" type="range" min="0" max="0.40" step="0.01" value="0.12"><span class="v" id="lagv"></span> s/hop</label>
+  <label>gain <input id="gain" type="range" min="0.25" max="1" step="0.05" value="1"><span class="v" id="gainv"></span></label>
+  <label>bleed <input id="bleed" type="range" min="0" max="1.2" step="0.05" value="0.35"><span class="v" id="bleedv"></span> /s</label>
+  <label>segments <input id="n" type="range" min="3" max="14" step="1" value="8"><span class="v" id="nv"></span></label>
+  <div style="margin-top:8px">transit <span class="v" id="tr"></span>s · head <span class="v" id="hd"></span> · in flight <span class="v" id="fl"></span></div>
+</div>
+<div id="hint">hold anywhere (or any key) to breathe into the head — then LET GO and watch the tail finish</div>
+<script src="../engine/zigcore.js"></script>
+<script>
+(function () {
+  const ZC = window.ZigCore, RL = ZC.Relay;
+  const c = document.getElementById("c"), g = c.getContext("2d");
+  const el = (id) => document.getElementById(id);
+  const S = { lag: el("lag"), gain: el("gain"), bleed: el("bleed"), n: el("n") };
+
+  let r = null, held = false, last = performance.now(), flash = [];
+
+  function build() {
+    const n = +S.n.value;
+    r = RL.create({
+      n, full: 1, reset: 0.12, spill: 0.14,
+      lag: +S.lag.value, gain: +S.gain.value, bleed: +S.bleed.value, tau: 0.5
+    });
+    flash = new Array(n).fill(0);
+    el("lagv").textContent = (+S.lag.value).toFixed(2);
+    el("gainv").textContent = (+S.gain.value).toFixed(2);
+    el("bleedv").textContent = (+S.bleed.value).toFixed(2);
+    el("nv").textContent = n;
+    el("tr").textContent = RL.transit(r).toFixed(2);
+  }
+  Object.values(S).forEach((s) => s.addEventListener("input", build));
+  build();
+
+  function resize() {
+    const d = Math.min(2, devicePixelRatio || 1);
+    c.width = innerWidth * d; c.height = innerHeight * d;
+    g.setTransform(d, 0, 0, d, 0, 0);
+  }
+  addEventListener("resize", resize); resize();
+
+  const down = () => { held = true; };
+  const up = () => { held = false; };
+  addEventListener("pointerdown", down); addEventListener("pointerup", up);
+  addEventListener("pointercancel", up); addEventListener("keydown", down); addEventListener("keyup", up);
+
+  function frame(now) {
+    const dt = Math.min(1 / 30, (now - last) / 1000); last = now;
+
+    /* THE SUPPLY. A held pointer is breath: a continuous rate into the head,
+       exactly as a breath CC would be. Nothing else is driven — every other
+       segment moves only because the one before it did. */
+    if (held) RL.fill(r, 1.6 * dt);
+    const fired = RL.step(r, dt);
+    for (const i of fired) flash[i] = 1;
+    for (let i = 0; i < r.n; i++) flash[i] *= Math.exp(-dt / 0.18);
+
+    const W = innerWidth, H = innerHeight;
+    g.fillStyle = "#07080a"; g.fillRect(0, 0, W, H);
+
+    const n = r.n, x0 = W * 0.14, x1 = W * 0.86, y = H * 0.52;
+    const step = (x1 - x0) / (n - 1), rad = Math.min(34, step * 0.42);
+
+    /* the bond line first, so segments sit on a spine */
+    g.strokeStyle = "#1b1f26"; g.lineWidth = 2; g.beginPath();
+    for (let i = 0; i < n; i++) {
+      const x = x0 + i * step, yy = y - RL.pose(r, i) * H * 0.13;
+      i ? g.lineTo(x, yy) : g.moveTo(x, yy);
+    }
+    g.stroke();
+
+    for (let i = 0; i < n; i++) {
+      const p = RL.pose(r, i), ch = RL.charge(r, i);
+      const x = x0 + i * step, yy = y - p * H * 0.13;
+
+      /* CHARGE is the quiet ring: a segment swelling before it moves. */
+      g.beginPath(); g.arc(x, yy, rad * (0.55 + 0.5 * ch), 0, 6.2832);
+      g.strokeStyle = "rgba(120,132,148," + (0.18 + 0.5 * ch) + ")";
+      g.lineWidth = 1.5; g.stroke();
+
+      /* POSE is the body. FLASH is the event — the moment it fired. */
+      const a = 0.10 + 0.85 * p, f = flash[i];
+      g.beginPath(); g.arc(x, yy, rad * (0.42 + 0.42 * p), 0, 6.2832);
+      g.fillStyle = "rgba(" + (190 + 45 * f) + "," + (128 + 60 * f) + "," + (104 + 70 * f) + "," + a + ")";
+      g.fill();
+
+      g.fillStyle = "rgba(138,143,152,0.55)";
+      g.font = "11px ui-monospace,monospace";
+      g.fillText(String(i), x - 3, y + H * 0.10);
+    }
+
+    /* the head is the only thing being fed — say so, plainly */
+    g.fillStyle = held ? "rgba(201,138,106,0.9)" : "rgba(120,132,148,0.35)";
+    g.fillText("supply", x0 - 22, y + H * 0.14);
+
+    el("hd").textContent = r.head;
+    el("fl").textContent = RL.inflight(r);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>

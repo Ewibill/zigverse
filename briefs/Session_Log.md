@@ -2339,3 +2339,128 @@ shader audit clean, 0 FAIL · CPU sim of the dwell chain (above) · Metal gate *
 **Open:** version stamps (`ZigWebGPU.VERSION` still 0.46.0 while both files say PRESENCE 0.47) ·
 PRESENCE fall-off shape (the card-fan slingshot) · `ZigCore.Session` · Logic Pro sound cleanup
 and glitch fix still unlogged · RC-600 + OBS session · `splice_anchors.mjs` stale default path.
+
+---
+
+## 2026-08-26 → 2026-09-05 · RECONSTRUCTED IN ARREARS (2026-09-08)
+
+**This entry is reconstructed from git evidence, not from a record kept at the time.** It exists
+so the history is continuous rather than accurate-by-memory. Anything not visible in the repo is
+marked unknown rather than guessed.
+
+The log stopped at TOUCH AS BREATH (v4.9) on 08-26 while work continued for another ten days.
+What the mirror can prove:
+
+- **Commit `0df33c4` "mobile panel fix + Zigglow v1"** (2026-09-05), pushed `5cf057c..0df33c4`,
+  2 files, 19,698 insertions, both under `dist/`:
+  `dist/Zigverse_Engine_v5_1_Installable_mobilefix.html` and `dist/Zigglow_v1_Obs1_3_mobilefix.html`.
+- **Source is not stranded.** Unbundling the v5.1 installable and diffing all five modules against
+  `engine/` and `species/` returns **5/5 IDENTICAL** — `zigcore.js`, `zigwebgpu.js`, `zigmesh.js`,
+  `zigmidi.js`, `sickleswarm.js`. Whatever was built in the gap reached source before it shipped.
+  The "work stranded in bundles" risk did **not** recur.
+
+**Unknown / not recoverable from the repo:** what the mobile panel fault actually was, what Zigglow
+v1 changed relative to the earlier Zigglow work, and whether the `Perf.bend` lag filter, the
+`still=calm` default, or the `view[69]` dead-write fix were among it. Those remain open unless
+Bill remembers otherwise.
+
+**Lesson, and it is the same one as before in a new costume:** the source-of-truth risk was solved
+for *code* and left unsolved for *record*. A commit proves what changed; only the log says why.
+
+---
+
+## 2026-09-08 · Opus-Glyph · RELAY 0.22 — the engine learns that a body has an ORDER
+
+**Asked:** take Scout's ZIGANATOMIES brief (Gill · Vertebra · Cochlea · Alveolus) and add the
+characters to the engine. "Any issues?"
+
+### The finding that reshaped the session
+
+Roughly 70% of what Scout's brief needs was **already in the engine and unused**:
+
+- **`ZigCore.Escapement` 0.20** — registered in the Canon ledger, proven by `escapement_ref`, and
+  wired to **nothing but `clock.html`**. Its own header states that *a chain of stages with
+  different thresholds gears down from one supply*. That is Vertebra's propagation and Alveolus's
+  staged surrender, already written.
+- **`ZIGAGE` (v0.15)** — `lifeHash(i)` already gives every agent a persistent deterministic
+  variation. Gill's healed notch needs a named defect slot, not a new system.
+- **A correction to an earlier claim in this session:** `ZigWebGPU.createMembrane` is **elastic
+  space, not a drawn skin** — an invisible field shards inherit local geometry from (`ZIG_SKIN`),
+  plus MICRO-MEMBRANE letters that swell as films. Inflation physics and breathing films: yes.
+  A closed translucent sac with a visible interior: **no**. That remains the genuinely new and
+  expensive thing in Scout's brief, and it was oversold before the source was read.
+
+**Ruled out:** four meshes with MIDI modulation (Scout rules this out too); forking the engine
+(Mercedes principle).
+
+### Built — `ZigCore.Relay` 0.22, *what happens here happens there, later*
+
+Escapement turns a continuous supply into a countable event. It says nothing about WHERE, and a
+raw chain fires the whole body on **one frame** — gearing with no geography. Relay's single change:
+a tick **schedules** the next stage after `lag` seconds instead of filling it.
+
+- **`lag`** — seconds per hop; the wave's speed. Per-stage array supported (stiff neck, loose tail).
+- **`gain`** — gearing, in units of the downstream threshold. 1 = every event travels the length.
+- **`bleed`** — stores leak toward empty, so the last wave finishes travelling (**follow-through**)
+  and then the chain decompresses to **rest** rather than freezing mid-pose.
+
+Pure CPU, built on Escapement rather than duplicating it. **No shader path, therefore no Metal
+exposure** — byte-identity confirms the WGSL is untouched.
+
+**Found by the proof, now an assertion:** *a store that leaks cannot also count.* Gearing needs
+charge to survive the gap between deliveries; bleed drains it. Gearing and breathing trade off,
+**per stage**. Also recorded: a relay hop costs **one frame even at lag 0**, since a delivery is
+consumed the frame after it is scheduled.
+
+### Bill's verdict — judged good
+
+> *"The delay is clean causation — I'll say 0.17, but I think the movement works at every lag
+> setting."* · gain *"should always be at 1"* · bleed *"is subtle so I need to play with it."*
+
+**`lag` 0.17 and `gain` 1.0 are the judged defaults.** That the movement works at *every* lag is
+itself the finding: if the absolute value doesn't much matter, holding it constant is the waste.
+
+### The installer fault — a new gate lesson
+
+The first `apply_vertebra.mjs` used `new URL(import.meta.url).pathname` to find the repo. On
+Windows that yields `/C:/Users/...`, and joining it produces **`C:\C:\Users\...`**. It passed on
+the Linux container and **could not** pass on eyeZ. Fixed with `fileURLToPath` — and then made
+structural: **the installer now PROVES its root**, accepting a candidate only if `engine/zigcore.js`,
+`test/` and `tools/` are actually there, and refusing to write at all otherwise. Tested from the
+repo root, from an unrelated cwd, and from an invalid location.
+
+*The machine that tests is not the machine that runs.* Same shape as the Metal lesson.
+
+**Changed:** `engine/zigcore.js` (+`ZigCore.Relay`, +Canon ledger entry `relay`) · `briefs/Session_Log.md`
+**Added:** `test/vertebra_ref.mjs` (22 checks) · `tools/relay_scope.html` (canvas-2D law scope, not
+an organism, not part of any build) · `tools/apply_vertebra.mjs`
+**Passed:** `node --check` clean (4 files) · reference gate **43/43** (42 inherited + `vertebra_ref`) ·
+byte-identity **5/5 IDENTICAL** vs `0df33c4` · installer self-verify, 3/3 sha256 OK on eyeZ ·
+Metal gate **not run** — and *not required*: no WGSL changed.
+
+**Open:** Relay 0.23 (lag driven by note-change interval, below) · the drawn-membrane primitive
+for Gill/Alveolus, still unbuilt and still the expensive item · a named defect slot on `ZIGAGE` ·
+no Vertebra **specimen** yet — the capability is in, the organism that draws it is not ·
+version stamps still `ZigWebGPU.VERSION` 0.46.0 · `ZigCore.Session`.
+
+### Next — Relay 0.23, lag from the rate of note change
+
+Bill: *"the telemetry that fits my playing… not tonguing or breathing, just the exact time each
+note changes to the next."*
+
+**`ZigCore.Pacemaker` already measures this** — every note-on lands there, it computes `ioi`,
+maintains `period` and `confidence`, and harmonic-snaps so a double-length phrase reads as the
+performer's tempo rather than half of it. Built from Bill's own telemetry, 2026-07-19. Relay
+should **read** it, not build a second estimator.
+
+**Calibration:** Pacemaker's resting `period` is 0.75s. At `ratio = 0.227`, lag lands on **exactly
+Bill's judged 0.17** at his resting note rate — his eye becomes the constant the law is scaled from.
+
+**The free consequence:** lag is read only at the moment a stage schedules the next, so a delivery
+already travelling keeps the lag it launched with. Accelerate, and a fast wave launched behind a
+slow one **catches up to it** — the body compresses; decelerate and the waves spread. Emergent, not
+scripted, and it exists *only* because the driver is per-event rather than continuous.
+
+**Open design fork for Bill:** raw `ioi` (every fingering change moves the lag; a trill makes the
+body frantic) vs Pacemaker's smoothed `period` (the body learns the tempo; ornaments don't disturb
+it). To be built as a `snap` blend knob so it is judged live rather than chosen blind.
