@@ -2583,3 +2583,176 @@ installer since **proves its root** — accepting a candidate only if `engine/zi
 `tools/` are actually there, and refusing to write at all otherwise.
 
 *The machine that tests is not the machine that runs.* Same shape as the Metal lesson.
+
+---
+
+## 2026-09-10/11 · Opus-Glyph · BITE, BOUNCE, and the two nervous systems — the organism starts listening to the RIGHT thing
+
+Base `5d487fb`, tagged `relay/0.22`. This lands Relay 0.25, two new laws, and the scope that
+finally puts the EWI and the loop in their proper places.
+
+### RELAY 0.25 — the clamp moves from the HOP to the BODY
+
+`spanMin`/`spanMax` replace `lagMin`/`lagMax`. Measured from Bill's own take, the body's length in
+TIME was swinging **9x inside one performance** (0.46s to 4.36s at 14 segments), so the number of
+waves coexisting in it swung with it — under 1 at speed, about 8 on slow notes. Bill's word for
+what works is *"one body with multiple series within the length"*, and that was only happening in
+the middle of his range, by accident. Bounding the span holds it: the swing drops to **2.0x**, the
+notes are obeyed exactly between the bounds, and unlike the old clamps it scales with segment count
+(4, 8 and 14 segments now give the same creature, differently resolved).
+
+`snap` now blends toward **`flow`** (density), not Pacemaker's `period`. Measured across four takes,
+**`confidence` never left 0.00** — Pacemaker's PLL accepts only onsets preceded by a gap longer than
+`ribbonGap`, and Bill's ribbon playing supplies almost none (5 gaps in 22s). `period` was never
+estimating at all. `flow` ranged 0.23..0.98 in the same material.
+
+### THE FINDING THAT REDIRECTED EVERYTHING — breath cannot articulate
+
+Bill, on the first EWI session: *"I don't really see a relationship between my note changes other
+than the initial note."* He was right, and the MIDI says why.
+
+Across four takes, **breath at note onset sits at a median of 46 with one zero crossing in 22
+seconds.** It is an envelope; it has no edges. Meanwhile notes change 4-9 times a second. So a body
+triggered by breath fires at moments unrelated to anything played — only the first note, where
+breath crosses threshold, ever feels connected. **The trigger and the intensity had been the same
+signal, and one of them was in the wrong place.**
+
+**And velocity is not a second signal: it correlates with breath at onset at 0.99-1.00 in every
+take.** The EWI derives note-on velocity from breath. Twenty years of playing away from tonguing is
+visible right there — the instrument has nothing else to report.
+
+### ZigCore.Bite 0.26 (pillar: life) — which notes reach the body
+
+Notes articulate, so notes are the door. But not a fixed fraction of them, because the density
+swings enormously and a rule tuned to one mode is wrong for the other:
+
+| | ribbon | open |
+|---|---|---|
+| notes/s | 8.8 | 1.6 |
+| turning points | 2.6/s | 0.6/s |
+| notes inside a repeated cell | 22% | **0%** |
+| breath at onset | 38..75, sd 10 | **18..114, sd 18.4** |
+
+So Bite holds a **TARGET RATE** and moves the threshold instead of holding a gate. Dense playing
+raises it until only turns and leaps pass; open playing lowers it until nearly every note does.
+Three things always pass because they are rare and structural: a **repeated cell**, a **big leap**,
+a **breath swell** above the performer's own baseline.
+
+**Breath is auto-ranged against the performer's own running range.** It is not a plateau — it was
+flattened by speed. Read against 0..127 both modes look like nothing; read against Bill's own range,
+both are expressive.
+
+**His runs are built from cells, and the cells GROW.** In one 20s passage: `[72 69 67 65]` x2, then
+`[67 72 69 67 65]` x2, then `[64 65 72 69 67 65]` x2 — the same tail, notes prepended. The interval
+shape `-3 -2 -2` appears **15 times** across Bite_2, transposed. Bite reports the cell's LENGTH and
+its DURATION, so a body can take its span from the figure being repeated.
+
+### ZigCore.Bounce 0.26 (pillar: physics) — a rhythm that is irregular and inevitable
+
+From a dream of Bill's, years old: a ball off a floor and a wall, every gap different, all one
+stream. `interval = k*sqrt(energy)`, `energy *= restitution` per impact — so a throw **accelerates
+into stillness**, which no grid gives you. Not a randomiser: energy only leaves, so each impact is
+heard as CAUSED by the last.
+
+**The first source in the engine with time of its own.** A significant note throws it, energy from
+breath, and the decay fills the space the performer left — activity he caused, not activity the
+organism invented. In the replay of his slow take the ball ran at 2.56/s against 1.38 bites/s: it
+filled exactly where the body was starving.
+
+The dream as dreamt is ~7x too busy (two lively surfaces = 27 impacts per throw, ~16/s). Lively or
+dry is a taste call, so both are dials.
+
+### REPLAYED THROUGH THE WHOLE CHAIN — his four takes
+
+| take | notes/s | bites/s | ball/s | **waves in body** |
+|---|---|---|---|---|
+| Bite_1 (dense) | 8.77 | 3.16 | 3.01 | **1.8** |
+| Bite_2 | 5.24 | 2.51 | 2.16 | **1.8** |
+| Bite_3 + Bee | 4.34 | 2.69 | 1.81 | **2.1** |
+| Bite_4 slow | 1.60 | 1.38 | 2.56 | **1.5** |
+
+A **5.5x swing in playing density becomes 2.3x at the body**, and the quantity Bill named as the
+thing he likes holds between 1.5 and 2.1 across all of it.
+
+**Known overshoot:** Bite_1 lands at 3.16/s against a target of 2.0, because 52 of its 62 bites were
+structural — cells, leaps and swells bypass the threshold by design, and his densest playing is full
+of them. The adaptive part cannot govern what it is not allowed to reject.
+
+### THE TWO NERVOUS SYSTEMS, WIRED
+
+Bill raised the RC-600: he loops slow rhythmic passages and plays ribbons into and around them. Once
+a loop is committed it is audio — the organism goes deaf to the layer carrying the pulse. A MIDI
+clock route was explored and **Bill ruled it out as a rabbit hole**, correctly: it was trying to make
+audio do MIDI's job.
+
+**His own law from July already settles it** — *MIDI = Bill's live body only -> pulse and bodies.
+AUDIO = the whole room, his loops, his history -> light and weather.* And `ZigCore.Timbre` already
+existed, already calibrated against Jimmy's live-gig recording, already wired into ten organisms.
+Nothing to design. The loop needs **no tempo, no downbeat, no transcription** — an envelope is the
+right shape for weather and the wrong shape for a trigger. It is also the worst possible material
+for beat detection, being slow and legato, which is a second reason the instinct to back off was
+right.
+
+The scope now runs it: MIDI drives what moves, audio lifts the ground and warms the body, **audio
+never touches geometry.**
+
+### BILL'S VERDICT — TIGHT
+
+Played on 2026-09-10 and settled on: **breath feed 6.0 · ball 0.00 · 7 segments · ratio 0.25 ·
+span min 0.20 · bleed 0.00 · bites/s target 4.40 · restitution 0.36** — measured span 0.20s, **waves
+0.4**, threshold 0.06. *"These five me a tight fluid response."*
+
+**He chose immediacy over body**, and it is the opposite of what he liked in the video take (a
+14-segment body holding 2-3 waves). At threshold 0.06 nearly every note passes, so the ball, the
+bleed/rest behaviour and cell announcement are all currently inert.
+
+**Caveat recorded, not argued:** the scope is seven dots on a line, where several waves in flight
+read as mush. TIGHT may be right for the diagnostic rather than right for the law. Both are now
+presets in the scope — **TIGHT is the default because Bill judged it**; LONG is the design as built,
+for the same comparison on an organism with a shape.
+
+### THE SPECIMEN — the spine in the field (`ZIG_RELAY`)
+
+Bill chose **spatial bands** over BOND topology and `lifeHash` groups, on the reasoning that the
+first specimen should be the most READABLE version rather than the most clever: if a wave does not
+read when it is spatially ordered, it will not read when it is not.
+
+**And the spatial mechanism was already in the engine, for the third time this week.** MELODIC
+STRATA (ZigWebGPU v0.32) draws bands of light at chosen world heights; `ZigCore.NoteField` packs six
+of them into `view[84..107]`; the shader has rendered them since July and is Metal-proven and
+byte-identical at zero. **So the spine costs NO new shader path and NO new binding.** The six bands
+ARE the six segments, and a wave crossing the body is those bands lighting in order up its vertical
+axis.
+
+`species/sickleswarm.js` gains an opt-in: with `ZIG_RELAY` set, a note reaches the spine only if
+Bite lets it, a repeated cell sets the body's length to that cell's duration, and the spine owns the
+strata bands for that frame. `ZIG_BITES`, `ZIG_RATIO`, `ZIG_SPANMIN`, `ZIG_SPANMAX`, `ZIG_BLEED`,
+`ZIG_BALL`, `ZIG_REST` are the dials, and each also reads from the URL hash the way BEEMODE and the Canon laws do, so a configuration is A/B-able on eyeZ without a rebuild: `sickleswarm.html#relay=1&bites=3&bleed=0`. **Diffed line by line against the previous file: two lines
+moved into an else branch, everything else is addition inside a `RELAY_ON` guard. Nothing changes
+when the flag is absent.**
+
+**NOT BOOT-GATED. This container has no playwright browser binaries, so `tools/boot_gate.mjs` could
+not be run here — the first Zigverse delivery in this campaign that touches a species and could not
+be proven headless before shipping.** It must be gated on eyeZ before it is trusted:
+`node tools/boot_gate.mjs sickleswarm.html` for the off path, then with `ZIG_RELAY` set for the on
+path. And the Metal gate on the Air, since a species changed even though no WGSL did.
+
+**Changed:** `engine/zigcore.js` · `species/sickleswarm.js` (ZIG_RELAY, opt-in)
+**also:** `engine/zigcore.js` (Relay 0.25, +Bite, +Bounce, +2 Canon entries) · `test/vertebra_ref.mjs` ·
+`tools/relay_scope.html` (the whole chain + presets) · `briefs/Session_Log.md`
+**Added:** `test/bite_ref.mjs` · `tools/bite_replay.mjs` (replays a .mid through the chain headless,
+with a minimal SMF reader) · `tools/serve.mjs` · the apply installers
+**Passed:** `node --check` clean · reference gate **44/44** · byte-identity **5/5 IDENTICAL** ·
+installer self-verify sha256 OK on eyeZ · Metal gate **not run, not required** — no WGSL changed.
+
+**A gate caught me:** both new laws were filed under a pillar called `performance`. `Canon.flow` is
+`physics · habitat · life · experience` and nothing else, and `canon_ref` rejected it in one run.
+Bite is **life** (what the organism lets in), Bounce is **physics** (it is ballistics).
+
+**Open:** **BOOT-GATE THE SPECIMEN ON eyeZ** (it could not be gated here) · Metal gate on the Air · tag `relay/0.24` and this · the Bite overshoot on dense playing (rate-limit the structural
+pass, or raise `leapBig`/`swell`) · TIGHT vs LONG on an organism with a shape · **no Vertebra
+specimen** — Relay needs an ORDER and the engine's agents are a field with no index; the three
+candidates are spatial bands, `Env.bonds` topology, or `lifeHash` groups, and that is Bill's call ·
+**audit charisma dwell for the same leak-on-the-accumulator fault Relay's head had** — it
+accumulates, it has a release, and the Bee has a long history of appearing inert · the drawn-membrane
+primitive for Gill/Alveolus · `ZigWebGPU.VERSION` still 0.46.0.

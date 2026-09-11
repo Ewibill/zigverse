@@ -288,6 +288,48 @@
     const HOLLOW = (+global.ZIG_HOLLOW > 0);                  // back curves as a concave SHELL (cupped underside) instead of a convex lens
     const AMBIENCE_ON = (global.ZIG_AMBIENCE != null && global.ZIG_AMBIENCE !== false && +global.ZIG_AMBIENCE !== 0);   // ATMOSPHERE BUS: the processed SOUND drives the environment (colour temp · mist · afterglow) while MIDI drives the body. Synth-sourced until the audio cabling is live. Byte-identical when off.
     const STRATA_ON = (global.ZIG_STRATA != null && global.ZIG_STRATA !== false && +global.ZIG_STRATA !== 0);   // MELODIC STRATA: each EWI note blooms a band of light at its pitch-height, fading over time — the melody written on the body's vertical axis. Byte-identical when off.
+
+    /* ---- THE SPINE IN THE FIELD (#relay) --------------------------------
+       MELODIC STRATA already draws BANDS OF LIGHT at chosen world heights —
+       ZigCore.NoteField packs six of them into view[84..107] and the shader has
+       rendered them since v0.32. It is Metal-proven and byte-identical at zero.
+       So the spatial ordering Relay needs was in the engine all along, and the
+       spine costs NO new shader path and NO new binding: the six bands ARE the
+       six segments, and a wave travelling the body is those bands lighting in
+       order up its vertical axis.
+
+       Notes reach it through Bite, so the body speaks at a steady rate whether
+       Bill is at 8.8 notes/s or 1.6 (his measured range). Nothing here runs when
+       ZIG_RELAY is absent, and nothing outside these blocks changes. */
+    /* the house idiom: the URL hash overrides the host, so this is A/B-able on
+       eyeZ without a rebuild —  sickleswarm.html#relay=1  */
+    const RELAY_ON = (function () {
+      const h = (global.location && global.location.hash) || "";
+      const m = h.match(/[#&]relay=([0-9.]+)/i);
+      if (m) return +m[1] !== 0;
+      return (global.ZIG_RELAY != null && global.ZIG_RELAY !== false && +global.ZIG_RELAY !== 0);
+    })();
+    const relayHashNum = function (name, dflt) {
+      const h = (global.location && global.location.hash) || "";
+      const m = h.match(new RegExp("[#&]" + name + "=([0-9.]+)", "i"));
+      if (m) return +m[1];
+      const g = +global["ZIG_" + name.toUpperCase()];
+      return (g > 0 || (name === "bleed" && g >= 0)) ? g : dflt;
+    };
+    const relaySpine = RELAY_ON ? ZC.Relay.create({
+      n: 6, full: 1, reset: 0.12, spill: 0.14, lag: 0.17, tau: 0.6,
+      bleed: relayHashNum("bleed", 0.35), headBleed: 0,
+      ratio: relayHashNum("ratio", 1),
+      spanMin: relayHashNum("spanmin", 0.9),
+      spanMax: relayHashNum("spanmax", 1.8)
+    }) : null;
+    const relayBite = RELAY_ON ? ZC.Bite.create({ target: relayHashNum("bites", 2) }) : null;
+    const RELAY_BALL0 = relayHashNum("ball", 0);
+    const relayBall = (RELAY_ON && RELAY_BALL0 > 0) ? ZC.Bounce.create({
+      surfaces: [{ rest: relayHashNum("rest", 0.52), k: 0.42 }], floor: 0.06
+    }) : null;
+    const RELAY_BALL = RELAY_BALL0;
+    let relayHue = 0.12;
     const STRATA_DEMO = (+global.ZIG_STRATADEMO > 0);   // auto-play a deterministic demo melody when no live MIDI (for demos only); off = strata responds to REAL notes only
     let strataSynthT = 0, strataSeq = 0;
     /* GEM MATERIAL — the shard becomes a cut stone (ZigCore.Gems: diamond, ruby, sapphire, …).
@@ -843,6 +885,20 @@
         if (NOTEPULSE) noteImpulse(ANCHOR[0], py0, ANCHOR[2], (0.55 + 0.4 * ZC.Perf.attack) * (0.45 + 0.55 * agitF), 0.18);   // nerve pulse INTO the body — flare eased by the agitation master
         if (flock.smoke) flock.smoke.puff(ANCHOR[0], py0, ANCHOR[2], 0.5 + 0.6 * ZC.Perf.attack, nhue);   // a puff of atmosphere on the note
         if (STRATA_ON) ZC.NoteField.note(py0, (pit % 12) / 12, 0.7 + 0.5 * ZC.Perf.attack);   // MELODIC STRATA: a band at the note's pitch-height, in its pitch-class colour
+        if (RELAY_ON) {
+          /* BITE decides. A note that passes deposits into the head, sets the
+             tempo from its own interval, and — when it is a repeated cell —
+             sets the body's LENGTH to that cell's duration. */
+          const tNow = performance.now() / 1000;
+          const hit = ZC.Bite.note(relayBite, tNow, pit, ZC.Perf.breath * 127);
+          if (hit) {
+            ZC.Relay.note(relaySpine, tNow);
+            if (hit.cell && hit.cellSecs > 0.15) ZC.Relay.setInterval(relaySpine, hit.cellSecs / 5);
+            ZC.Relay.fill(relaySpine, 1.1 * hit.strength);
+            if (relayBall) ZC.Bounce.throw_(relayBall, hit.strength);
+            relayHue = (pit % 12) / 12;
+          }
+        }
       }
       /* ============ NOTE → FORM (summon · \ toggles) ============================
          A note is a BIRTH: the field re-forms into a body whose REGISTER is the pitch
@@ -1077,8 +1133,22 @@
             ZC.NoteField.note(py0, (pit % 12) / 12, 1.0);
           }
         }
-        ZC.NoteField.update(dt);
-        ZC.NoteField.pack(view, 84);
+        if (RELAY_ON) {
+          /* the spine OWNS the bands this frame: pose per segment, at fixed
+             heights up the body. NoteField.update is skipped deliberately —
+             these bands are rewritten every frame rather than ringing down. */
+          if (relayBall) { const hs = ZC.Bounce.step(relayBall, dt); for (let q = 0; q < hs.length; q++) ZC.Relay.fill(relaySpine, RELAY_BALL * hs[q]); }
+          ZC.Relay.step(relaySpine, dt);
+          ZC.NoteField.bands.length = 0;
+          for (let q = 0; q < 6; q++) {
+            ZC.NoteField.bands.push({ y: ANCHOR[1] + (q - 2.5) / 2.5 * 16,
+                                      hue: relayHue, e: ZC.Relay.pose(relaySpine, q) });
+          }
+          ZC.NoteField.pack(view, 84);
+        } else {
+          ZC.NoteField.update(dt);
+          ZC.NoteField.pack(view, 84);
+        }
       }
       if (AMBIENCE_ON) {
         if (ZC.Ambience.src === "off") { ZC.Ambience.synth(true); ZC.AmbienceMap.reset(); }

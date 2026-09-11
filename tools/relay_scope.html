@@ -36,6 +36,11 @@
 <canvas id="c"></canvas>
 <div id="ui">
   <b>RELAY 0.26 — the spine</b>
+  <div style="margin:6px 0 2px">
+    <button id="pTight">TIGHT</button>
+    <button id="pLong">LONG</button>
+    <span class="v" id="pnow"></span>
+  </div>
 
   <h4>WHAT REACHES THE BODY</h4>
   <label>bites/s <input id="target" type="range" min="0.5" max="6" step="0.1" value="2"><span class="v" id="targetv"></span> target</label>
@@ -91,7 +96,41 @@
   ids.forEach(function (k) {
     S[k].addEventListener("input", build); S[k].addEventListener("change", build);
   });
-  build();
+  /* ---- TWO BODIES, BOTH REAL --------------------------------------------
+     TIGHT is Bill's, found by playing on 2026-09-10: breath at full feed, the
+     ball off, the spine at its shortest, no bleed, threshold on the floor so
+     nearly every note passes. Immediacy over body — under one wave in flight at
+     a time, everything arriving at once. It is the default because he judged it.
+
+     LONG is the counter: the design as built. A 14-segment body holding two or
+     three waves, the ball filling the space his open playing leaves, bleed so it
+     decompresses to rest rather than freezing, and a threshold high enough that
+     selection actually happens — which is the only setting where a repeated cell
+     can announce itself.
+
+     Worth knowing before judging: this scope is DOTS ON A LINE. Several waves in
+     flight across seven dots reads as mush, so tight wins here — which may be the
+     diagnostic's limit rather than a verdict on the law. The same comparison on an
+     organism with a shape may go the other way. */
+  var PRESETS = {
+    TIGHT: { target: 4.40, rest: 0.36, settle: 0.060, ballmix: 0.00,
+             smin: 0.20, smax: 1.80, n: 7, bleed: 0.00, gain: 1.00,
+             snap: 0.00, ratio: 0.25, bfeed: 6.00 },
+    LONG:  { target: 2.00, rest: 0.52, settle: 0.060, ballmix: 0.55,
+             smin: 0.90, smax: 1.80, n: 14, bleed: 0.35, gain: 1.00,
+             snap: 0.00, ratio: 1.00, bfeed: 0.00 }
+  };
+  function apply(name) {
+    var P = PRESETS[name]; if (!P) return;
+    ids.forEach(function (k) { if (P[k] !== undefined) S[k].value = P[k]; });
+    el("pnow").textContent = name;
+    build();
+  }
+  el("pTight").addEventListener("click", function () { apply("TIGHT"); });
+  el("pLong").addEventListener("click", function () { apply("LONG"); });
+  ids.forEach(function (k) { S[k].addEventListener("input", function () { el("pnow").textContent = "custom"; }); });
+
+  apply("TIGHT");            /* Bill's judged setting is what the page opens on */
 
   function resize() {
     var d = Math.min(2, devicePixelRatio || 1);
