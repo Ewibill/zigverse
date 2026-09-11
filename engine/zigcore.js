@@ -998,7 +998,9 @@
       { id: "shape-memory", pillar: "physics", since: "0.17(core)", enables: "a body REMEMBERS the angle it grew at - per-joint rest curvature recorded at growth (state.kap0), so a spiral holds its spiral instead of straining to unwind. Without it a shell creeps forever (motion still 5.6/s after 1500 frames of silence); with it, 0.4. This is what lets a performed shape persist rather than relaxing away", proof: "shell_species_ref" },
       { id: "framing", pillar: "experience", since: "0.21(core)", enables: "A CAMERA THAT HOLDS ITS SUBJECT - the distance at which a body of known radius is exactly TANGENT to the view frustum, for the current field of view and ASPECT. A fixed distance is a promise about one screen: measured on a 2560x1440 capture the field was cropped on all four edges while filling 26% of the frame. Aspect is the crux - a vertical fov means the binding axis SWAPS between wide and tall windows, which is why a piece composed on one monitor is cropped on the next. Pure arithmetic, no readback", proof: "frame_ref" },
       { id: "escapement", pillar: "physics", since: "0.20(core)", enables: "FILL UNTIL IT IS ENOUGH, THEN ALL AT ONCE - a store, a threshold, a release, a reset. The pattern behind a tipping-bucket gauge, a geyser, a seed pod, a heart, a neuron reaching action potential and the escapement in a clock. Turns a CONTINUOUS supply into a COUNTABLE event, so period = threshold / rate and a chain of stages with different thresholds gives seconds, minutes and hours from one supply. HYSTERESIS is the law, not a detail: without a reset level the store chatters at the frame rate instead of ticking", proof: "escapement_ref" },
-      { id: "relay", pillar: "physics", since: "0.24(core)", enables: "WHAT HAPPENS HERE HAPPENS THERE, LATER - an ordered chain of escapements where a tick SCHEDULES the next stage after a lag instead of filling it. Escapement gears; relay gives the gearing GEOGRAPHY. Simultaneity reads as a mechanism, delay reads as CAUSE: segment 4 is still moving after segment 1 has stopped, which is the whole difference between a row of twitching things and a spine. BLEED is why silence works - stores leak toward empty, so the last wave finishes travelling (the body follows through) and then the chain decompresses to rest rather than freezing mid-pose. GAIN is the gearing in units of the downstream threshold. Pure CPU, no shader path. 0.23 makes the lag LIVE from the rate of NOTE CHANGE - and because lag is read only when a stage schedules the next, a wave already travelling keeps the lag it launched with, so accelerating makes a later wave CATCH UP to an earlier one and the body compresses. Emergent, and only possible with a per-EVENT driver. Pacemaker deliberately does not measure note-to-note time (its PLL takes only gap-preceded onsets), so Relay measures the interval itself and `snap` blends toward the phrase pulse", proof: "vertebra_ref" },
+      { id: "relay", pillar: "physics", since: "0.25(core)", enables: "WHAT HAPPENS HERE HAPPENS THERE, LATER - an ordered chain of escapements where a tick SCHEDULES the next stage after a lag instead of filling it. Escapement gears; relay gives the gearing GEOGRAPHY. Simultaneity reads as a mechanism, delay reads as CAUSE: segment 4 is still moving after segment 1 has stopped, which is the whole difference between a row of twitching things and a spine. BLEED is why silence works - stores leak toward empty, so the last wave finishes travelling (the body follows through) and then the chain decompresses to rest rather than freezing mid-pose. GAIN is the gearing in units of the downstream threshold. Pure CPU, no shader path. 0.23 makes the lag LIVE from the rate of NOTE CHANGE - and because lag is read only when a stage schedules the next, a wave already travelling keeps the lag it launched with, so accelerating makes a later wave CATCH UP to an earlier one and the body compresses. Emergent, and only possible with a per-EVENT driver. Pacemaker deliberately does not measure note-to-note time (its PLL takes only gap-preceded onsets), so Relay measures the interval itself and `snap` blends toward the phrase pulse", proof: "vertebra_ref" },
+      { id: "bite", pillar: "life", since: "0.26(core)", enables: "WHICH NOTES REACH THE BODY - a TARGET event rate with a moving threshold, not a fixed gate. Measured across four of Bill's takes the density swings 8.8 to 1.6 notes/s and turning points with it (2.6/s to 0.6/s), so any fixed rule is right for one mode and wrong for the other. Holding the rate steady and letting selectivity move keeps the body equally alive at both while always landing on real notes. Repeated cells, big leaps and breath swells always pass. Breath is auto-ranged against the performer's own running range - it is not a plateau, it was flattened by speed", proof: "bite_ref" },
+      { id: "bounce", pillar: "physics", since: "0.26(core)", enables: "A RHYTHM THAT IS IRREGULAR AND INEVITABLE - interval = k*sqrt(energy), energy *= restitution per impact, so a throw ACCELERATES INTO STILLNESS and every gap differs while all of them descend from one throw. Not a randomiser: energy only leaves, so each impact is heard as CAUSED by the last. Two surfaces interleave into clustering pairs. The first source in the engine with time of its own - a significant note throws it and the decay fills the space the performer left", proof: "bite_ref" },
       { id: "coalescence", pillar: "physics", since: "0.19(core)", enables: "WHEN TWO TOUCH THEY BECOME ONE - the exact counterpart to contact, sharing its broadphase and pair test with the opposite resolution. VOLUME is conserved (r = cbrt(r1^3+r2^3)), not radius, which is what makes a merged body rise FASTER than either parent while the event rate collapses: motion accelerating as events decelerate. Momentum conserved with volume as mass. Absorbed agents are PARKED at radius 0 rather than deleted, so a fixed agent count needs no allocation. Lower index survives, so a run is deterministic", proof: "coalesce_ref" },
       { id: "contact", pillar: "physics", since: "0.16(core)", enables: "MATTER THAT OCCUPIES SPACE - static exclusion AND a body that cannot pass through ITSELF (uniform-grid broadphase, bonded near-neighbours exempt, every pair resolved once so a body cannot push itself; coils PACK instead of interpenetrating - measured overlap 0.84 -> 0.03). Flocking separation is a force between strangers, a preference that can be overpowered; this is a body that cannot be entered. A stone, a pillar, a reef: something a creature must go AROUND, which turns a drawing into a creature in a PLACE. The general case (a body against itself) is the same mathematics with both sides moving", proof: "contact_ref" },
       { id: "allometry", pillar: "physics", since: "0.15(core)", enables: "per-segment REST LENGTH - one body whose segments differ in size. A kelp frond tapers, a whale tapers, and a SHELL is a body whose every segment slightly outgrows the last", proof: "structure_ref" },
@@ -1869,6 +1871,227 @@
   };
 
   /* ==========================================================================
+     ZigCore.Bite — WHICH NOTES REACH THE BODY. (v0.26)
+
+     Relay answers "what happens when something enters the body". It says nothing
+     about WHAT ENTERS. Until now that was breath crossing a threshold, and for
+     this performer that is the wrong door: measured across four takes, Bill's
+     breath at note onset sits at a median of 46 with almost no edges in it — one
+     zero crossing in 22 seconds. Breath is an envelope. It cannot articulate, so
+     the body fired at moments unrelated to anything played, and Bill's report was
+     exact: "I don't see a relationship between my note changes other than the
+     initial note."
+
+     NOTES ARTICULATE. So notes are the door. But not all of them, and not a fixed
+     fraction of them, because the density swings enormously:
+
+         ribbon playing   8.8 notes/s   turning points 2.6/s   22% inside a loop
+         open playing     1.6 notes/s   turning points 0.6/s    0% inside a loop
+
+     A fixed rule tuned to one is wrong for the other — the turning-point gate
+     that gives a living texture at speed nearly stops the body when he opens up.
+     So the rule here is not a gate but a TARGET: keep the event rate near `target`
+     and let the THRESHOLD move. Dense playing raises it until only turning points
+     and leaps get through; open playing lowers it until nearly every note does.
+     The body's activity stays steady while WHICH notes it picks tracks whatever is
+     most salient at that moment. Bill plays as he plays; the organism follows.
+
+     Three things always pass, whatever the threshold, because they are rare and
+     structural: a REPEATED CELL (his runs are built from 2-8 note loops that
+     repeat — 22% of notes in ribbon playing, and the cells visibly GROW: 4 notes,
+     then 5, then 6, same tail), a big LEAP, and a BREATH SWELL above his own
+     recent baseline.
+
+     AUTO-RANGING. Breath is not a plateau — it was flattened by speed. Open
+     playing spans 18..114 with sd 18.4; ribbon playing 38..75 with sd 10. Read
+     against the full MIDI range both look like nothing. Read against the
+     performer's OWN running range, both are expressive. That is `level`.
+     ====================================================================== */
+  ZigCore.Bite = {
+    VERSION: "0.26.0",
+
+    create(opts) {
+      const o = opts || {};
+      return {
+        target: (o.target === undefined) ? 2.0 : +o.target,   /* events per second wanted */
+        adapt:  (o.adapt  === undefined) ? 1.2 : +o.adapt,    /* how fast the threshold chases it */
+        wTurn:  (o.wTurn  === undefined) ? 0.55 : +o.wTurn,
+        wLeap:  (o.wLeap  === undefined) ? 0.35 : +o.wLeap,
+        wBreath:(o.wBreath=== undefined) ? 0.40 : +o.wBreath,
+        leapBig:(o.leapBig=== undefined) ? 7    : +o.leapBig, /* semitones that always pass */
+        swell:  (o.swell  === undefined) ? 0.60 : +o.swell,   /* sd above baseline that always passes */
+        thr: 0.5,
+        rate: 0,                    /* measured events/s, smoothed */
+        notes: [],                  /* recent pitches — cycle + contour */
+        times: [],
+        dir: 0,
+        bMin: 127, bMax: 0, bMean: 0, bVar: 0, bN: 0,
+        level: 0,                   /* breath, auto-ranged 0..1 */
+        dev: 0,                     /* breath in sd above its own baseline */
+        cell: 0,                    /* length of the cell that just repeated, 0 if none */
+        last: -1,
+        fired: 0
+      };
+    },
+
+    /* the whole law. Returns null if the note does not reach the body, or
+       { strength, why, cell } if it does. */
+    note(b, t, pitch, breath) {
+      /* --- auto-range the breath against the performer's own playing --------- */
+      if (breath >= 0) {
+        b.bMin = Math.min(b.bMin, breath); b.bMax = Math.max(b.bMax, breath);
+        /* the range breathes back in slowly, so one huge note does not flatten
+           everything after it for the rest of the set */
+        b.bMin += 0.02; b.bMax -= 0.02;
+        if (b.bMax - b.bMin < 4) b.bMax = b.bMin + 4;
+        b.level = Math.max(0, Math.min(1, (breath - b.bMin) / (b.bMax - b.bMin)));
+        b.bN++;
+        const d = breath - b.bMean;
+        b.bMean += d / Math.min(b.bN, 120);
+        b.bVar += (d * (breath - b.bMean) - b.bVar) / Math.min(b.bN, 120);
+        const sd = Math.sqrt(Math.max(1e-6, b.bVar));
+        b.dev = (breath - b.bMean) / sd;
+      }
+
+      /* --- contour ---------------------------------------------------------- */
+      const prev = b.notes.length ? b.notes[b.notes.length - 1] : pitch;
+      const step = pitch - prev;
+      const d = step === 0 ? 0 : (step > 0 ? 1 : -1);
+      const turned = (d !== 0 && b.dir !== 0 && d !== b.dir);
+      if (d !== 0) b.dir = d;
+
+      b.notes.push(pitch); if (b.notes.length > 17) b.notes.shift();
+      b.times.push(t);     if (b.times.length > 17) b.times.shift();
+
+      /* --- a repeated cell -------------------------------------------------- */
+      b.cell = 0;
+      const n = b.notes.length;
+      for (let L = 8; L >= 2; L--) {
+        if (n >= 2 * L) {
+          let same = true;
+          for (let i = 0; i < L; i++) if (b.notes[n - 1 - i] !== b.notes[n - 1 - i - L]) { same = false; break; }
+          if (same) { b.cell = L; break; }
+        }
+      }
+      /* the cell's DURATION — what a body can take its length from */
+      const cellSecs = b.cell ? (t - b.times[n - 1 - b.cell]) : 0;
+
+      /* --- significance ----------------------------------------------------- */
+      const leap = Math.min(1, Math.abs(step) / 12);
+      const sig = b.wTurn * (turned ? 1 : 0) +
+                  b.wLeap * leap +
+                  b.wBreath * Math.max(0, Math.min(1, b.dev));
+
+      /* --- the three that always pass --------------------------------------- */
+      const structural = (b.cell > 0) || (Math.abs(step) >= b.leapBig) || (b.dev >= b.swell);
+
+      /* --- the adaptive threshold ------------------------------------------- */
+      const dt = (b.last < 0) ? 0 : Math.max(0, Math.min(2, t - b.last));
+      b.last = t;
+      if (dt > 0) {
+        /* measured rate, decaying between events so silence pulls it to zero */
+        b.rate += (0 - b.rate) * Math.min(1, dt / 1.5);
+        /* chase the target: too busy -> be choosier */
+        b.thr += (b.rate - b.target) * b.adapt * dt * 0.15;
+        b.thr = Math.max(0.02, Math.min(1.2, b.thr));
+      }
+
+      if (!structural && sig < b.thr) return null;
+
+      if (dt > 0) b.rate += 1 / Math.max(dt, 1e-3) * Math.min(1, dt / 1.5);
+      b.fired++;
+      return {
+        strength: Math.max(0.05, Math.min(1, 0.25 + 0.75 * b.level)),
+        why: b.cell ? "cell" : (Math.abs(step) >= b.leapBig ? "leap" :
+             (b.dev >= b.swell ? "swell" : (turned ? "turn" : "note"))),
+        cell: b.cell, cellSecs: cellSecs, level: b.level, dev: b.dev
+      };
+    }
+  };
+
+  /* ==========================================================================
+     ZigCore.Bounce — A RHYTHM THAT IS IRREGULAR AND INEVITABLE. (v0.26)
+
+     From a dream of Bill's, years old: a ball bouncing off a floor and a wall,
+     every gap between impacts different, all of it one stream. The point is that
+     it is NOT random. A randomiser gives arbitrary intervals and the ear hears
+     nothing connecting them. A ball has ENERGY, and energy only leaves, so each
+     impact is heard as caused by the one before it. Irregular and inevitable at
+     once — which is the only kind of irregular that reads as alive.
+
+     interval = k * sqrt(energy) · energy *= restitution at every impact
+
+     So a throw ACCELERATES INTO STILLNESS: gaps shrink geometrically until the
+     ball settles. Not a ritardando — its opposite, a gesture that quickens as it
+     dies, which no grid will give you. Two surfaces with different restitutions
+     interleave into pairs that cluster tight and open out again: the dream.
+
+     WHAT IT IS FOR HERE: everything else in this build SELECTS from what Bill
+     plays. This GENERATES — the first place the organism has time of its own.
+     A significant note throws the ball, with energy from breath at that instant,
+     and the decay fills the space. At 1.6 notes/s his open playing left the body
+     starving; a throw per gesture fills it with activity he CAUSED rather than
+     activity the organism invented.
+
+     DENSITY IS THE WHOLE TUNING. The dream as dreamt is far too busy: two lively
+     surfaces give 27 impacts per throw, about 16/s against his open playing, into
+     a body that wants ~2. A dry ball (restitution near 0.45, one surface, a high
+     settle floor) knocks three or four times and quits. Lively or dry is a taste
+     call, so both are dials and neither is chosen here.
+     ====================================================================== */
+  ZigCore.Bounce = {
+    VERSION: "0.26.0",
+
+    create(opts) {
+      const o = opts || {};
+      const surf = o.surfaces || [{ rest: 0.52, k: 0.42 }];
+      return {
+        surf: surf.map((s) => ({ rest: +s.rest, k: +s.k, t: 0, e: 0, live: false })),
+        floor: (o.floor === undefined) ? 0.06 : +o.floor,  /* it settles below this gap */
+        maxPer:(o.maxPer=== undefined) ? 24   : +o.maxPer, /* a hard stop on one throw */
+        n: 0,
+        hits: []      /* strengths of impacts this frame — reused, never reallocated */
+      };
+    },
+
+    /* throw it. energy 0..1 — from breath at the moment of the note. */
+    throw_(b, energy) {
+      const e = Math.max(0, Math.min(1, energy === undefined ? 1 : energy));
+      for (let i = 0; i < b.surf.length; i++) {
+        const s = b.surf[i];
+        s.e = e * (i === 0 ? 1 : 0.7);           /* the wall gets less than the floor */
+        s.t = s.k * Math.sqrt(Math.max(1e-6, s.e));
+        s.live = s.t >= b.floor;
+      }
+      b.n = 0;
+      return b;
+    },
+
+    /* advance. Returns the (reused) array of impact strengths this frame. */
+    step(b, dt) {
+      const hits = b.hits; hits.length = 0;
+      for (let i = 0; i < b.surf.length; i++) {
+        const s = b.surf[i];
+        if (!s.live) continue;
+        s.t -= dt;
+        while (s.live && s.t <= 0) {
+          hits.push(Math.max(0.05, Math.min(1, s.e)));
+          b.n++;
+          s.e *= s.rest;
+          const gap = s.k * Math.sqrt(Math.max(1e-9, s.e));
+          /* IT SETTLES. Without this the intervals shrink forever — a real ball
+             buzzes and then rests, and so must this or one throw never ends. */
+          if (gap < b.floor || b.n >= b.maxPer) { s.live = false; break; }
+          s.t += gap;
+        }
+      }
+      return hits;
+    },
+
+    settled(b) { return !b.surf.some((s) => s.live); }
+  };
+
+  /* ==========================================================================
      ZigCore.Relay — WHAT HAPPENS HERE HAPPENS THERE, LATER. (v0.22)
 
      Escapement turns a continuous supply into a countable event. It says
@@ -1904,7 +2127,7 @@
      no shader path, so nothing here can black-screen Metal.
      ====================================================================== */
   ZigCore.Relay = {
-    VERSION: "0.24.0",
+    VERSION: "0.25.0",
 
     /* 0.23 — THE LAG IS ALIVE. Lag is read at exactly ONE moment: when a stage
        fires and schedules the next. So making it live costs one multiplier and
@@ -1951,8 +2174,10 @@
         base: base0, shape,
         ratio:  (o.ratio  === undefined) ? 1    : +o.ratio,
         snap:   (o.snap   === undefined) ? 0    : +o.snap,
-        lagMin: (o.lagMin === undefined) ? 0.03 : +o.lagMin,
-        lagMax: (o.lagMax === undefined) ? 0.60 : +o.lagMax,
+        /* 0.25 — THE CLAMP IS ON THE BODY, NOT ON THE HOP. See setInterval. */
+        spanMin: (o.spanMin === undefined) ? 0.9 : +o.spanMin,
+        spanMax: (o.spanMax === undefined) ? 1.8 : +o.spanMax,
+        shapeSum: shape.slice(0, Math.max(1, n - 1)).reduce((a, b) => a + b, 0) || 1,
         interval: base0 / Math.max(1e-6, (o.ratio === undefined ? 1 : +o.ratio)),
         _lastNote: -1,
         gain:  (o.gain  === undefined) ? 1    : +o.gain,   /* delivery, in units of the next threshold */
@@ -2031,16 +2256,45 @@
     /* ---- 0.23 · THE LIVE LAG -------------------------------------------
        setInterval: the raw driver. Any measure of "how fast is this being
        played" can be handed in; the law does not care where it came from. */
-    setInterval(r, seconds, pulse) {
+    setInterval(r, seconds, flow) {
       if (!(seconds > 0)) return r;
+      r.interval = seconds;
+
+      /* WHAT THE NOTES ASK FOR — one hop per note at ratio 1, so the body holds
+         roughly the last n notes. */
+      const asked = (r.n - 1) * r.ratio * seconds;
+
+      /* WHAT DENSITY ASKS FOR (`snap`). Pacemaker's `period` is NOT usable here.
+         Its PLL accepts only onsets preceded by more than ribbonGap, and Bill's
+         playing is one continuous ribbon: measured from a take on 2026-09-09,
+         `confidence` sat at 0.00 for 21 unbroken seconds while `period` never
+         moved off its default. `flow` was alive across 0.23..0.98 in the same
+         take. Same direction as the raw interval — dense playing asks for a short
+         body — but heavily smoothed, which is exactly the larger, slower creature
+         `snap` was always meant to reach. */
+      const f = (flow >= 0 && flow <= 1) ? flow : -1;
+      const byFlow = (f < 0) ? asked : (r.spanMax - f * (r.spanMax - r.spanMin));
+
       const sn = Math.max(0, Math.min(1, r.snap));
-      const p = (pulse > 0) ? pulse : seconds;
-      r.interval = seconds * (1 - sn) + p * sn;
-      const b = Math.max(r.lagMin, Math.min(r.lagMax, r.ratio * r.interval));
+      const want = asked * (1 - sn) + byFlow * sn;
+
+      /* THE CLAMP IS ON THE BODY, NOT ON THE HOP. Clamping lag let the body's
+         length in TIME swing 9x within one take (0.46s to 4.36s at 14 segments),
+         and the number of waves coexisting in it swung with it — under 1 at speed,
+         about 8 on slow notes. Bill's word for what works is "one body with
+         multiple series within the length", and that only existed in the middle of
+         his range, by accident. Bounding the SPAN keeps a roughly steady amount of
+         recent history in the body at any tempo, and it scales with segment count
+         for free, which lagMin/lagMax never did. */
+      const span = Math.max(r.spanMin, Math.min(r.spanMax, want));
+      const b = span / r.shapeSum;
       r.base = b;
       for (let i = 0; i < r.n; i++) r.lag[i] = b * r.shape[i];
       return r;
     },
+
+    /* the body's length in time — the quantity actually being held steady */
+    span(r) { return ZigCore.Relay.transit(r); },
 
     /* note: call on every note CHANGE with the time in seconds. The interval is
        measured here — one subtraction. A held note makes no call, so the body
@@ -2050,7 +2304,7 @@
       const prev = r._lastNote;
       r._lastNote = tSec;
       if (prev < 0) return r;
-      return ZigCore.Relay.setInterval(r, tSec - prev, pm ? pm.period : 0);
+      return ZigCore.Relay.setInterval(r, tSec - prev, pm ? pm.flow : -1);
     },
 
     /* 0..1 displacement for stage i — the drawing surface of this law */

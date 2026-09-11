@@ -1,217 +1,227 @@
 <!DOCTYPE html>
-<!-- tools/relay_scope.html — THE RELAY SCOPE (ZigCore.Relay 0.23)
+<!-- tools/relay_scope.html — THE RELAY SCOPE (Relay 0.25 · Bite/Bounce 0.26 · Timbre)
      A diagnostic, not an organism. Canvas 2D on purpose: no WebGPU, no shader
      path, nothing here can black-screen anything.
 
-     It answers the questions only Bill's hands and eye can answer:
-       · does the delay read as CAUSATION or as wobble?
-       · driven by NOTE CHANGES, does the body follow the way a phrase moves?
-       · does the CATCH-UP read as a body compressing, or as clutter?
-       · raw note interval, or Pacemaker's phrase pulse? (`snap`)
+     THE TWO NERVOUS SYSTEMS (Bill's law, July 2026, from the RC-600 revelation):
+       MIDI  = Bill's live body only  -> pulse and bodies
+       AUDIO = the whole room, his loops, his history -> light and weather
+     So the EWI drives WHAT MOVES, and the loop coming back off the RC-600 drives
+     the CONDITIONS it moves in. Audio never touches geometry. That division is
+     why the loop needs no tempo, no downbeat and no transcription: an envelope is
+     the right shape for weather and the wrong shape for a trigger.
 
-     MIDI NEEDS A SECURE CONTEXT. Opened as file:// this page can never see the
-     EWI — no prompt, no error, just silence. Run `node tools/serve.mjs` and open
-     it on http://localhost, which IS a secure context. The banner top-right says
-     which case you are in.  -->
-<meta charset="utf-8"><title>Relay scope — 0.24</title>
+     MIDI NEEDS A SECURE CONTEXT, and so does the microphone. Opened as file://
+     this page sees neither. Run `node tools/serve.mjs` and open it on
+     http://localhost.  -->
+<meta charset="utf-8"><title>Relay scope — 0.26</title>
 <style>
   html,body{margin:0;height:100%;background:#07080a;color:#8a8f98;
-    font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;overflow:hidden}
+    font:12.5px/1.45 ui-monospace,Menlo,Consolas,monospace;overflow:hidden}
   #c{display:block;width:100vw;height:100vh;touch-action:none}
-  #ui{position:fixed;left:16px;top:14px;z-index:2;user-select:none}
+  #ui{position:fixed;left:16px;top:12px;z-index:2;user-select:none}
   #ui b{color:#d8dde4;font-weight:500}
-  label{display:block;margin:6px 0 0}
-  input[type=range]{width:150px;vertical-align:middle;accent-color:#c98a6a}
-  input[type=range]:disabled{opacity:.35}
-  select{background:#12151a;color:#d8dde4;border:1px solid #262c35;font:inherit;padding:1px 4px}
+  h4{margin:9px 0 2px;font-weight:500;color:#5d646e;font-size:11px;letter-spacing:.08em}
+  label{display:block;margin:3px 0 0}
+  input[type=range]{width:132px;vertical-align:middle;accent-color:#c98a6a}
+  input[type=range]:disabled{opacity:.3}
+  select{background:#12151a;color:#d8dde4;border:1px solid #262c35;font:inherit;padding:1px 3px}
+  button{background:#12151a;color:#d8dde4;border:1px solid #2d3541;font:inherit;padding:3px 9px;cursor:pointer}
+  button:hover{border-color:#c98a6a}
   span.v{color:#c98a6a}
-  #midi{position:fixed;right:16px;top:14px;z-index:2;text-align:right;line-height:1.4}
-  #midi .ok{color:#8fbf7a} #midi .no{color:#c96a6a}
-  #hint{position:fixed;left:16px;bottom:14px;z-index:2}
+  #hud{position:fixed;right:16px;top:12px;z-index:2;text-align:right;line-height:1.5}
+  #hud .ok{color:#8fbf7a} #hud .no{color:#c96a6a} #hud .dim{color:#5d646e}
+  #hint{position:fixed;left:16px;bottom:12px;z-index:2;color:#5d646e}
 </style>
 <canvas id="c"></canvas>
 <div id="ui">
-  <b>RELAY 0.24 — the spine</b>
-  <label>mode <select id="mode">
-    <option value="live">lag from NOTE CHANGES</option>
-    <option value="fixed">lag fixed</option>
-  </select></label>
-  <label>lag <input id="lag" type="range" min="0" max="0.60" step="0.01" value="0.17"><span class="v" id="lagv"></span> s/hop</label>
-  <label>ratio <input id="ratio" type="range" min="0.25" max="2" step="0.05" value="1"><span class="v" id="ratiov"></span> &times; interval</label>
-  <label>snap <input id="snap" type="range" min="0" max="1" step="0.05" value="0"><span class="v" id="snapv"></span> raw &rarr; pulse</label>
-  <label>gain <input id="gain" type="range" min="0.25" max="1" step="0.05" value="1"><span class="v" id="gainv"></span></label>
+  <b>RELAY 0.26 — the spine</b>
+
+  <h4>WHAT REACHES THE BODY</h4>
+  <label>bites/s <input id="target" type="range" min="0.5" max="6" step="0.1" value="2"><span class="v" id="targetv"></span> target</label>
+  <label>restitution <input id="rest" type="range" min="0.25" max="0.85" step="0.01" value="0.52"><span class="v" id="restv"></span></label>
+  <label>settle <input id="settle" type="range" min="0.03" max="0.20" step="0.005" value="0.06"><span class="v" id="settlev"></span> s</label>
+  <label>ball <input id="ballmix" type="range" min="0" max="1" step="0.05" value="0.55"><span class="v" id="ballmixv"></span> strength</label>
+
+  <h4>THE BODY</h4>
+  <label>span min <input id="smin" type="range" min="0.2" max="2" step="0.05" value="0.9"><span class="v" id="sminv"></span> s</label>
+  <label>span max <input id="smax" type="range" min="0.4" max="4" step="0.05" value="1.8"><span class="v" id="smaxv"></span> s</label>
+  <label>segments <input id="n" type="range" min="3" max="14" step="1" value="14"><span class="v" id="nv"></span></label>
   <label>bleed <input id="bleed" type="range" min="0" max="1.2" step="0.05" value="0.35"><span class="v" id="bleedv"></span> /s</label>
-  <label>head leak <input id="hbleed" type="range" min="0" max="0.6" step="0.01" value="0"><span class="v" id="hbleedv"></span> /s</label>
-  <label>breath gain <input id="bgain" type="range" min="1" max="16" step="0.5" value="8"><span class="v" id="bgainv"></span></label>
-  <label>segments <input id="n" type="range" min="3" max="14" step="1" value="8"><span class="v" id="nv"></span></label>
-  <div style="margin-top:8px">transit <span class="v" id="tr"></span>s &middot; head <span class="v" id="hd"></span> &middot; in flight <span class="v" id="fl"></span></div>
-  <div>interval <span class="v" id="iv"></span>s &middot; live lag <span class="v" id="lv"></span>s</div>
-  <div>head charge <span class="v" id="hc"></span> &middot; breath <span class="v" id="bv"></span></div>
-  <div>pacemaker <span class="v" id="pm"></span></div>
+  <label>gain <input id="gain" type="range" min="0.25" max="1" step="0.05" value="1"><span class="v" id="gainv"></span></label>
+  <label>snap <input id="snap" type="range" min="0" max="1" step="0.05" value="0"><span class="v" id="snapv"></span> raw &rarr; density</label>
+  <label>ratio <input id="ratio" type="range" min="0.25" max="2" step="0.05" value="1"><span class="v" id="ratiov"></span></label>
+  <label>breath feed <input id="bfeed" type="range" min="0" max="6" step="0.25" value="0"><span class="v" id="bfeedv"></span></label>
+
+  <h4>THE ROOM</h4>
+  <button id="arm">arm audio (the loop)</button>
 </div>
-<div id="midi">&hellip;</div>
-<div id="hint"><b>head leak 0</b> = no minimum breath: every breath speaks, softer just takes longer &middot; <b>breath gain</b> sets how promptly</div>
+<div id="hud">&hellip;</div>
+<div id="hint">the EWI moves the body &middot; the loop sets the light &middot; audio never touches geometry</div>
 <script src="../engine/zigcore.js"></script>
 <script>
 (function () {
-  var ZC = window.ZigCore, RL = ZC.Relay, PM = ZC.Pacemaker;
+  var ZC = window.ZigCore, RL = ZC.Relay, BT = ZC.Bite, BO = ZC.Bounce, TB = ZC.Timbre;
   var c = document.getElementById("c"), g = c.getContext("2d");
   var el = function (id) { return document.getElementById(id); };
-  var S = { lag: el("lag"), gain: el("gain"), bleed: el("bleed"), n: el("n"),
-            ratio: el("ratio"), snap: el("snap"), mode: el("mode"),
-            hbleed: el("hbleed"), bgain: el("bgain") };
+  var ids = ["target","rest","settle","ballmix","smin","smax","n","bleed","gain","snap","ratio","bfeed"];
+  var S = {}; ids.forEach(function (k) { S[k] = el(k); });
 
-  var r = null, held = false, last = performance.now(), flash = [];
-  var breath = 0;              /* 0..1 — CC2 from the EWI, or 1 while held by hand */
-  var lastNoteName = "\u2014";
+  var relay, bite, ball, flash = [], last = performance.now();
+  var breath = 0, held = false, lastNote = "\u2014", lastWhy = "\u2014", lastCell = 0;
+  var bites = 0, impacts = 0, headTimes = [], t0 = performance.now() / 1000;
 
   function build() {
     var n = +S.n.value;
-    r = RL.create({
-      n: n, full: 1, reset: 0.12, spill: 0.14,
-      lag: +S.lag.value, gain: +S.gain.value, bleed: +S.bleed.value, tau: 0.5,
-      ratio: +S.ratio.value, snap: +S.snap.value, lagMin: 0.03, lagMax: 0.60,
-      headBleed: +S.hbleed.value
+    relay = RL.create({
+      n: n, full: 1, reset: 0.12, spill: 0.14, lag: 0.17, tau: 0.5,
+      bleed: +S.bleed.value, headBleed: 0, gain: +S.gain.value,
+      ratio: +S.ratio.value, snap: +S.snap.value,
+      spanMin: +S.smin.value, spanMax: +S.smax.value
     });
+    bite = BT.create({ target: +S.target.value });
+    ball = BO.create({ surfaces: [{ rest: +S.rest.value, k: 0.42 }], floor: +S.settle.value });
     flash = new Array(n).fill(0);
-    el("lagv").textContent   = (+S.lag.value).toFixed(2);
-    el("gainv").textContent  = (+S.gain.value).toFixed(2);
-    el("bleedv").textContent = (+S.bleed.value).toFixed(2);
-    el("ratiov").textContent = (+S.ratio.value).toFixed(2);
-    el("snapv").textContent  = (+S.snap.value).toFixed(2);
-    el("nv").textContent     = n;
-    el("hbleedv").textContent = (+S.hbleed.value).toFixed(2);
-    el("bgainv").textContent  = (+S.bgain.value).toFixed(1);
-    el("lag").disabled = (S.mode.value === "live");
+    bites = 0; impacts = 0; headTimes = []; t0 = performance.now() / 1000;
+    ids.forEach(function (k) {
+      var d = (k === "n") ? 0 : (k === "settle" ? 3 : 2);
+      el(k + "v").textContent = (+S[k].value).toFixed(d);
+    });
   }
-  Object.keys(S).forEach(function (k) {
-    S[k].addEventListener("input", build);
-    S[k].addEventListener("change", build);
+  ids.forEach(function (k) {
+    S[k].addEventListener("input", build); S[k].addEventListener("change", build);
   });
   build();
 
   function resize() {
     var d = Math.min(2, devicePixelRatio || 1);
-    c.width = innerWidth * d; c.height = innerHeight * d;
-    g.setTransform(d, 0, 0, d, 0, 0);
+    c.width = innerWidth * d; c.height = innerHeight * d; g.setTransform(d, 0, 0, d, 0, 0);
   }
   addEventListener("resize", resize); resize();
 
-  /* ---- A NOTE CHANGE. One entry point, whether it came from a finger or from
-     the EWI. Relay measures the interval itself; Pacemaker gets the same event
-     so `snap` has a real phrase pulse to blend toward. --------------------- */
-  function noteChange() {
+  /* ---- A NOTE. The one door into the body. Bite decides whether it opens. --- */
+  function noteOn(pitch) {
     var t = performance.now() / 1000;
-    if (S.mode.value === "live") RL.note(r, t, PM);
-    PM.noteOn(t);
+    var hit = BT.note(bite, t, pitch, breath * 127);
+    if (!hit) return;
+    bites++; lastWhy = hit.why; lastCell = hit.cell;
+    RL.note(relay, t);                                   /* the interval sets the tempo */
+    if (hit.cell && hit.cellSecs > 0.15)                 /* a repeated cell sets the LENGTH */
+      RL.setInterval(relay, hit.cellSecs / Math.max(1, relay.n - 1));
+    RL.fill(relay, 1.1 * hit.strength);                  /* BITE — the note itself deposits */
+    BO.throw_(ball, hit.strength);                       /* and throws the ball */
   }
 
-  var down = function () { held = true; noteChange(); };
-  var up = function () { held = false; };
-  addEventListener("pointerdown", down); addEventListener("pointerup", up);
-  addEventListener("pointercancel", up);
-  addEventListener("keydown", function (e) { if (!e.repeat) down(); });
-  addEventListener("keyup", up);
+  addEventListener("pointerdown", function () { held = true; noteOn(60 + ((Math.random() * 14) | 0)); });
+  addEventListener("pointerup", function () { held = false; });
+  addEventListener("keydown", function (e) { if (!e.repeat) { held = true; noteOn(48 + (e.keyCode % 24)); } });
+  addEventListener("keyup", function () { held = false; });
 
-  /* ---- WEB MIDI ---------------------------------------------------------- */
-  var midiEl = el("midi");
+  /* ---- MIDI: the EWI. Bill's live body. ---------------------------------- */
+  var midiOn = false, midiTxt = '<span class="no">MIDI not requested</span>';
   var NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
-  var midiOn = false;
-
   function onMIDI(ev) {
-    var st = ev.data[0], d1 = ev.data[1], d2 = ev.data[2], kind = st & 0xf0;
-    if (kind === 0x90 && d2 > 0) {                    /* note-on = A NOTE CHANGE */
-      lastNoteName = NAMES[d1 % 12] + (Math.floor(d1 / 12) - 1);
-      noteChange();
-    } else if (kind === 0xb0 && d1 === 2) {           /* CC2 breath = THE SUPPLY */
-      breath = d2 / 127;
-    } else if (kind === 0xb0 && (d1 === 123 || d1 === 120)) {
-      breath = 0;
-    }
+    var st = ev.data[0] & 0xf0, d1 = ev.data[1], d2 = ev.data[2];
+    if (st === 0x90 && d2 > 0) { lastNote = NAMES[d1 % 12] + (Math.floor(d1 / 12) - 1); noteOn(d1); }
+    else if (st === 0xb0 && d1 === 2) breath = d2 / 127;
+    else if (st === 0xb0 && (d1 === 123 || d1 === 120)) breath = 0;
   }
-
-  if (!navigator.requestMIDIAccess) {
-    midiEl.innerHTML = '<span class="no">no Web MIDI</span><br>' +
-      (location.protocol === "file:"
-        ? 'opened as file:// &mdash; MIDI is blocked here.<br>run <b>node tools/serve.mjs</b><br>and open on localhost'
-        : 'this browser does not expose it');
-  } else {
-    navigator.requestMIDIAccess().then(function (access) {
+  if (navigator.requestMIDIAccess) {
+    navigator.requestMIDIAccess().then(function (acc) {
       var wire = function () {
         var ins = [];
-        access.inputs.forEach(function (i) { i.onmidimessage = onMIDI; ins.push(i.name); });
+        acc.inputs.forEach(function (i) { i.onmidimessage = onMIDI; ins.push(i.name); });
         midiOn = ins.length > 0;
-        midiEl.innerHTML = midiOn
-          ? '<span class="ok">MIDI &middot; ' + ins.length + ' input' + (ins.length > 1 ? "s" : "") + '</span><br>' + ins.join("<br>")
-          : '<span class="no">MIDI granted &middot; no inputs</span><br>is the EWI connected?';
+        midiTxt = midiOn ? '<span class="ok">MIDI \u00b7 ' + ins.join(" \u00b7 ") + '</span>'
+                         : '<span class="no">MIDI granted \u00b7 no inputs</span>';
       };
-      wire();
-      access.onstatechange = wire;
-    })["catch"](function (e) {
-      midiEl.innerHTML = '<span class="no">MIDI refused</span><br>' + e.message;
-    });
+      wire(); acc.onstatechange = wire;
+    })["catch"](function (e) { midiTxt = '<span class="no">MIDI refused</span> ' + e.message; });
+  } else {
+    midiTxt = '<span class="no">no Web MIDI</span>' +
+      (location.protocol === "file:" ? '<br><span class="dim">file:// blocks it \u2014 use tools/serve.mjs</span>' : "");
   }
 
-  /* ---- FRAME ------------------------------------------------------------- */
+  /* ---- AUDIO: the room, the loops, the history. CONDITIONS ONLY. ---------- */
+  var audioTxt = '<span class="dim">audio not armed</span>';
+  el("arm").addEventListener("click", function () {
+    audioTxt = '<span class="dim">asking\u2026</span>';
+    TB.arm(window.ZIG_VOICE, { split: false }).then(function (ok) {
+      audioTxt = ok ? '<span class="ok">audio \u00b7 ' + TB.device + '</span>'
+                    : '<span class="no">audio refused</span> ' + (TB.err || "");
+    });
+  });
+
   function frame(now) {
     var dt = Math.min(1 / 30, (now - last) / 1000); last = now;
-
-    /* THE SUPPLY is breath — CC2 from the EWI, or a held pointer standing in for
-       it. Only the head is fed. Every other segment moves because of the one
-       before it, and for no other reason. */
     var supply = midiOn ? breath : (held ? 1 : 0);
-    if (supply > 0) RL.fill(r, (+S.bgain.value) * supply * dt);
-    PM.update(dt);
 
-    var fired = RL.step(r, dt), i;
-    for (i = 0; i < fired.length; i++) flash[fired[i]] = 1;
-    for (i = 0; i < r.n; i++) flash[i] *= Math.exp(-dt / 0.18);
+    /* an OPTIONAL continuous breath feed, default 0. The note is the door now;
+       this is here only so the old breath-driven behaviour can be A/B'd. */
+    if (supply > 0 && +S.bfeed.value > 0) RL.fill(relay, (+S.bfeed.value) * supply * dt);
 
+    var hits = BO.step(ball, dt), i;
+    for (i = 0; i < hits.length; i++) { impacts++; RL.fill(relay, (+S.ballmix.value) * hits[i]); }
+
+    TB.update(dt);
+    var fired = RL.step(relay, dt);
+    for (i = 0; i < fired.length; i++) {
+      flash[fired[i]] = 1;
+      if (fired[i] === 0) { headTimes.push(now / 1000); if (headTimes.length > 8) headTimes.shift(); }
+    }
+    for (i = 0; i < relay.n; i++) flash[i] *= Math.exp(-dt / 0.18);
+
+    /* ---- THE ROOM SETS THE LIGHT. Never the geometry. -------------------- */
+    var room = TB.live ? TB.body : 0, shine = TB.live ? TB.brightness : 0;
     var W = innerWidth, H = innerHeight;
-    g.fillStyle = "#07080a"; g.fillRect(0, 0, W, H);
+    var bg = 7 + 26 * room;                              /* the loop lifts the ground */
+    g.fillStyle = "rgb(" + (bg | 0) + "," + ((bg + 1) | 0) + "," + ((bg + 3) | 0) + ")";
+    g.fillRect(0, 0, W, H);
 
-    var n = r.n, x0 = W * 0.14, x1 = W * 0.86, y = H * 0.52;
+    var n = relay.n, x0 = W * 0.14, x1 = W * 0.86, y = H * 0.52;
     var step = (x1 - x0) / (n - 1), rad = Math.min(34, step * 0.42);
 
-    g.strokeStyle = "#1b1f26"; g.lineWidth = 2; g.beginPath();
+    g.strokeStyle = "rgba(" + (27 + 40 * room) + "," + (31 + 40 * room) + "," + (38 + 46 * room) + ",1)";
+    g.lineWidth = 2; g.beginPath();
     for (i = 0; i < n; i++) {
-      var xx = x0 + i * step, yb = y - RL.pose(r, i) * H * 0.13;
+      var xx = x0 + i * step, yb = y - RL.pose(relay, i) * H * 0.13;
       if (i) g.lineTo(xx, yb); else g.moveTo(xx, yb);
     }
     g.stroke();
 
     for (i = 0; i < n; i++) {
-      var p = RL.pose(r, i), ch = RL.charge(r, i);
+      var p = RL.pose(relay, i), ch = RL.charge(relay, i);
       var x = x0 + i * step, yy = y - p * H * 0.13;
-
       g.beginPath(); g.arc(x, yy, rad * (0.55 + 0.5 * ch), 0, 6.2832);
-      g.strokeStyle = "rgba(120,132,148," + (0.18 + 0.5 * ch) + ")";
-      g.lineWidth = 1.5; g.stroke();
+      g.strokeStyle = "rgba(120,132,148," + (0.18 + 0.5 * ch) + ")"; g.lineWidth = 1.5; g.stroke();
 
+      /* shine warms the body — the loop's brightness, not its rhythm */
       var a = 0.10 + 0.85 * p, f = flash[i];
+      var R = 178 + 50 * f + 26 * shine, G2 = 122 + 62 * f + 10 * shine, B = 100 + 72 * f - 14 * shine;
       g.beginPath(); g.arc(x, yy, rad * (0.42 + 0.42 * p), 0, 6.2832);
-      g.fillStyle = "rgba(" + (190 + 45 * f) + "," + (128 + 60 * f) + "," + (104 + 70 * f) + "," + a + ")";
-      g.fill();
-
-      g.fillStyle = "rgba(138,143,152,0.55)";
-      g.font = "11px ui-monospace,monospace";
-      g.fillText(String(i), x - 3, y + H * 0.10);
+      g.fillStyle = "rgba(" + (R | 0) + "," + (G2 | 0) + "," + (B | 0) + "," + a + ")"; g.fill();
     }
 
     g.fillStyle = "rgba(120,132,148,0.45)";
-    g.fillText("breath  " + lastNoteName, x0 - 62, y + H * 0.145);
+    g.fillText("breath  " + lastNote, x0 - 62, y + H * 0.145);
     g.fillStyle = "rgba(201,138,106,0.85)";
     g.fillRect(x0 - 62, y + H * 0.155, 96 * supply, 4);
 
-    el("hd").textContent = r.head;
-    el("fl").textContent = RL.inflight(r);
-    el("iv").textContent = r.interval.toFixed(2);
-    el("lv").textContent = r.base.toFixed(3);
-    el("tr").textContent = RL.transit(r).toFixed(2);
-    el("hc").textContent = RL.charge(r, 0).toFixed(2);
-    el("bv").textContent = supply.toFixed(2);
-    el("pm").textContent = "period " + PM.period.toFixed(2) + "s \u00b7 conf " +
-                           PM.confidence.toFixed(2) + " \u00b7 flow " + PM.flow.toFixed(2);
+    var el2 = performance.now() / 1000 - t0;
+    var hp = (headTimes.length > 1) ? (headTimes[headTimes.length - 1] - headTimes[0]) / (headTimes.length - 1) : 0;
+    document.getElementById("hud").innerHTML =
+      midiTxt + "<br>" + audioTxt +
+      '<br><br><span class="dim">bites</span> ' + (bites / Math.max(1, el2)).toFixed(2) + "/s" +
+      ' &middot; <span class="dim">thr</span> ' + bite.thr.toFixed(2) +
+      ' &middot; <span class="dim">' + lastWhy + (lastCell ? " " + lastCell : "") + "</span>" +
+      '<br><span class="dim">ball</span> ' + (impacts / Math.max(1, el2)).toFixed(2) + "/s" +
+      ' &middot; <span class="dim">inflight</span> ' + RL.inflight(relay) +
+      '<br><span class="dim">span</span> ' + RL.span(relay).toFixed(2) + "s" +
+      ' &middot; <span class="dim">waves</span> ' + (hp ? (RL.span(relay) / hp).toFixed(1) : "\u2014") +
+      '<br><span class="dim">room</span> ' + room.toFixed(2) +
+      ' &middot; <span class="dim">shine</span> ' + shine.toFixed(2) +
+      ' &middot; <span class="dim">flux</span> ' + (TB.live ? TB.flux.toFixed(2) : "\u2014");
+
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);

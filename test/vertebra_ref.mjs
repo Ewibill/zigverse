@@ -20,7 +20,7 @@ const ok = (c, m) => { if (!c) { console.log("  FAIL:", m); fail++; } };
 const DT = 1 / 120;
 
 ok(!!RL, "ZigCore.Relay exists");
-ok(RL.VERSION === "0.24.0", `version stamp is 0.24.0 (${RL && RL.VERSION})`);
+ok(RL.VERSION === "0.25.0", `version stamp is 0.25.0 (${RL && RL.VERSION})`);
 
 // ---------------------------------------------------------------- 1) CAUSATION HAS A FLOOR
 // A tail segment may move only because a head segment did. With no supply, nothing anywhere.
@@ -168,15 +168,14 @@ ok(RL.VERSION === "0.24.0", `version stamp is 0.24.0 (${RL && RL.VERSION})`);
 }
 
 // ---------------------------------------------------------------- 8) THE LAG IS DRIVEN BY NOTE CHANGES
-// Not breath, not attack: the time from one note to the next. `ratio` 1 means the body's
-// conduction speed IS your note rate — one hop per note, so the wave is a moving record of
-// roughly the last n notes you played.
+// Not breath, not attack: the time from one note to the next. At ratio 1 the body asks for one
+// hop per note, so it holds roughly the last n notes — bounded by the span (section 9).
 {
-  const r = RL.create({ n: 6, full: 1, lag: 0.12, spill: 0.05 });
+  const r = RL.create({ n: 6, full: 1, lag: 0.12, spill: 0.05, spanMin: 0.2, spanMax: 4 });
   let t = 0;
   for (const gap of [0.17, 0.17, 0.17]) { t += gap; RL.note(r, t); }
-  ok(Math.abs(r.base - 0.17) < 1e-9, `three notes 0.17s apart set the lag to 0.17 (${r.base.toFixed(4)})`);
-  ok(r.lag.every((L) => Math.abs(L - 0.17) < 1e-9), "and every hop inherits it");
+  ok(Math.abs(r.base - 0.17) < 1e-9, `three notes 0.17s apart set the hop to 0.17 (${r.base.toFixed(4)})`);
+  ok(Math.abs(RL.span(r) - 5 * 0.17) < 1e-9, `and the body is five hops long (${RL.span(r).toFixed(3)}s)`);
 
   /* Bill judged 0.17 by eye on 2026-09-08. At ratio 1 that is simply the note rate it
      corresponds to — his number is a tempo, not a magic constant. */
@@ -184,48 +183,82 @@ ok(RL.VERSION === "0.24.0", `version stamp is 0.24.0 (${RL && RL.VERSION})`);
   ok(Math.abs(r.base - 0.42) < 1e-9, `slowing to 0.42s notes lengthens the body's conduction (${r.base.toFixed(3)})`);
 }
 
-// ---------------------------------------------------------------- 9) CLAMPS AND HELD NOTES
-// A trill must not collapse the body to zero, a long note must not stall it, and a note being
-// HELD makes no call at all — the body keeps the tempo of the last transition.
+// ---------------------------------------------------------------- 9) THE CLAMP IS ON THE BODY
+// The 0.24 clamps were on the HOP, which let the body's length in time swing 9x inside one take
+// (0.46s..4.36s at 14 segments) — so the number of waves coexisting in it swung too, and the
+// creature Bill wanted existed only in the middle of his range. Bounding the SPAN fixes that,
+// and unlike lagMin/lagMax it scales with segment count for free.
 {
-  const r = RL.create({ n: 4, lag: 0.12, lagMin: 0.03, lagMax: 0.6 });
-  let t = 0;
-  t += 0.004; RL.note(r, t);
-  t += 0.004; RL.note(r, t);
-  ok(r.base === 0.03, `a trill floors at lagMin rather than collapsing (${r.base})`);
-  t += 9; RL.note(r, t);
-  ok(r.base === 0.6, `a nine-second gap ceils at lagMax rather than stalling (${r.base})`);
+  const N = 14, MIN = 0.9, MAX = 1.8;
+  const spanAt = (iv) => {
+    const r = RL.create({ n: N, lag: 0.17, spanMin: MIN, spanMax: MAX });
+    RL.setInterval(r, iv);
+    return RL.span(r);
+  };
+  ok(Math.abs(spanAt(0.04) - MIN) < 1e-9, `a trill cannot shrink the body below spanMin (${spanAt(0.04).toFixed(2)}s)`);
+  ok(Math.abs(spanAt(0.34) - MAX) < 1e-9, `a slow passage cannot stretch it past spanMax (${spanAt(0.34).toFixed(2)}s)`);
+  ok(Math.abs(spanAt(0.10) - 13 * 0.10) < 1e-9, "and between the two the notes are obeyed exactly");
+
+  /* the swing that made this necessary, stated as a ratio */
+  const oldSwing = (13 * 0.34) / (13 * 0.04), newSwing = MAX / MIN;
+  ok(newSwing < oldSwing / 3,
+     `the body's length now swings ${newSwing.toFixed(1)}x across the same playing, not ${oldSwing.toFixed(1)}x`);
+
+  /* SPAN SCALES WITH SEGMENT COUNT. lagMin/lagMax never did: at a fixed hop clamp, a 14-segment
+     body was four times longer in time than a 4-segment one for the same playing. */
+  const sameSpan = [4, 8, 14].map((n) => {
+    const r = RL.create({ n, lag: 0.17, spanMin: MIN, spanMax: MAX });
+    RL.setInterval(r, 0.02);                 // fast enough that every length clamps to spanMin
+    return RL.span(r);
+  });
+  ok(sameSpan.every((v) => Math.abs(v - MIN) < 1e-9),
+     `4, 8 and 14 segments give the same body length (${sameSpan.map((v) => v.toFixed(2)).join(", ")}s)`);
+
+  /* A HELD NOTE makes no call at all — the body keeps the tempo of the last transition. */
+  const r = RL.create({ n: 6, lag: 0.12, spanMin: MIN, spanMax: MAX });
+  let t = 0; t += 0.2; RL.note(r, t); t += 0.2; RL.note(r, t);
   const held = r.base;
-  for (let s2 = 0; s2 < 600; s2++) RL.step(r, DT);      // five seconds of holding, no note events
-  ok(r.base === held, "and holding a note leaves the lag exactly where the last change put it");
+  for (let s2 = 0; s2 < 600; s2++) RL.step(r, DT);
+  ok(r.base === held, "holding a note leaves the hop exactly where the last change put it");
 }
 
 // ---------------------------------------------------------------- 10) THE PER-STAGE SHAPE SURVIVES
 // A stiff neck and a loose tail must stay a stiff neck and a loose tail when the tempo changes,
 // not flatten to uniform.
 {
-  const r = RL.create({ n: 3, lag: [0.2, 0.1, 0.05] });
+  const r = RL.create({ n: 3, lag: [0.2, 0.1, 0.05], spanMin: 0.05, spanMax: 5 });
   const before = r.lag.map((L) => L / r.lag[0]);
-  let t = 0; t += 0.3; RL.note(r, t); t += 0.3; RL.note(r, t);
+  let t = 0; t += 0.2; RL.note(r, t); t += 0.2; RL.note(r, t);
   const after = r.lag.map((L) => L / r.lag[0]);
   ok(after.every((v, i) => Math.abs(v - before[i]) < 1e-9),
      `the 4:2:1 taper is preserved through a tempo change (${after.map((v) => v.toFixed(2)).join(":")})`);
-  ok(Math.abs(r.lag[0] - 0.3) < 1e-9, "and the head hop tracks the new interval");
+  ok(Math.abs(RL.span(r) - 2 * 0.2) < 1e-9, `and the body is two hops of the new interval long (${RL.span(r).toFixed(3)}s)`);
 }
 
-// ---------------------------------------------------------------- 11) SNAP BLENDS TOWARD THE PULSE
-// Pacemaker does NOT measure note-to-note time — its PLL takes only gap-preceded onsets, so
-// `period` is the PHRASE pulse. `snap` is the blend between the two bodies.
+// ---------------------------------------------------------------- 11) SNAP BLENDS TOWARD FLOW
+// Pacemaker's `period` is unusable as a driver for this performer: its PLL accepts only onsets
+// preceded by a gap, and a continuous ribbon never supplies one. Measured from a take on
+// 2026-09-09: `confidence` 0.00 for 21 unbroken seconds, `period` never off its default, while
+// `flow` ranged 0.23..0.98. So `snap` blends toward DENSITY, which is alive in this style.
 {
-  const fake = { period: 0.9 };
-  const raw  = RL.create({ n: 3, lag: 0.12, snap: 0, lagMax: 5 });
-  const pull = RL.create({ n: 3, lag: 0.12, snap: 1, lagMax: 5 });
-  const mid  = RL.create({ n: 3, lag: 0.12, snap: 0.5, lagMax: 5 });
-  for (const r of [raw, pull, mid]) { let t = 0; t += 0.1; RL.note(r, t, fake); t += 0.1; RL.note(r, t, fake); }
-  ok(Math.abs(raw.base  - 0.1) < 1e-9, `snap 0 follows the raw note change (${raw.base.toFixed(3)})`);
-  ok(Math.abs(pull.base - 0.9) < 1e-9, `snap 1 follows the phrase pulse (${pull.base.toFixed(3)})`);
-  ok(Math.abs(mid.base  - 0.5) < 1e-9, `snap 0.5 sits between them (${mid.base.toFixed(3)})`);
-  ok(pull.base > raw.base, "the pulse body is the slower creature — two different animals, one law");
+  const MIN = 0.9, MAX = 1.8, IV = 0.10;
+  const at = (snap, flow) => {
+    const r = RL.create({ n: 14, lag: 0.17, snap: snap, spanMin: MIN, spanMax: MAX });
+    RL.setInterval(r, IV, flow);
+    return RL.span(r);
+  };
+  ok(Math.abs(at(0, 0.9) - 13 * IV) < 1e-9, `snap 0 follows the raw note change, flow ignored (${at(0, 0.9).toFixed(2)}s)`);
+  ok(Math.abs(at(1, 1) - MIN) < 1e-9, `snap 1 at full density gives the short body (${at(1, 1).toFixed(2)}s)`);
+  ok(Math.abs(at(1, 0) - MAX) < 1e-9, `snap 1 at no density gives the long one (${at(1, 0).toFixed(2)}s)`);
+  ok(at(1, 0.2) > at(1, 0.8), "denser playing asks for a shorter body — same direction as the raw interval");
+  const mid = at(0.5, 0.5);
+  ok(mid > Math.min(13 * IV, 1.35) - 1e-9 && mid < Math.max(13 * IV, 1.35) + 1e-9,
+     `snap 0.5 sits between the two readings (${mid.toFixed(2)}s)`);
+
+  /* and with NO flow supplied at all, the law falls back to the notes rather than to a default */
+  const r = RL.create({ n: 14, lag: 0.17, snap: 1, spanMin: MIN, spanMax: MAX });
+  RL.setInterval(r, IV);
+  ok(Math.abs(RL.span(r) - 13 * IV) < 1e-9, "no flow supplied — the notes still drive it, not a stale estimate");
 }
 
 // ---------------------------------------------------------------- 12) THE CATCH-UP
@@ -233,7 +266,7 @@ ok(RL.VERSION === "0.24.0", `version stamp is 0.24.0 (${RL && RL.VERSION})`);
 // so a fast wave launched behind a slow one CLOSES THE GAP by the time both reach the tail.
 {
   const arrivals = (secondInterval) => {
-    const r = RL.create({ n: 6, full: 1, lag: 0.25, spill: 0.03, bleed: 0, lagMax: 5 });
+    const r = RL.create({ n: 6, full: 1, lag: 0.25, spill: 0.03, bleed: 0, spanMin: 0.05, spanMax: 6 });
     let t = 0; const tailAt = [];
     const launch = () => RL.fill(r, 1.2);
     launch();                                   // wave A at the slow lag it was created with
