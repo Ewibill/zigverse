@@ -20,7 +20,7 @@ const ok = (c, m) => { if (!c) { console.log("  FAIL:", m); fail++; } };
 const DT = 1 / 120;
 
 ok(!!RL, "ZigCore.Relay exists");
-ok(RL.VERSION === "0.25.0", `version stamp is 0.25.0 (${RL && RL.VERSION})`);
+ok(RL.VERSION === "0.27.0", `version stamp is 0.27.0 (${RL && RL.VERSION})`);
 
 // ---------------------------------------------------------------- 1) CAUSATION HAS A FLOOR
 // A tail segment may move only because a head segment did. With no supply, nothing anywhere.

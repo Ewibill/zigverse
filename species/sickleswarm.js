@@ -330,6 +330,19 @@
     }) : null;
     const RELAY_BALL = RELAY_BALL0;
     let relayHue = 0.12;
+    /* A WIND PLAYER MUST BREATHE IN. Measured from Bill's takes an inhale runs
+       0.47-1.08s; a 9.4s silence is a REST. Under `hold` the body keeps what it
+       has, so a phrase survives the breath that carries it. */
+    const relayInhale = RELAY_ON ? ZC.Inhale.create({
+      floor: 0.06, hold: relayHashNum("hold", 1.2), release: relayHashNum("release", 0.6)
+    }) : null;
+    /* THE STRATA SHADER MULTIPLIES THE BODY'S OWN COLOUR: c*(1+1.1*bl) + sun*(0.30*bl).
+       On an unlit body the first term stays near zero, so the bands alone top out
+       around 30% before the 7-unit proximity falloff — strata was built as an
+       ACCENT on a lit body, not as the only light in the room. Nothing clamps
+       band energy, so the gain is applied HERE, on the CPU, and no shader changes. */
+    const RELAY_GLOW = relayHashNum("glow", 2.2);
+    let relayNotes = 0, relayBites = 0, relayWhy = "\u2014", relayHudT = 0, relayT0 = 0;
     const STRATA_DEMO = (+global.ZIG_STRATADEMO > 0);   // auto-play a deterministic demo melody when no live MIDI (for demos only); off = strata responds to REAL notes only
     let strataSynthT = 0, strataSeq = 0;
     /* GEM MATERIAL — the shard becomes a cut stone (ZigCore.Gems: diamond, ruby, sapphire, …).
@@ -886,6 +899,8 @@
         if (flock.smoke) flock.smoke.puff(ANCHOR[0], py0, ANCHOR[2], 0.5 + 0.6 * ZC.Perf.attack, nhue);   // a puff of atmosphere on the note
         if (STRATA_ON) ZC.NoteField.note(py0, (pit % 12) / 12, 0.7 + 0.5 * ZC.Perf.attack);   // MELODIC STRATA: a band at the note's pitch-height, in its pitch-class colour
         if (RELAY_ON) {
+          relayNotes++;
+          if (!relayT0) relayT0 = performance.now() / 1000;
           /* BITE decides. A note that passes deposits into the head, sets the
              tempo from its own interval, and — when it is a repeated cell —
              sets the body's LENGTH to that cell's duration. */
@@ -896,7 +911,7 @@
             if (hit.cell && hit.cellSecs > 0.15) ZC.Relay.setInterval(relaySpine, hit.cellSecs / 5);
             ZC.Relay.fill(relaySpine, 1.1 * hit.strength);
             if (relayBall) ZC.Bounce.throw_(relayBall, hit.strength);
-            relayHue = (pit % 12) / 12;
+            relayHue = (pit % 12) / 12; relayBites++; relayWhy = hit.why + (hit.cell ? " " + hit.cell : "");
           }
         }
       }
@@ -1138,13 +1153,31 @@
              heights up the body. NoteField.update is skipped deliberately —
              these bands are rewritten every frame rather than ringing down. */
           if (relayBall) { const hs = ZC.Bounce.step(relayBall, dt); for (let q = 0; q < hs.length; q++) ZC.Relay.fill(relaySpine, RELAY_BALL * hs[q]); }
-          ZC.Relay.step(relaySpine, dt);
+          const held = ZC.Inhale.update(relayInhale, dt, ZC.Perf.breath);
+          ZC.Relay.step(relaySpine, dt, held);
           ZC.NoteField.bands.length = 0;
           for (let q = 0; q < 6; q++) {
             ZC.NoteField.bands.push({ y: ANCHOR[1] + (q - 2.5) / 2.5 * 16,
-                                      hue: relayHue, e: ZC.Relay.pose(relaySpine, q) });
+                                      hue: relayHue, e: RELAY_GLOW * ZC.Relay.pose(relaySpine, q) });
           }
           ZC.NoteField.pack(view, 84);
+          /* THE SPINE ON THE HUD. Bill saw breath move the field and nothing from
+             the notes, and there was no way to tell WHERE it stopped: notes not
+             reaching Perf, Bite rejecting them, or the bands lit but too dim to
+             read. This says which. `notes` counts every note-on the species saw,
+             `bites` counts the ones Bite let through. notes 0 means the EWI is not
+             sending them; notes rising with bites 0 means the threshold is closed. */
+          if ((relayHudT -= dt) <= 0) {
+            relayHudT = 0.2;
+            const el2 = Math.max(0.001, (performance.now() / 1000) - relayT0);
+            H.line("relay", "SPINE · notes " + relayNotes + " · bites " + relayBites +
+              " (" + (relayBites / el2).toFixed(2) + "/s, target " + relayBite.target.toFixed(1) + ")" +
+              " · thr " + relayBite.thr.toFixed(2) + " · " + relayWhy +
+              " · span " + ZC.Relay.span(relaySpine).toFixed(2) + "s" +
+              " · glow " + RELAY_GLOW.toFixed(1) +
+              " · band max " + Math.max.apply(null, ZC.NoteField.bands.map(function (b) { return b.e; })).toFixed(2) +
+              " · held " + held.toFixed(2));
+          }
         } else {
           ZC.NoteField.update(dt);
           ZC.NoteField.pack(view, 84);

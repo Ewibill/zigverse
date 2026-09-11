@@ -1001,6 +1001,7 @@
       { id: "relay", pillar: "physics", since: "0.25(core)", enables: "WHAT HAPPENS HERE HAPPENS THERE, LATER - an ordered chain of escapements where a tick SCHEDULES the next stage after a lag instead of filling it. Escapement gears; relay gives the gearing GEOGRAPHY. Simultaneity reads as a mechanism, delay reads as CAUSE: segment 4 is still moving after segment 1 has stopped, which is the whole difference between a row of twitching things and a spine. BLEED is why silence works - stores leak toward empty, so the last wave finishes travelling (the body follows through) and then the chain decompresses to rest rather than freezing mid-pose. GAIN is the gearing in units of the downstream threshold. Pure CPU, no shader path. 0.23 makes the lag LIVE from the rate of NOTE CHANGE - and because lag is read only when a stage schedules the next, a wave already travelling keeps the lag it launched with, so accelerating makes a later wave CATCH UP to an earlier one and the body compresses. Emergent, and only possible with a per-EVENT driver. Pacemaker deliberately does not measure note-to-note time (its PLL takes only gap-preceded onsets), so Relay measures the interval itself and `snap` blends toward the phrase pulse", proof: "vertebra_ref" },
       { id: "bite", pillar: "life", since: "0.26(core)", enables: "WHICH NOTES REACH THE BODY - a TARGET event rate with a moving threshold, not a fixed gate. Measured across four of Bill's takes the density swings 8.8 to 1.6 notes/s and turning points with it (2.6/s to 0.6/s), so any fixed rule is right for one mode and wrong for the other. Holding the rate steady and letting selectivity move keeps the body equally alive at both while always landing on real notes. Repeated cells, big leaps and breath swells always pass. Breath is auto-ranged against the performer's own running range - it is not a plateau, it was flattened by speed", proof: "bite_ref" },
       { id: "bounce", pillar: "physics", since: "0.26(core)", enables: "A RHYTHM THAT IS IRREGULAR AND INEVITABLE - interval = k*sqrt(energy), energy *= restitution per impact, so a throw ACCELERATES INTO STILLNESS and every gap differs while all of them descend from one throw. Not a randomiser: energy only leaves, so each impact is heard as CAUSED by the last. Two surfaces interleave into clustering pairs. The first source in the engine with time of its own - a significant note throws it and the decay fills the space the performer left", proof: "bite_ref" },
+      { id: "inhale", pillar: "life", since: "0.27(core)", enables: "A WIND PLAYER MUST BREATHE IN - breath is the source of life and it STOPS several times a minute as physiology, not expression. A listener hears one phrase across an inhale and the organism must too. Measured from Bill's takes an inhale is short (median 0.47-1.08s, 3-17% of a take) while a 9.4s silence is a REST, so ONE threshold separates them: shorter than `hold` and the body keeps what it has, longer and it decompresses as before. Reports 0..1 and acts on nothing; Relay takes it as an optional third argument to step() and is unchanged without it", proof: "inhale_ref" },
       { id: "coalescence", pillar: "physics", since: "0.19(core)", enables: "WHEN TWO TOUCH THEY BECOME ONE - the exact counterpart to contact, sharing its broadphase and pair test with the opposite resolution. VOLUME is conserved (r = cbrt(r1^3+r2^3)), not radius, which is what makes a merged body rise FASTER than either parent while the event rate collapses: motion accelerating as events decelerate. Momentum conserved with volume as mass. Absorbed agents are PARKED at radius 0 rather than deleted, so a fixed agent count needs no allocation. Lower index survives, so a run is deterministic", proof: "coalesce_ref" },
       { id: "contact", pillar: "physics", since: "0.16(core)", enables: "MATTER THAT OCCUPIES SPACE - static exclusion AND a body that cannot pass through ITSELF (uniform-grid broadphase, bonded near-neighbours exempt, every pair resolved once so a body cannot push itself; coils PACK instead of interpenetrating - measured overlap 0.84 -> 0.03). Flocking separation is a force between strangers, a preference that can be overpowered; this is a body that cannot be entered. A stone, a pillar, a reef: something a creature must go AROUND, which turns a drawing into a creature in a PLACE. The general case (a body against itself) is the same mathematics with both sides moving", proof: "contact_ref" },
       { id: "allometry", pillar: "physics", since: "0.15(core)", enables: "per-segment REST LENGTH - one body whose segments differ in size. A kelp frond tapers, a whale tapers, and a SHELL is a body whose every segment slightly outgrows the last", proof: "structure_ref" },
@@ -1871,6 +1872,68 @@
   };
 
   /* ==========================================================================
+     ZigCore.Inhale — A WIND PLAYER MUST BREATHE IN. (v0.27)
+
+     Breath is the source of life in this engine, and it STOPS, several times a
+     minute, forever. Not as an expressive choice — as physiology. If the body
+     dies every time the performer refills their lungs, the instrument is fighting
+     the person playing it, and the audience sees a switch instead of a creature.
+
+     A LISTENER HEARS ONE PHRASE ACROSS AN INHALE. The organism must too.
+
+     Measured from three of Bill's takes, the inhale has a shape and it is short:
+
+         Bite_2       16 inhales · median 0.47s · 17% of the take
+         Bite_3+Bee    1 inhale  ·        1.08s ·  3%
+         Bite_4 slow   2 inhales · median 0.84s ·  5%
+
+     Under about 1.1s, and the one 9.4s outlier is a REST between ideas, not a
+     breath. So one threshold separates them: a breath-floor stretch shorter than
+     `hold` is an INHALE and the body keeps what it has; longer is REST and the
+     body decompresses as it always did. The performer's own physiology sets the
+     number, which is why it is measured rather than chosen.
+
+     Also measured, and worth stating because it contradicts the feel: of 93 gaps
+     longer than 0.3s between notes, the breath floor DURING them had a median of
+     41-48. He is usually still blowing. The body goes dark in fewer moments than
+     it seems — but those moments land mid-phrase, where they do the most damage.
+
+     IT REPORTS, IT DOES NOT ACT. `held` is 0..1 and any organism can multiply a
+     decay by it. Relay takes it as an optional third argument to step(); absent,
+     nothing changes. It also ARMS: a body that has not yet been played is not
+     holding its breath, it simply has not started.
+     ====================================================================== */
+  ZigCore.Inhale = {
+    VERSION: "0.27.0",
+
+    create(opts) {
+      const o = opts || {};
+      return {
+        floor:   (o.floor   === undefined) ? 0.06 : +o.floor,  /* below this, not blowing */
+        hold:    (o.hold    === undefined) ? 1.2  : +o.hold,   /* an inhale is shorter than this */
+        release: (o.release === undefined) ? 0.6  : +o.release,/* then it lets go, it does not snap */
+        held: 0,      /* 0..1 — how much the body is being held right now */
+        quiet: 0,     /* seconds since the supply fell to the floor */
+        armed: false  /* has this body ever been played? */
+      };
+    },
+
+    update(inh, dt, supply) {
+      if (supply > inh.floor) { inh.armed = true; inh.quiet = 0; inh.held = 0; return inh.held; }
+      if (!inh.armed) { inh.held = 0; return 0; }     /* never played is not the same as holding */
+      inh.quiet += dt;
+      if (inh.quiet <= inh.hold) inh.held = 1;
+      else if (inh.release > 0)
+        inh.held = Math.max(0, 1 - (inh.quiet - inh.hold) / inh.release);
+      else inh.held = 0;
+      return inh.held;
+    },
+
+    /* is this a breath, or has the performer stopped? */
+    resting(inh) { return inh.armed && inh.quiet > inh.hold + inh.release; }
+  };
+
+  /* ==========================================================================
      ZigCore.Bite — WHICH NOTES REACH THE BODY. (v0.26)
 
      Relay answers "what happens when something enters the body". It says nothing
@@ -2127,7 +2190,7 @@
      no shader path, so nothing here can black-screen Metal.
      ====================================================================== */
   ZigCore.Relay = {
-    VERSION: "0.25.0",
+    VERSION: "0.27.0",
 
     /* 0.23 — THE LAG IS ALIVE. Lag is read at exactly ONE moment: when a stage
        fires and schedules the next. So making it live costs one multiplier and
@@ -2195,10 +2258,15 @@
     fill(r, amount) { ZigCore.Escapement.fill(r.st[0], amount); return r; },
 
     /* advance. Returns the (reused) array of stage indices that fired. */
-    step(r, dt) {
+    step(r, dt, hold) {
       const ES = ZigCore.Escapement;
       const fired = r.fired; fired.length = 0;
       r.t += dt;
+      /* 0.27 — AN INHALE IS NOT A REST. `hold` 0..1 (from ZigCore.Inhale)
+         suspends both the leak and the pose decay while the performer is
+         refilling their lungs, so a phrase survives the breath that carries it.
+         Absent or 0, every line below behaves exactly as it did. */
+      const H = (hold > 0) ? Math.min(1, hold) : 0;
 
       /* A) LEAK FIRST. If this ran after delivery, a delivery of exactly one
          threshold would be bled just below it and the stage would never trip —
@@ -2214,7 +2282,7 @@
            INTEGRATOR by default (headBleed 0) and every soft breath eventually
            speaks; downstream stages still leak, which is what makes silence
            decompress. Raise headBleed only if you want the head to forget. */
-        const rate = (i === 0) ? r.headBleed : r.bleed;
+        const rate = ((i === 0) ? r.headBleed : r.bleed) * (1 - H);
         if (rate > 0) {
           const e = r.st[i];
           if (!e.tipping) e.level = Math.max(0, e.level - rate * dt);
@@ -2244,7 +2312,7 @@
       /* D) pose — what the body is DRAWN from. Rises through the tip (half a
          sine, so the extreme is mid-tip, the most legible moment), then decays
          at tau. Read this, not `level`, or the body twitches instead of moving. */
-      const k = (r.tau > 0) ? Math.exp(-dt / r.tau) : 0;
+      const k = (r.tau > 0) ? Math.exp(-dt * (1 - H) / r.tau) : (H > 0 ? 1 : 0);
       for (let i = 0; i < r.n; i++) {
         const e = r.st[i];
         const drive = e.tipping ? Math.sin(Math.PI * Math.min(1, e.phase)) : 0;
