@@ -343,6 +343,13 @@
        band energy, so the gain is applied HERE, on the CPU, and no shader changes. */
     const RELAY_GLOW = relayHashNum("glow", 2.2);
     let relayNotes = 0, relayBites = 0, relayWhy = "\u2014", relayHudT = 0, relayT0 = 0;
+    /* PEAK HOLD. Every reading Bill sent was of a RESTING organism: Perf.live
+       falls 1.6s after the last message, and a screenshot always arrives after
+       the playing stopped, so the instantaneous band value had already decayed
+       to nothing and looked like a fault. These hold the high-water mark for a
+       few seconds so a photo taken afterwards still reports what HAPPENED. */
+    let relayPeakBand = 0, relayPeakFire = 0, relayFires = 0;
+    const RELAY_HIT = relayHashNum("hit", 1.1);   /* deposit per bite, in thresholds */
     const STRATA_DEMO = (+global.ZIG_STRATADEMO > 0);   // auto-play a deterministic demo melody when no live MIDI (for demos only); off = strata responds to REAL notes only
     let strataSynthT = 0, strataSeq = 0;
     /* GEM MATERIAL — the shard becomes a cut stone (ZigCore.Gems: diamond, ruby, sapphire, …).
@@ -909,7 +916,7 @@
           if (hit) {
             ZC.Relay.note(relaySpine, tNow);
             if (hit.cell && hit.cellSecs > 0.15) ZC.Relay.setInterval(relaySpine, hit.cellSecs / 5);
-            ZC.Relay.fill(relaySpine, 1.1 * hit.strength);
+            ZC.Relay.fill(relaySpine, RELAY_HIT * hit.strength);
             if (relayBall) ZC.Bounce.throw_(relayBall, hit.strength);
             relayHue = (pit % 12) / 12; relayBites++; relayWhy = hit.why + (hit.cell ? " " + hit.cell : "");
           }
@@ -1136,7 +1143,13 @@
          deposit bands in the newNote block above; when no MIDI is live, a deterministic demo
          melody keeps it alive so the capability is visible on open. Bands decay & pack each
          frame into view[84..107]; byte-identical (all zero) when STRATA is off. */
-      if (STRATA_ON) {
+      /* RELAY OWNS THE BANDS WHETHER OR NOT STRATA IS ON. This block used to be
+         nested inside `if (STRATA_ON)` alone, so `#relay=1` by itself never ran a
+         single frame of the spine — it booted clean and did nothing, which is
+         exactly what Bill reported and what the missing HUD line was saying.
+         The spine writes the same six bands strata does, so it needs the same
+         per-frame pack and none of strata's own note handling. */
+      if (STRATA_ON || RELAY_ON) {
         const stLive = ZC.Perf.live || ZC.Perf._sim > 0;
         if (STRATA_DEMO && !stLive) {                         // demo melody (ZIG_STRATADEMO): an up-and-down scale, one note ~every 0.5 s
           strataSynthT += dt;
@@ -1154,7 +1167,7 @@
              these bands are rewritten every frame rather than ringing down. */
           if (relayBall) { const hs = ZC.Bounce.step(relayBall, dt); for (let q = 0; q < hs.length; q++) ZC.Relay.fill(relaySpine, RELAY_BALL * hs[q]); }
           const held = ZC.Inhale.update(relayInhale, dt, ZC.Perf.breath);
-          ZC.Relay.step(relaySpine, dt, held);
+          if (ZC.Relay.step(relaySpine, dt, held).includes(0)) { relayFires++; relayPeakFire = performance.now() / 1000; }
           ZC.NoteField.bands.length = 0;
           for (let q = 0; q < 6; q++) {
             ZC.NoteField.bands.push({ y: ANCHOR[1] + (q - 2.5) / 2.5 * 16,
@@ -1167,6 +1180,17 @@
              read. This says which. `notes` counts every note-on the species saw,
              `bites` counts the ones Bite let through. notes 0 means the EWI is not
              sending them; notes rising with bites 0 means the threshold is closed. */
+          {
+            let bm = 0;
+            for (let q = 0; q < ZC.NoteField.bands.length; q++) bm = Math.max(bm, ZC.NoteField.bands[q].e);
+            /* SESSION MAXIMUM, never decayed. The first version used
+               exp(-dt/4), which is a 4-SECOND TIME CONSTANT, not a 4-second
+               hold: a peak of 2.0 falls to 0.06 in about fourteen seconds, so a
+               screenshot taken after the phrase reported 0.06 and looked like a
+               dead organism. The high-water mark of the whole session cannot
+               lie about what happened. `band now` still shows the instant. */
+            if (bm > relayPeakBand) relayPeakBand = bm;
+          }
           if ((relayHudT -= dt) <= 0) {
             relayHudT = 0.2;
             const el2 = Math.max(0.001, (performance.now() / 1000) - relayT0);
@@ -1175,7 +1199,10 @@
               " · thr " + relayBite.thr.toFixed(2) + " · " + relayWhy +
               " · span " + ZC.Relay.span(relaySpine).toFixed(2) + "s" +
               " · glow " + RELAY_GLOW.toFixed(1) +
-              " · band max " + Math.max.apply(null, ZC.NoteField.bands.map(function (b) { return b.e; })).toFixed(2) +
+              " · band now " + (function () { let m = 0; for (let q = 0; q < ZC.NoteField.bands.length; q++) m = Math.max(m, ZC.NoteField.bands[q].e); return m; })().toFixed(2) +
+              " PEAK " + relayPeakBand.toFixed(2) + " (session)" +
+              " · waves " + relayFires + " (" + (relayFires / el2).toFixed(2) + "/s)" +
+              " · hit " + RELAY_HIT.toFixed(1) +
               " · held " + held.toFixed(2));
           }
         } else {
