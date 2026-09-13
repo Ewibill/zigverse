@@ -28,7 +28,16 @@
 
   const SEED = 0x51CC;
   const COUNT = (+global.ZIG_COUNT > 0) ? Math.min(20000, +global.ZIG_COUNT | 0) : 6000;   // fewer = bigger, more legible individual shapes (a shape-browsing field)
-  const SIZEK = (+global.ZIG_SIZE > 0) ? +global.ZIG_SIZE : 1;                              // shard size multiplier — crank it to make each letterform big enough to read
+  const SIZEK = (+global.ZIG_SIZE > 0) ? +global.ZIG_SIZE : 1;
+  /* SIZE VARIANCE (#sizevar=0.35 · ZIG_SIZEVAR) — per-agent, from the instance
+     index. 0 = every shard identical, as it has always been. 0.3-0.4 reads as a
+     population; past 0.6 it reads as two species sharing a field. */
+  const SIZEVAR = (function () {
+    const h = (global.location && global.location.hash) || "";
+    const m = h.match(/[#&]sizevar=([0-9.]+)/i);
+    if (m) return Math.max(0, Math.min(0.9, +m[1]));
+    return Math.max(0, Math.min(0.9, +global.ZIG_SIZEVAR || 0));
+  })();                              // shard size multiplier — crank it to make each letterform big enough to read
   const EXT = 130, EXTY = 130;
   const ANCHOR = [0, 62, 0];
   /* the approved letterform — retune on the turntable, paste numbers here */
@@ -252,13 +261,23 @@
        when absent, the individual medium / force / current dials speak. FORCES' floor/ceil
        resolve to THIS species' frame either way (view geometry stays here). */
     const WORLD   = ZC.Worlds.get(global.ZIG_WORLD, FRAME_H);
-    const MEDIUM  = WORLD ? WORLD.medium  : ZC.Env.medium(global.ZIG_MEDIUM);
-    const FORCES  = WORLD ? WORLD.forces  : ZC.Env.force(global.ZIG_FORCES, FRAME_H);
-    let CURRENT = WORLD ? WORLD.current : ZC.Env.current(global.ZIG_CURRENT);
+    /* DECLARED BEFORE ITS FIRST USE. It lived inside the relay block, sixty lines
+       below the MEDIUM/FORCES/CURRENT/BOUNDARY lines that call it — a `const` read
+       in its temporal dead zone, which throws at boot and takes the whole page with
+       it. The reference gate cannot see this; only the boot gate can. */
+    const relayHashStr = function (name) {
+      const h = (global.location && global.location.hash) || "";
+      const m = h.match(new RegExp("[#&]" + name + "=([a-z0-9_]+)", "i"));
+      return m ? m[1] : null;
+    };
+
+    const MEDIUM  = WORLD ? WORLD.medium  : ZC.Env.medium((relayHashStr("medium") || global.ZIG_MEDIUM));
+    const FORCES  = WORLD ? WORLD.forces  : ZC.Env.force((relayHashStr("forces") || global.ZIG_FORCES), FRAME_H);
+    let CURRENT = WORLD ? WORLD.current : ZC.Env.current((relayHashStr("current") || global.ZIG_CURRENT));
     if (CURRENT && global.ZIG_GYREAXIS) CURRENT = { ...CURRENT, axis: global.ZIG_GYREAXIS };   // GYRE AXIS: roll the flow around a chosen axis ("x" = a horizontal cigar rolling broadside so it always presents its full width); default "y" is byte-identical
     /* BOUNDARY — the world's shape. Explicit ZIG_BOUNDARY wins (incl. "none" to strip walls);
        else a named world holds matter in its native shape (bowl/chimney/vessel). */
-    const BOUNDARY = global.ZIG_BOUNDARY ? ZC.Env.boundary(global.ZIG_BOUNDARY, FRAME_H)
+    const BOUNDARY = (relayHashStr("boundary") || global.ZIG_BOUNDARY) ? ZC.Env.boundary((relayHashStr("boundary") || global.ZIG_BOUNDARY), FRAME_H)
                                          : (WORLD ? WORLD.boundary : null);
     /* THE VITRINE (ZIG_STAGE): a floor with a soft pool of light beneath the organism —
        it reads as a lit specimen on a plinth in a dark room. Floor sits at the basin depth
@@ -324,11 +343,11 @@
       spanMax: relayHashNum("spanmax", 1.8)
     }) : null;
     const relayBite = RELAY_ON ? ZC.Bite.create({ target: relayHashNum("bites", 2) }) : null;
-    const RELAY_BALL0 = relayHashNum("ball", 0);
-    const relayBall = (RELAY_ON && RELAY_BALL0 > 0) ? ZC.Bounce.create({
+    let RELAY_BALL0 = relayHashNum("ball", 0);
+    const relayBall = RELAY_ON && (true) ? ZC.Bounce.create({
       surfaces: [{ rest: relayHashNum("rest", 0.52), k: 0.42 }], floor: 0.06
     }) : null;
-    const RELAY_BALL = RELAY_BALL0;
+    let RELAY_BALL = RELAY_BALL0;
     let relayHue = 0.12;
     /* A WIND PLAYER MUST BREATHE IN. Measured from Bill's takes an inhale runs
        0.47-1.08s; a 9.4s silence is a REST. Under `hold` the body keeps what it
@@ -341,7 +360,7 @@
        around 30% before the 7-unit proximity falloff — strata was built as an
        ACCENT on a lit body, not as the only light in the room. Nothing clamps
        band energy, so the gain is applied HERE, on the CPU, and no shader changes. */
-    const RELAY_GLOW = relayHashNum("glow", 2.2);
+    let RELAY_GLOW = relayHashNum("glow", 2.2);
     let relayNotes = 0, relayBites = 0, relayWhy = "\u2014", relayHudT = 0, relayT0 = 0;
     /* PEAK HOLD. Every reading Bill sent was of a RESTING organism: Perf.live
        falls 1.6s after the last message, and a screenshot always arrives after
@@ -349,7 +368,7 @@
        to nothing and looked like a fault. These hold the high-water mark for a
        few seconds so a photo taken afterwards still reports what HAPPENED. */
     let relayPeakBand = 0, relayPeakFire = 0, relayFires = 0;
-    const RELAY_HIT = relayHashNum("hit", 1.1);   /* deposit per bite, in thresholds */
+    let RELAY_HIT = relayHashNum("hit", 1.1);   /* deposit per bite, in thresholds */
     const STRATA_DEMO = (+global.ZIG_STRATADEMO > 0);   // auto-play a deterministic demo melody when no live MIDI (for demos only); off = strata responds to REAL notes only
     let strataSynthT = 0, strataSeq = 0;
     /* GEM MATERIAL — the shard becomes a cut stone (ZigCore.Gems: diamond, ruby, sapphire, …).
@@ -396,6 +415,7 @@
       noteFlash: NOTEFLASH_ON,
       radiance: RADIANCE || undefined,   // RADIANCE (Canon 0.1.0): absent → not one character of the law's WGSL is emitted
       bee: BEE > 0 ? 1.45 : 1,   // agent #0 drawn larger when the bee is live
+      sizeVar: SIZEVAR,          // SIZE VARIANCE: per-agent grading, 0 = the old uniform field
       presence: PRESENCE || undefined,   // PRESENCE: the field feels her (cozy = drawn in · agitate = driven off)
       max: 20000, count: COUNT, seed: SEED,
       extent: EXT, extentY: EXTY, cell: 12, debris: 0,
@@ -451,6 +471,7 @@
         noteFlash: NOTEFLASH_ON,
         radiance: RADIANCE || undefined,
         bee: BEE > 0 ? 1.45 : 1,   // agent #0 drawn larger when the bee is live
+      sizeVar: SIZEVAR,          // SIZE VARIANCE: per-agent grading, 0 = the old uniform field
         presence: PRESENCE || undefined,   // PRESENCE: the field feels her (cozy = drawn in · agitate = driven off)
         max: 8000, count: 2600, seed: SEED ^ 0xB10C,
         extent: EXT, extentY: EXTY, cell: 12, debris: 0,
@@ -1165,7 +1186,7 @@
           /* the spine OWNS the bands this frame: pose per segment, at fixed
              heights up the body. NoteField.update is skipped deliberately —
              these bands are rewritten every frame rather than ringing down. */
-          if (relayBall) { const hs = ZC.Bounce.step(relayBall, dt); for (let q = 0; q < hs.length; q++) ZC.Relay.fill(relaySpine, RELAY_BALL * hs[q]); }
+          if (relayBall && RELAY_BALL > 0) { const hs = ZC.Bounce.step(relayBall, dt); for (let q = 0; q < hs.length; q++) ZC.Relay.fill(relaySpine, RELAY_BALL * hs[q]); }
           const held = ZC.Inhale.update(relayInhale, dt, ZC.Perf.breath);
           if (ZC.Relay.step(relaySpine, dt, held).includes(0)) { relayFires++; relayPeakFire = performance.now() / 1000; }
           ZC.NoteField.bands.length = 0;
@@ -1480,6 +1501,97 @@
             H.line("midi", "track loaded: " + f.name + " · " + r.notes + " notes"); }
       catch (err) { H.line("midi", "not a readable .mid: " + err.message); }
     });
+
+
+    /* ==== THE SPINE PANEL (` toggles) ===================================
+       Every dial that was a URL hash is now a live slider. A hash change
+       costs a reload, and a reload resets the organism, the auto-ranged
+       breath and the session peak — so hunting a setting by hash means
+       hunting it from cold every time. These write straight into the live
+       objects, so a value can be found WHILE PLAYING, which is the only
+       way Bill can judge one. The hash still sets the opening position.
+       ` also lists the keyboard, because 25 live keys is more than anyone
+       should have to remember. ==================================== */
+    if (RELAY_ON) (function () {
+      const box = document.createElement("div");
+      box.style.cssText = "position:fixed;right:14px;top:14px;z-index:9;display:none;" +
+        "background:rgba(6,8,11,.88);border:1px solid #1e242c;padding:10px 12px;" +
+        "font:11.5px/1.5 ui-monospace,Consolas,monospace;color:#8a8f98;max-height:94vh;overflow:auto";
+      const rows = [
+        ["bites/s", 0.5, 8, 0.1, () => relayBite.target, (v) => relayBite.target = v],
+        ["hit", 0.2, 6, 0.1, () => RELAY_HIT, (v) => RELAY_HIT = v],
+        ["glow", 0.2, 8, 0.1, () => RELAY_GLOW, (v) => RELAY_GLOW = v],
+        ["ratio", 0.1, 3, 0.05, () => relaySpine.ratio, (v) => relaySpine.ratio = v],
+        ["span min", 0.1, 3, 0.05, () => relaySpine.spanMin, (v) => relaySpine.spanMin = v],
+        ["span max", 0.2, 5, 0.05, () => relaySpine.spanMax, (v) => relaySpine.spanMax = v],
+        ["bleed", 0, 1.5, 0.05, () => relaySpine.bleed, (v) => relaySpine.bleed = v],
+        ["tau", 0.1, 4, 0.05, () => relaySpine.tau, (v) => relaySpine.tau = v],
+        ["snap", 0, 1, 0.05, () => relaySpine.snap, (v) => relaySpine.snap = v],
+        ["gain", 0.25, 1, 0.05, () => relaySpine.gain, (v) => relaySpine.gain = v],
+        ["hold", 0, 3, 0.1, () => relayInhale.hold, (v) => relayInhale.hold = v],
+        ["release", 0, 3, 0.1, () => relayInhale.release, (v) => relayInhale.release = v],
+        ["ball", 0, 1.5, 0.05, () => RELAY_BALL, (v) => RELAY_BALL = v],
+        ["restitution", 0.25, 0.85, 0.01, () => relayBall.surf[0].rest, (v) => relayBall.surf[0].rest = v]
+      ];
+      let html = '<div style="color:#d8dde4;margin-bottom:6px">THE SPINE &middot; ` closes</div>';
+      rows.forEach(function (r, i) {
+        html += '<div style="margin:2px 0">' + r[0].padEnd(12).replace(/ /g, "&nbsp;") +
+          '<input id="sp' + i + '" type="range" min="' + r[1] + '" max="' + r[2] + '" step="' + r[3] +
+          '" value="' + r[4]() + '" style="width:118px;vertical-align:middle;accent-color:#c98a6a">' +
+          '<span id="spv' + i + '" style="color:#c98a6a">&nbsp;' + (+r[4]()).toFixed(2) + '</span></div>';
+      });
+      /* WORLD — these RELOAD. MEDIUM, FORCES, CURRENT and BOUNDARY are captured
+         at GPU init and spliced into the compiled step kernel, so they cannot be
+         moved live the way the sliders above can: the panel writes the choice into
+         the hash and reloads, which is exactly what the shard panel means by
+         "baked into the mesh, so this one RELOADS". The options are read from
+         ZigCore.Env rather than typed here, so the engine describes itself and
+         a new medium appears in the menu the day it is added. */
+      const E = ZC.Env, WORLDS = [
+        ["MEDIUM", "medium", E.media], ["FORCES", "forces", E.forces],
+        ["CURRENT", "current", E.currents], ["SHAPE", "boundary", E.boundaries]
+      ];
+      html += '<div style="color:#d8dde4;margin:9px 0 3px">WORLD &middot; reloads</div>';
+      WORLDS.forEach(function (w, i) {
+        const cur = relayHashStr(w[1]) || "";
+        html += '<div style="margin:2px 0">' + w[0].padEnd(9).replace(/ /g, "&nbsp;") +
+          '<select id="wp' + i + '" style="background:#12151a;color:#d8dde4;border:1px solid #262c35;font:inherit">' +
+          '<option value="">(default)</option>' +
+          Object.keys(w[2]).map(function (k) {
+            return '<option value="' + k + '"' + (k === cur ? " selected" : "") + ">" + k + "</option>";
+          }).join("") + "</select></div>";
+      });
+      html += '<div style="color:#d8dde4;margin:9px 0 3px">KEYS</div>' +
+        '<div style="color:#5d646e">' + [
+          "B hold to breathe", "Space strike", "I/K ink", "O/L moon", "+/- zoom",
+          "[ / ] field of view", "P spectral ink", "J/M heartbeat", "Shift+M memory underside",
+          "Y/H your pull", "A open audio", "N next letter", "Q spectrum rotate",
+          "F/G wind", "W/S murmuration", "E/D memory glass", "V mark: hidden/ember/beacon",
+          "Shift+R radiance", "T play/pause", "X cockpit", "` this panel"
+        ].join("<br>") + "</div>";
+      box.innerHTML = html;
+      document.body.appendChild(box);
+      WORLDS.forEach(function (w, i) {
+        const sel = box.querySelector("#wp" + i);
+        sel.addEventListener("change", function () {
+          let h = (global.location.hash || "#relay=1")
+            .replace(new RegExp("[&#]" + w[1] + "=[a-z0-9_]+", "i"), "");
+          if (h.indexOf("relay=") < 0) h = "#relay=1" + (h.replace("#", "&"));
+          if (sel.value) h += "&" + w[1] + "=" + sel.value;
+          global.location.hash = h;
+          global.location.reload();
+        });
+      });
+      rows.forEach(function (r, i) {
+        const el = box.querySelector("#sp" + i), lab = box.querySelector("#spv" + i);
+        el.addEventListener("input", function () {
+          const v = +el.value; r[5](v); lab.innerHTML = "&nbsp;" + v.toFixed(2);
+        });
+      });
+      global.addEventListener("keydown", function (e) {
+        if (e.code === "Backquote") { box.style.display = box.style.display === "none" ? "block" : "none"; }
+      });
+    })();
 
     global.addEventListener("keydown", (e) => {
       if (e.code === "KeyB") ZC.Perf.sim(0.85);

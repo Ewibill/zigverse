@@ -917,6 +917,16 @@ fn waterColor(dir: vec3f) -> vec3f {
     const UNSEEN = Math.max(0, Math.min(0.95, +opts.unseen || 0));
     /* THE BEE — agent #0's size multiplier. 1 = same as every other shard (byte-identical). */
     const BEE = Math.max(1, Math.min(4, +opts.bee || 1));
+    /* SIZE VARIANCE — nothing living has uniform element size. A coral's polyps, a
+       pine cone's scales, a fish's flank: all graded. The field's shards were every
+       one the same, which is the single loudest tell that they were manufactured.
+       Tested on the INSTANCE INDEX, exactly as THE BEE is, because the compute
+       uniform block does not exist in this shader and reaching for it here blanked
+       the entire render pass once already. No new binding, no new varying, no
+       change to which bindings the stage uses — which is the class of edit that
+       cost 1,240 driver errors at 0.46.0. Agent #0 is excluded: the Bee's size is
+       her recognisability. Not one character is emitted when absent. */
+    const SVAR = Math.max(0, Math.min(0.9, +opts.sizeVar || 0));
     const CONTACT = opts.contact ? {
       r: Math.max(0.01, +opts.contact.r || 1),
       /* STIFFNESS MUST MATCH THE FIELD'S OWN FORCE SCALE. 400 is right for a
@@ -1838,6 +1848,15 @@ struct DOut { @builtin(position) cp: vec4f, @location(0) uv: vec2f, @location(1)
       const u1 = "const UNSEEN_FRAC: f32 = 0.0;";
       if (RENDER_SRC.indexOf(u1) < 0) throw new Error("UNSEEN splice anchor missing in render kernel");
       RENDER_SRC = RENDER_SRC.replace(u1, "const UNSEEN_FRAC: f32 = " + (+UNSEEN).toFixed(4) + ";");
+    }
+    if (SVAR > 0) {
+      const s1 = "  if (ii == 0u) { size = V.birdDark.w * BEE_SIZE; }";
+      if (RENDER_SRC.indexOf(s1) < 0) throw new Error("SIZEVAR splice anchor missing in render kernel");
+      /* its own hash, so the small shards do not correlate with the ones UNSEEN
+         hides (that reads as a thinning rather than a grading) */
+      RENDER_SRC = RENDER_SRC.replace(s1, s1 +
+        "\n  if (ii != 0u) { size = size * (1.0 + " + SVAR.toFixed(3) +
+        " * (fract(sin(f32(ii) * 45.31 + 7.7) * 31607.9) - 0.5) * 2.0); }");
     }
     if (BEE > 1) {
       const b1 = "const BEE_SIZE: f32 = 1.0;";
