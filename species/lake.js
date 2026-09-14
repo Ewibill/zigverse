@@ -88,11 +88,27 @@
     const flow = ZG.createFlow(gpu, { extent: EXT, extentY: EXTY, cell: 8, gain: 0.9, damp: 0.30 });
     Lake.flow = flow;
     const flock = ZG.createFlock(gpu, {
+      /* SIZE VARIANCE (#sizevar=) — inherited from the renderer; nothing living
+         has uniform element size. 0 = the old uniform field. */
+      sizeVar: (function () {
+        const h = (global.location && global.location.hash) || "";
+        const m = h.match(/[#&]sizevar=([0-9.]+)/i);
+        return m ? Math.max(0, Math.min(0.9, +m[1])) : Math.max(0, Math.min(0.9, +global.ZIG_SIZEVAR || 0));
+      })(),
+
       max: 20000, count: COUNT, seed: SEED,
       extent: EXT, extentY: EXTY, cell: 12, debris: 0,
       mesh: ZM.shard(PETAL), phase: {}, flow
     });
     const flockD = ZG.createFlock(gpu, {
+      /* SIZE VARIANCE (#sizevar=) — inherited from the renderer; nothing living
+         has uniform element size. 0 = the old uniform field. */
+      sizeVar: (function () {
+        const h = (global.location && global.location.hash) || "";
+        const m = h.match(/[#&]sizevar=([0-9.]+)/i);
+        return m ? Math.max(0, Math.min(0.9, +m[1])) : Math.max(0, Math.min(0.9, +global.ZIG_SIZEVAR || 0));
+      })(),
+
       max: 8000, count: COUNT_D, seed: SEED ^ 0xDEE9,
       extent: EXT, extentY: EXTY, cell: 12, debris: 0,
       mesh: ZM.shard(ZM.presets.woodblock), phase: {}, flow
@@ -102,6 +118,14 @@
        gathers the school. No blink — fish don't burn, they glide. */
     const KOI = 420, SWIM = LAKE - 26;
     const flockF = ZG.createFlock(gpu, {
+      /* SIZE VARIANCE (#sizevar=) — inherited from the renderer; nothing living
+         has uniform element size. 0 = the old uniform field. */
+      sizeVar: (function () {
+        const h = (global.location && global.location.hash) || "";
+        const m = h.match(/[#&]sizevar=([0-9.]+)/i);
+        return m ? Math.max(0, Math.min(0.9, +m[1])) : Math.max(0, Math.min(0.9, +global.ZIG_SIZEVAR || 0));
+      })(),
+
       max: 2000, count: KOI, seed: SEED ^ 0x0F15,
       extent: EXT, extentY: EXTY, cell: 12, debris: 0,
       mesh: ZM.shard(ZM.presets.ribbon), flow       // koi RIDE the currents the stones stir

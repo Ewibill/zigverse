@@ -471,7 +471,7 @@
         noteFlash: NOTEFLASH_ON,
         radiance: RADIANCE || undefined,
         bee: BEE > 0 ? 1.45 : 1,   // agent #0 drawn larger when the bee is live
-      sizeVar: SIZEVAR,          // SIZE VARIANCE: per-agent grading, 0 = the old uniform field
+        sizeVar: SIZEVAR,          // SIZE VARIANCE: per-agent grading, 0 = the old uniform field
         presence: PRESENCE || undefined,   // PRESENCE: the field feels her (cozy = drawn in · agitate = driven off)
         max: 8000, count: 2600, seed: SEED ^ 0xB10C,
         extent: EXT, extentY: EXTY, cell: 12, debris: 0,

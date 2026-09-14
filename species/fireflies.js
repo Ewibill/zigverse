@@ -84,6 +84,14 @@
     const flow = ZG.createFlow(gpu, { extent: EXT, extentY: EXTY, cell: 8, gain: 0.8, damp: 0.32 });
     Fireflies.flow = flow;
     const flock = ZG.createFlock(gpu, {
+      /* SIZE VARIANCE (#sizevar=) — inherited from the renderer; nothing living
+         has uniform element size. 0 = the old uniform field. */
+      sizeVar: (function () {
+        const h = (global.location && global.location.hash) || "";
+        const m = h.match(/[#&]sizevar=([0-9.]+)/i);
+        return m ? Math.max(0, Math.min(0.9, +m[1])) : Math.max(0, Math.min(0.9, +global.ZIG_SIZEVAR || 0));
+      })(),
+
       max: 20000, count: COUNT, seed: SEED,
       extent: EXT, extentY: EXTY, cell: 12, debris: 0,
       phase: {},                                  // ← ZigPhase: the TIME law
