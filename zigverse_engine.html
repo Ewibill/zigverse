@@ -91,6 +91,7 @@
   <div class="med"><label>SHAPE</label> <select id="boundpick" title="the world's shape holds it in — basin (bowl) · column (the standing spindle) · capsule (the horizontal cigar) · vessel (sphere) · lens (the breathing disc)"></select></div>
   <div class="skin"><label>SURFACE</label> <select id="matpick" title="the front material skin — switching reloads"></select></div>
   <div class="gem"><label>GEM</label> <select id="gempick" title="none, or a cut stone (refraction · dispersion · facet flash) — reloads"></select></div>
+  <div class="gem"><label>GEM 2</label> <select id="gem2pick" title="a SECOND stone lining the cupped interior while GEM keeps the shell — two optical behaviours on one shard; overrides GEM FACE — reloads"></select></div>
   <div class="gem"><label>GEM FACE</label> <select id="gemfacepick" title="where the gem lives — inside (seashell nacre) · outside (gem shell) · both (whole shard) — reloads"></select></div>
   <div><label>FABRIC</label> <select id="fabpick" title="none, or line the cupped interior in a textile (20 weaves) — reloads"></select></div>
   <div class="brk"><label>LIGHT</label> <select id="lightpick" title="RADIANCE — the FIRST Canon law. The room your panel stands in is a light source with no falloff: its reflected ambient adds a constant to every pixel, so perceived = displayed + veil. A linear difference survives that; a RATIO does not, and the shadow ratios are what carry the modelling. Name the room you are actually in. dark = identity (the law is off). lit/bright/sunlit EXPAND — stretch the shadows apart so their differences are big enough to survive the veil. cut is the opposite instinct — refuse the drowned region and rescale the survivors. white is the projection/spa inversion. SHIFT+R toggles it live, against itself, in the same frame."></select></div>
@@ -284,6 +285,9 @@
   window.ZIG_BOND = (function () { var b = (location.hash.match(/bond=([a-z]+)/i) || [])[1]; return (b && b !== "none") ? b : "none"; })();
   window.ZIG_GEM     = (function () { var g = (location.hash.match(/gem=([a-z]+)/i) || [])[1]; return (g && g !== "none") ? g : undefined; })();
   window.ZIG_BACKMAT = (function () { var f = (location.hash.match(/fab=([a-z]+)/i) || [])[1]; return (f && f !== "none") ? f : undefined; })();
+  window.ZIG_GEM2    = (function () { var g = (location.hash.match(/gem2=([a-z]+)/i) || [])[1]; return (g && g !== "none") ? g : undefined; })();   // DUAL GEM: the interior's own stone
+  window.ZIG_GEM2OFFSET = (function () { var v = (location.hash.match(/gem2off=([0-9.]+)/i) || [])[1]; return v === undefined ? undefined : +v; })();   // the interval the pair holds while Q sweeps
+  window.ZIG_GEMBUFF = (function () { var v = (location.hash.match(/gembuff=([0-9.]+)/i) || [])[1]; return v === undefined ? undefined : +v; })();      // interior glint softening (absent = 0.5)
   window.ZIG_GEMFACE = ((location.hash.match(/gface=([a-z]+)/i) || [])[1]) || "both";   // SEASHELL: inside = gem lines the cupped interior · outside = gem shell · both = whole shard
   // SILHOUETTE RIM — a fresnel outline so shapes stay legible under any skin/light (↑/↓ strength · ←/→ edge).
   window.ZIG_RIM = 0.4;
@@ -339,8 +343,9 @@
     const bmsel = document.getElementById("bmpick");   // PRESENCE mood — declared with the other selects so btail() can never hit a dead zone
     const lsel = document.getElementById("lightpick");
     const gsel = document.getElementById("gempick"), fbsel = document.getElementById("fabpick"), gfsel = document.getElementById("gemfacepick");
+    const g2sel = document.getElementById("gem2pick");
     const fill = (sel, names, cur) => { if (!sel) return; for (const n of names) { const o = document.createElement("option"); o.value = n; o.textContent = n; if (n === cur) o.selected = true; sel.appendChild(o); } };
-    const skinTail = () => "&gem=" + (gsel ? gsel.value : "none") + "&fab=" + (fbsel ? fbsel.value : "none") + "&gface=" + (gfsel ? gfsel.value : "both");   // GEM · GEM FACE · FABRIC persist across every reload
+    const skinTail = () => "&gem=" + (gsel ? gsel.value : "none") + "&gem2=" + (g2sel ? g2sel.value : "none") + "&fab=" + (fbsel ? fbsel.value : "none") + "&gface=" + (gfsel ? gfsel.value : "both");   // GEM · GEM FACE · FABRIC persist across every reload
     const bondTail = () => "&bond=" + (bdsel ? bdsel.value : "none") + "&spread=" + (spsel ? spsel.value : "field") + "&still=" + (stsel ? stsel.value : "restless") + "&contact=" + (ctsel ? ctsel.value : "off") + "&onset=" + (onsel ? onsel.value : "snap") + "&crowding=" + (cwsel ? cwsel.value : "loose") + "&summon=" + (susel ? susel.value : "note") + "&heft=" + (hfsel ? hfsel.value : "cupped") + "&crowd=" + (cnsel ? cnsel.value : "6000") + "&unseen=" + (unsel ? unsel.value : "all") + "&bee=" + (besel ? besel.value : "off") + "&flash=" + (nfsel ? nfsel.value : "off");   // BOND rides along in either mode
     const btail = () => "&beemode=" + (bmsel ? bmsel.value : "off") + bondTail() + "&breath=" + (bsel ? bsel.value : "easy") + "&stage=" + (vsel ? vsel.value : "soft") + "&radiance=" + (lsel ? lsel.value : "dark") + skinTail();   // presentation + skins ride along in either mode
     const dialsHash = () => "world=custom&med=" + msel.value + "&force=" + fsel.value + "&cur=" + csel.value + "&bound=" + (bnsel ? bnsel.value : "none") + "&mat=" + ssel.value + btail();
@@ -386,7 +391,14 @@
     fill(lsel, Object.keys(ZigCore.Radiance ? ZigCore.Radiance.rooms : { dark: 1 }), window.ZIG_ROOM);
     fill(gsel, ["none"].concat(ZigCore.Gems ? Object.keys(ZigCore.Gems) : []), (location.hash.match(/gem=([a-z]+)/i) || [])[1] || "none");
     fill(fbsel, ["none"].concat(ZigCore.Fabrics ? Object.keys(ZigCore.Fabrics) : []), (location.hash.match(/fab=([a-z]+)/i) || [])[1] || "none");
+    fill(g2sel, ["none"].concat(ZigCore.Gems ? Object.keys(ZigCore.Gems) : []), (location.hash.match(/gem2=([a-z]+)/i) || [])[1] || "none");
     fill(gfsel, ["both", "inside", "outside"], window.ZIG_GEMFACE);
+    /* a second stone speaks for the interior, so GEM FACE has nothing left to decide.
+       GREYED rather than removed: a control that silently stops mattering is how an
+       afternoon gets spent chasing a dial that does nothing. */
+    const gfSync = () => { const on = !!(g2sel && g2sel.value !== "none"); if (gfsel) { gfsel.disabled = on; gfsel.style.opacity = on ? 0.35 : 1; gfsel.title = on ? "GEM 2 is set — both faces are spoken for" : "where the gem lives — inside (seashell nacre) · outside (gem shell) · both (whole shard) — reloads"; } };
+    if (g2sel) g2sel.addEventListener("change", gfSync);
+    gfSync();
     /* When a named world is active, reflect its triple + native (or overridden) skin & shape
        so every sub-dial SHOWS the place. */
     if (window.ZIG_WORLD !== "custom" && ZigCore.Worlds && ZigCore.Worlds.places[window.ZIG_WORLD]) {
@@ -400,7 +412,7 @@
     /* SHAPE + SURFACE → overrides: stay in the current world (else they're custom dials). */
     for (const s of [bnsel, ssel]) if (s) s.addEventListener("change", () => { location.hash = inWorld() ? worldHash() : dialsHash(); location.reload(); });
     /* GEM (front stone) + FABRIC (back textile) recompile the shader → reload, staying in the current world/dials. */
-    for (const s of [gsel, fbsel, gfsel]) if (s) s.addEventListener("change", () => { location.hash = curHash(); location.reload(); });
+    for (const s of [gsel, g2sel, fbsel, gfsel]) if (s) s.addEventListener("change", () => { location.hash = curHash(); location.reload(); });   // g2sel (DUAL GEM) rides the SAME rail as the other skin pickers — it was in the DOM and in skinTail() but not here, so it changed a value nobody read
     /* WORLD is a MACRO — a named place reloads BARE (no overrides → its NATIVE skin + shape apply);
        "custom" hands control back to the dials. */
     if (wsel) wsel.addEventListener("change", () => {

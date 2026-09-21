@@ -386,6 +386,26 @@
         GEMPROF = { col, ior: G.ior, disp: G.disp, facet: G.facet, spark: G.spark };
       }
     }
+    /* DUAL GEM — a SECOND stone lining the cupped INTERIOR while ZIG_GEM keeps the shell.
+       The stones differ in more than colour: dispersion, facet and spark are per-stone, so
+       diamond outside + emerald inside is hard spectral fire on the shell and a soft included
+       glow within — two optical behaviours on two faces of one shard.
+       ZIG_GEM2 = gem name · ZIG_GEM2HUE overrides its body colour (0..1 wheel)
+       ZIG_GEM2OFFSET = constant hue interval held between the two stones as Q sweeps the pair
+       ZIG_GEMBUFF = interior glint softening (default 0.5 = v0.34's buff · 1.0 = none) */
+    let GEM2PROF = null;
+    {
+      const G = (ZC.Gems || {})[(global.ZIG_GEM2 || "").toLowerCase()];
+      if (G) {
+        let col = G.col.slice();
+        if (global.ZIG_GEM2HUE !== undefined) {
+          const gh = +global.ZIG_GEM2HUE, hc = (p) => 0.5 + 0.5 * Math.cos(6.2831 * (gh + p));
+          const hr = hc(0), hg = hc(0.3333), hb = hc(0.6667), mn = Math.min(hr, hg, hb);
+          col = [(hr - mn) * 0.85 + 0.1, (hg - mn) * 0.85 + 0.1, (hb - mn) * 0.85 + 0.1];
+        }
+        GEM2PROF = { col, ior: G.ior, disp: G.disp, facet: G.facet, spark: G.spark };
+      }
+    }
     /* FABRIC UNDERSIDE — a textile lining the concave interior (ZigCore.Fabrics: velvet, silk,
        denim, …20). ZIG_BACKMAT = fabric name · ZIG_BACKHUE overrides its colour (0..1 wheel). */
     let BACKFAB = null;
@@ -446,7 +466,10 @@
       memoryBack: (+global.ZIG_MEMBACK > 0) || undefined,  // ← MEMORY UNDERSIDE: the 2nd performance surface — back faces glow with a lagging ghost of the phrase (front=now, back=recent past)
       backFabric: BACKFAB,                                 // ← FABRIC UNDERSIDE: the concave interior lined in a textile (20 in ZigCore.Fabrics)
       gem: GEMPROF,                                         // ← GEM MATERIAL: the shard becomes a cut stone (refraction/dispersion/fresnel/facet), sampling the sky
-      gemFace: (["both", "inside", "outside"].indexOf(String(global.ZIG_GEMFACE || "both")) >= 0 ? String(global.ZIG_GEMFACE || "both") : "both")   // SEASHELL: "inside" = gem lines the cupped interior, material stays the outside
+      gemFace: (["both", "inside", "outside"].indexOf(String(global.ZIG_GEMFACE || "both")) >= 0 ? String(global.ZIG_GEMFACE || "both") : "both"),   // SEASHELL: "inside" = gem lines the cupped interior, material stays the outside
+      gem2: GEM2PROF,                                       // ← DUAL GEM: the interior's own stone (gemFace is moot once this is set — the shell takes the outside)
+      gem2Hue: (global.ZIG_GEM2OFFSET !== undefined ? +global.ZIG_GEM2OFFSET : undefined),   // ← the interval the pair holds while Q sweeps them together
+      gemBuff: (global.ZIG_GEMBUFF !== undefined ? +global.ZIG_GEMBUFF : undefined)          // ← interior glint softening (absent = 0.5, v0.34's value)
     });   // CHIAROSCURO is a LIVE uniform now (view[76]), driven by dial.chiaro + keys 1/2
     flock.seed(ANCHOR);
     flock.seedPhase(4.4, 0.25);
