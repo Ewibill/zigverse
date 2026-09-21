@@ -905,13 +905,13 @@
        facet : facet-flash strength · spark : scintillation strength */
   ZigCore.Gems = {
     diamond:    { col: [0.93, 0.96, 1.00], ior: 2.42, disp: 0.045, facet: 1.00, spark: 1.00 },
-    ruby:       { col: [0.86, 0.08, 0.17], ior: 1.77, disp: 0.016, facet: 0.85, spark: 0.70 },
+    ruby:       { col: [0.78, 0.06, 0.15], ior: 1.77, disp: 0.016, facet: 0.85, spark: 0.82 },   // Cr3+ red w/ faint blue secondary; FLUORESCES - spark up so lit faces intensify, not wash
     sapphire:   { col: [0.12, 0.28, 0.92], ior: 1.77, disp: 0.016, facet: 0.85, spark: 0.70 },
-    emerald:    { col: [0.10, 0.80, 0.42], ior: 1.58, disp: 0.014, facet: 0.60, spark: 0.42 },
+    emerald:    { col: [0.05, 0.70, 0.50], ior: 1.58, disp: 0.014, facet: 0.52, spark: 0.42 },   // BLUISH green (was yellowish); included 'jardin' so facets never flash clean
     amethyst:   { col: [0.56, 0.32, 0.90], ior: 1.55, disp: 0.013, facet: 0.75, spark: 0.60 },
-    topaz:      { col: [1.00, 0.72, 0.22], ior: 1.62, disp: 0.015, facet: 0.80, spark: 0.70 },
+    topaz:      { col: [1.00, 0.60, 0.30], ior: 1.63, disp: 0.015, facet: 0.80, spark: 0.70 },   // IMPERIAL topaz - peach/orange; was sitting on citrine's gold and the two were one stone
     aquamarine: { col: [0.46, 0.88, 0.93], ior: 1.58, disp: 0.014, facet: 0.72, spark: 0.62 },
-    garnet:     { col: [0.74, 0.10, 0.09], ior: 1.79, disp: 0.024, facet: 0.80, spark: 0.68 },
+    garnet:     { col: [0.46, 0.07, 0.09], ior: 1.79, disp: 0.024, facet: 0.80, spark: 0.52 },   // almandine - DARKER and browner than ruby, and does NOT fluoresce; value is the separator
     citrine:    { col: [0.98, 0.78, 0.20], ior: 1.55, disp: 0.014, facet: 0.75, spark: 0.66 },
     peridot:    { col: [0.60, 0.85, 0.20], ior: 1.65, disp: 0.020, facet: 0.72, spark: 0.60 }
   };
