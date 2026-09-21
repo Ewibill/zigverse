@@ -2756,3 +2756,25 @@ candidates are spatial bands, `Env.bonds` topology, or `lifeHash` groups, and th
 **audit charisma dwell for the same leak-on-the-accumulator fault Relay's head had** — it
 accumulates, it has a release, and the Bee has a long history of appearing inert · the drawn-membrane
 primitive for Gill/Alveolus · `ZigWebGPU.VERSION` still 0.46.0.
+
+
+
+cd C:\Users\billy\Zigverse
+"" | Add-Content briefs\Session_Log.md
+Get-Clipboard | Add-Content briefs\Session_Log.md
+
+**2026-09-20 · GEMS ACCURATE, THEN TWO OF THEM** — `8888d99` · ZigWebGPU **0.46.0 → 0.47.0**
+
+**Ruby rendered green.** Not a table error. `ZIG_HUEROT = 0.33` is a 118.8° rotation of the whole wheel applied on top of every declared colour — one constant explained all ten gem renders to a mean 11°. Diamond looked correct only because a grey cannot be rotated, and I read that as evidence the system worked.
+
+**Four stones corrected** in `ZigCore.Gems` (`apply_gems.mjs`, 4 lines). Ruby and garnet now separate on **value and fluorescence**, not hue — which is how a gemmologist separates them, and they share a hue in nature on purpose. Topaz moved to imperial peach, which freed citrine without touching it. Diamond, sapphire, amethyst, aquamarine, citrine and peridot were already accurate and were left alone.
+
+**DUAL GEM 0.47.0** — `opts.gem2` puts a second stone on the cupped interior while `opts.gem` keeps the shell. The stones differ in dispersion, facet and spark as well as colour, so diamond outside + emerald inside is hard spectral fire on the shell and a soft included glow within. `gemBlock(G, cond)` was **already** parameterised by stone and face condition, so the law is a second invocation at the same splice point: no new bindings, no new varyings, nothing that can change an auto-derived layout. Both stones share `Q` held apart by a constant hue offset (`opts.gem2Hue`); v0.34's interior buff became `opts.gemBuff`, defaulted to its old `0.5`.
+
+**The trap.** `gemHueRot`/`gemSky` were declared `if (GEM)`. A second stone with no first would have emitted a block calling undeclared WGSL functions — nvidia tolerates a dangling reference, Metal refuses it and the pipeline fails to build: black canvas, healthy HUD, 165fps. **That is 0.44.1 exactly.** Now gated on `GEM || GEM2`; `test/gem2_ref.mjs` **case C** exists for it and nothing else.
+
+**Passed:** `node --check` clean · reference gate **46/46** · byte-identity **5/5 IDENTICAL** plus present-when-declared · installer reproduces the build tree byte-identical on all four files · **boot gate on eyeZ: 165fps, 1332 submits, 0 driver errors** · Bill's eyes on ruby, on both collision pairs, and on the sapphire/emerald lens.
+
+**A gate did not catch me.** `apply_gem2.mjs` put GEM 2 in the DOM and in `skinTail()` and wired it to grey out GEM FACE — but never added `g2sel` to the skin-picker reload rail. The dropdown changed a value nobody read. **All 46 CPU proofs were green while the feature did nothing**, because every gate drives `createFlock` directly and none of them can reach the panel. `boot_gate` is the only thing in the stack that touches the host. Fixed in `apply_gem2fix.mjs` (one line).
+
+**Open:** **the panel has no gate** — every picker is hand-wired to a rail and this is exactly how easy it is to half-connect one · **the two faces want different stones**: the shell is lit and carries pale high-dispersion stones (diamond) where fire does the work colour can't, the cup is dim and buffed to 0.5 so it wants saturation and value — pairings are **not symmetric** · **the vitrine has five expressive parameters and one exposed control** (position, plane size, pool radius, colour all read, none on the panel) · **`colour_ref`** — declare a colour, render it, read the pixel back, assert the hue survives; ruby-is-green would have failed on run one, and it is the commercially load-bearing gate · **Metal gate on the Air, now REQUIRED** — WGSL changed this time, unlike last session · `order_collisions` **proves** memory and note-flash are computed and discarded with an interior gem; the underside wants an ordering claim on the `shard.face` rail · `tools/splice_anchors.mjs` and `test/_bundlecheck.mjs` both fail on a hard-coded `/home/claude/live/...` path, **identically on the untouched baseline** — stale sandbox paths, the same rot `byte_identity`'s own header describes.
