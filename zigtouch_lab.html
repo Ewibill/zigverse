@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Zigverse — touch lab v0.2</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Touch lab">
+<meta name="theme-color" content="#010204">
+<!-- v0.2 THE NUCLEUS AND THE WAVE (Bill, 2026-09-22): a held finger becomes
+     the nucleus — trusted shards gather into a small lens around it; a sweep
+     let go while moving is a WAVE that sends what was gathered off along the
+     current, and the body drifts home and settles. A/B dials in the address:
+     #nucleus=0..2 (how strongly a held finger gathers · 1 default) and
+     #throw=0.2..2 (how far a wave can carry, screens/s · 0.9 default). -->
+<!-- ZIGTOUCH LAB 0.1 — a test bench, not a species. The creature here is a
+     small 2D lens that READS touch.field and nothing else; every behaviour you
+     feel comes from engine/zigtouch.js and engine/zighaptics.js, which is the
+     point: the same two files will drive the WebGPU organism, Kelp, Rootwhale,
+     and a lobby screen. 2D canvas on purpose — it opens on any phone, WebGPU
+     or not, so the test is about touch and haptics and nothing else. -->
+<style>
+  :root {
+    color-scheme: dark;
+    --void: #010204; --nacre: #d9dfe4; --moon: #8fa3b8; --amber: #e2b98a; --ice: #bfe6ff; --dim: #6f7b86;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  html, body { margin: 0; height: 100%; background: var(--void); color: var(--nacre); overflow: hidden;
+               font-family: var(--serif); -webkit-text-size-adjust: 100%; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .hint { position: fixed; left: 0; right: 0; top: calc(env(safe-area-inset-top, 0px) + 18px);
+          text-align: center; font-size: 17px; line-height: 1.4; color: var(--moon); pointer-events: none;
+          padding: 0 24px; transition: opacity 1.2s ease; }
+  .panel { position: fixed; left: 0; right: 0; bottom: 0;
+           padding: 14px 20px calc(env(safe-area-inset-bottom, 0px) + 14px);
+           background: linear-gradient(to top, rgba(1,2,4,.92) 60%, rgba(1,2,4,0));
+           font-size: 15px; line-height: 1.45; }
+  .panel.hidden .readout { display: none; }
+  .meters { display: grid; grid-template-columns: 7.5em 1fr; gap: 6px 12px; align-items: center; max-width: 34em; margin: 0 auto; }
+  .meters span { color: var(--dim); }
+  .bar { height: 3px; background: rgba(143,163,184,.18); border-radius: 2px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--moon); }
+  .bar.trust i { background: var(--amber); } .bar.startle i { background: var(--ice); }
+  .said { max-width: 34em; margin: 10px auto 0; color: var(--nacre); min-height: 1.45em; }
+  .why { max-width: 34em; margin: 4px auto 0; color: var(--dim); font-size: 13px; }
+  .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+  button { font: inherit; font-size: 15px; color: var(--nacre); background: transparent;
+           border: 1px solid rgba(143,163,184,.35); border-radius: 999px; padding: 7px 14px; cursor: pointer; }
+  button[aria-pressed="false"] { color: var(--dim); }
+  button:focus-visible { outline: 2px solid var(--ice); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<canvas id="glass" aria-label="A living lens. Tap it, rest a finger on it until it gathers around you, then sweep it away."></canvas>
+<div class="hint" id="hint">Tap it. Rest a finger on it until it gathers, then sweep it away.</div>
+<div class="panel" id="panel">
+  <div class="readout">
+    <div class="meters">
+      <span>Startle</span><div class="bar startle"><i id="m-startle"></i></div>
+      <span>Used to taps</span><div class="bar"><i id="m-habit"></i></div>
+      <span>Trust</span><div class="bar trust"><i id="m-trust"></i></div>
+      <span>Settled</span><div class="bar"><i id="m-settle"></i></div>
+    </div>
+    <div class="said" id="said">It is resting.</div>
+    <div class="why" id="why"></div>
+  </div>
+  <div class="row">
+    <button id="b-haptics" aria-pressed="true">Haptics on</button>
+    <button id="b-readout" aria-pressed="true">Readout on</button>
+    <button id="b-forget">Forget me</button>
+    <button id="b-ios" aria-pressed="false" hidden>iPhone tick (test)</button>
+  </div>
+</div>
+
+<script src="engine/zigtouch.js"></script>
+<script src="engine/zighaptics.js"></script>
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const hash = new URLSearchParams(location.hash.slice(1));
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} },
+    del(k) { try { localStorage.removeItem(k); } catch (_) {} }
+  };
+  const MEM = "zigtouch.memory.v1";
+  const NUCLEUS = Math.max(0, Math.min(2, parseFloat(hash.get("nucleus") || "1")));
+  const THROW = Math.max(0.2, Math.min(2, parseFloat(hash.get("throw") || "0.9")));   // wave launch cap, screens per second
+  let scatter = 0;                                               // 1 right after a wave, bleeds to 0: the body lets go, then comes home
+
+  /* ---- the touch field + its memory --------------------------------------- */
+  const touch = ZigTouch.create();
+  try { touch.importMemory(JSON.parse(store.get(MEM) || "null")); } catch (_) {}
+  const commit = () => store.set(MEM, JSON.stringify(touch.commitSession()));
+  addEventListener("pagehide", commit);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) { commit(); haptics.silence(); } });
+
+  /* ---- haptics ------------------------------------------------------------ */
+  const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  let iosSwitch = hash.get("ios") === "1";
+  let haptics;
+  const lastFelt = { ms: 0 };
+  function makeHaptics() {
+    haptics = ZigHaptics.create({ iosSwitch, onVisual: answer });
+    haptics.enabled = hash.get("haptics") !== "off" && $("b-haptics").getAttribute("aria-pressed") === "true";
+    $("why").textContent = "Haptics: " + haptics.status().why + ".";
+  }
+
+  /* ---- the organism: a lens of shards that READS the field ---------------- */
+  const cv = $("glass"), g = cv.getContext("2d");
+  let W = 0, H = 0, DPR = 1, M = 1, cx = 0, cy = 0, RX = 1, RY = 1, portrait = true;
+  const N = 520, P = [];
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < N; i++) {
+    const r = Math.sqrt(rnd()), a = rnd() * Math.PI * 2;
+    P.push({ hu: r * Math.cos(a), hv: r * Math.sin(a), x: 0, y: 0, vx: 0, vy: 0, ang: a, len: 0.6 + 0.8 * rnd(),
+             ph: rnd() * Math.PI * 2, warm: 0, gath: 0 });
+  }
+  function resize() {
+    DPR = Math.min(2, devicePixelRatio || 1);
+    W = cv.clientWidth; H = cv.clientHeight; cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    M = Math.min(W, H); portrait = H >= W;
+    cx = W / 2; cy = H * (portrait ? 0.40 : 0.42);
+    /* one creature, two poses: the standing spindle in portrait, the lens in landscape */
+    RX = portrait ? M * 0.24 : M * 0.62; RY = portrait ? M * 0.55 : M * 0.22;
+    for (const p of P) if (!p.x) { p.x = cx + p.hu * RX; p.y = cy + p.hv * RY; }
+  }
+  addEventListener("resize", resize); resize();
+
+  /* surface units (1 = shorter side) → screen px */
+  const sx = (u) => u * M, sy = (v) => v * M;
+
+  /* feelings the organism answers with light — the visual half of every
+     haptic, and the whole response on a phone that cannot buzz */
+  const rings = [];
+  function answer(ev) {
+    const x = sx(ev.x), y = sy(ev.y);
+    if (ev.type === "startle") {
+      for (const p of P) {                                   // the flinch: pushed from the touch, scaled by the (habituated) strength
+        const dx = p.x - x, dy = p.y - y, d = Math.hypot(dx, dy) + 20;
+        const k = ev.strength * 2600 / d;
+        p.vx += dx / d * k; p.vy += dy / d * k;
+      }
+      rings.push({ x, y, r: 6, a: 0.5 * ev.strength, grow: 260, col: "191,230,255" });
+    } else if (ev.type === "notice") rings.push({ x, y, r: 4, a: 0.35 * ev.strength + 0.05, grow: 90, col: "143,163,184" });
+    else if (ev.type === "pulse") rings.push({ x, y, r: 10, a: 0.18 + 0.2 * ev.strength, grow: 70, col: "226,185,138" });
+    else if (ev.type === "trust") rings.push({ x, y, r: 12, a: 0.35, grow: 140, col: "226,185,138" });
+    else if (ev.type === "wave") {
+      /* THE WAVE: what the hold gathered is thrown along the current. Launch
+         = the hand's own velocity × how gathered each shard was, fanned a
+         little either side so it leaves as a swell, not a bullet. */
+      const vx = ev.vx * M, vy = ev.vy * M, sp = Math.hypot(vx, vy) + 1e-6, nx = -vy / sp, ny = vx / sp;
+      for (const p of P) {
+        const near = Math.exp(-Math.hypot(p.x - x, p.y - y) / (0.15 * M));
+        const w = Math.max(p.gath, 0.15 * near);                  // what was GATHERED goes; the rest stays home
+        /* a swell, not a cannon: launch speed capped at ~0.9 screen/s, so the
+           gathered shards travel a third of the glass and come home */
+        const cap = Math.min(1, THROW * M / sp);
+        const k = (0.55 + 0.35 * ev.strength) * w * cap, fan = Math.sin(p.ph * 7.3) * 0.3 * sp * k;
+        p.vx += vx * k + nx * fan; p.vy += vy * k + ny * fan;
+        p.gath = 0;
+      }
+      scatter = Math.max(scatter, 0.4 + 0.6 * ev.strength);
+      rings.push({ x, y, r: 8, a: 0.3 + 0.3 * ev.strength, grow: 320, col: "217,223,228" });
+    }
+    say(ev);
+  }
+
+  /* ---- plain-language readout -------------------------------------------- */
+  const WORDS = {
+    notice: "It noticed you.", startle: "You tapped — it startled", pulse: "You're holding — its heartbeat",
+    trust: "It trusts your hand.", current: "You're stroking — it rides the current", release: "You let go.",
+    wave: "You swept it away — the current carries it off.",
+    settle: "It is settling."
+  };
+  let saidAt = 0;
+  function say(ev) {
+    if (ev.type === "current" && performance.now() - saidAt < 400) return;
+    let s = WORDS[ev.type] || ev.type;
+    if (ev.type === "startle") s += " (" + Math.round(ev.strength * 100) + "%)" + (ev.strength < 0.45 ? ", less than before." : ".");
+    if (ev.type === "pulse") s += ev.trust > 0.5 ? ", slowing." : ".";
+    if (ev.type === "current") s += ".";
+    $("said").textContent = s; saidAt = performance.now();
+  }
+
+  ZigTouch.attach(cv, touch, {});
+  touch.on((ev) => {
+    const felt = haptics.feel(ev);
+    if (felt) lastFelt.ms = performance.now();
+    if (ev.type !== "settle") $("hint").style.opacity = "0";
+  });
+
+  /* ---- frame --------------------------------------------------------------- */
+  let last = performance.now(), breath = 0;
+  const bar = (id, v) => { $(id).style.width = Math.round(Math.max(0, Math.min(1, v)) * 100) + "%"; };
+  function frame(now) {
+    const f = touch.update(now);
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+
+    const period = 5.5 + 3.0 * f.settle + 2.0 * f.trust;           // calmer = slower, deeper
+    breath += dt * Math.PI * 2 / period;
+    const depth = 0.04 + 0.04 * f.settle;
+    const scale = (1 + depth * Math.sin(breath)) * (1 - 0.10 * f.arousal);
+    const ax = sx(f.attention.x), ay = sy(f.attention.y);
+    const toA = Math.hypot(ax - cx, ay - cy) + 1;
+    /* the body leans toward a trusted hand and recoils from a startle */
+    const lean = f.attention.w * (0.08 * f.trust - 0.10 * f.arousal) * M;
+    const ox = (ax - cx) / toA * lean, oy = (ay - cy) / toA * lean;
+    const curX = sx(f.current.x), curY = sy(f.current.y);
+    scatter *= Math.exp(-dt / 2.2);
+    /* after a wave the body's hold on its shards loosens, so they travel far
+       and come home slowly — the settle is the return, not a snap back */
+    const spring = (5 + 5 * f.settle - 3 * f.current.s) * (1 - 0.85 * scatter), damp = (2.6 + 1.2 * f.settle) * (1 - 0.6 * scatter);
+    const jitter = 30 + 260 * f.arousal;
+
+    g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    g.globalCompositeOperation = "source-over";
+    g.fillStyle = "rgba(1,2,4," + (0.28 + 0.2 * f.settle) + ")";   // a short afterimage; the black is protected
+    g.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = "lighter";
+    g.lineCap = "round";
+
+    for (const p of P) {
+      p.ph += dt * (0.7 + p.len);
+      const tx = cx + ox + p.hu * RX * scale, ty = cy + oy + p.hv * RY * scale;
+      let axx = (tx - p.x) * spring - p.vx * damp + Math.sin(p.ph * 1.3) * jitter * 0.3;
+      let ayy = (ty - p.y) * spring - p.vy * damp + Math.cos(p.ph) * jitter * 0.3;
+      /* THE NUCLEUS: trusted shards gather into a small lens around a still
+         hand — each keeps its place in the body, scaled down, so the gathering
+         has a shape of its own instead of collapsing to a point */
+      const dA = Math.hypot(p.x - ax, p.y - ay);
+      const nearA = Math.exp(-dA / (0.20 * M)) * f.attention.w;
+      const pull = NUCLEUS * f.trust * nearA;
+      if (f.phase === "hold") {
+        const gx = ax + p.hu * RX * 0.28, gy = ay + p.hv * RY * 0.28;
+        axx += (gx - p.x) * 7 * pull; ayy += (gy - p.y) * 7 * pull;
+        p.gath += (Math.min(1, pull * 1.6) - p.gath) * Math.min(1, dt / 0.6);
+      } else if (f.phase !== "stroke") p.gath *= Math.exp(-dt / 3);
+      /* current: shards near the stroke ride it */
+      if (f.current.s > 0.01) {
+        const nearC = Math.exp(-Math.hypot(p.x - curX, p.y - curY) / (0.2 * M));
+        axx += f.current.vx * M * 6 * f.current.s * nearC; ayy += f.current.vy * M * 6 * f.current.s * nearC;
+      }
+      /* the world has an edge: a soft wall keeps every shard on the glass,
+         so a wave carries the body across its world, never out of it */
+      const pad = 0.16 * M;                                       // a cushion, not a wall: it brakes as well as pushes
+      const edge = (d) => d > 0 ? d / pad : 0;
+      const ex = edge(pad - p.x) - edge(p.x - (W - pad)), ey = edge(pad - p.y) - edge(p.y - (H - pad));
+      if (ex) { axx += ex * Math.abs(ex) * 900 - p.vx * 6 * Math.abs(ex); }
+      if (ey) { ayy += ey * Math.abs(ey) * 900 - p.vy * 6 * Math.abs(ey); }
+      p.vx += axx * dt; p.vy += ayy * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      p.warm += ((0.15 + 0.85 * nearA) * f.trust - p.warm) * Math.min(1, dt * 1.5);
+
+      const sp = Math.hypot(p.vx, p.vy);
+      const tang = Math.atan2(p.hv * RY, p.hu * RX) + Math.PI / 2;
+      const ang = sp > 25 ? Math.atan2(p.vy, p.vx) : tang;
+      p.ang += Math.atan2(Math.sin(ang - p.ang), Math.cos(ang - p.ang)) * Math.min(1, dt * 4);
+      const L = (3 + 4 * p.len) * (1 + Math.min(1.5, sp / 300));
+      const w = p.warm, ice = f.arousal * Math.exp(-dA / (0.3 * M));
+      const r = Math.round(217 * (1 - w) + 236 * w - 20 * ice), gg = Math.round(223 * (1 - w) + 162 * w + 7 * ice),
+            b = Math.round(228 * (1 - w) + 84 * w + 27 * ice);
+      g.strokeStyle = "rgba(" + r + "," + gg + "," + b + "," + (0.34 + 0.25 * p.len) + ")";
+      g.lineWidth = 1.1 + 0.5 * p.len;
+      g.beginPath();
+      g.moveTo(p.x - Math.cos(p.ang) * L, p.y - Math.sin(p.ang) * L);
+      g.lineTo(p.x + Math.cos(p.ang) * L, p.y + Math.sin(p.ang) * L);
+      g.stroke();
+    }
+    for (let i = rings.length - 1; i >= 0; i--) {
+      const q = rings[i]; q.r += q.grow * dt; q.a *= Math.exp(-dt / 0.35);
+      if (q.a < 0.01) { rings.splice(i, 1); continue; }
+      g.strokeStyle = "rgba(" + q.col + "," + q.a.toFixed(3) + ")"; g.lineWidth = 1.2;
+      g.beginPath(); g.arc(q.x, q.y, q.r, 0, Math.PI * 2); g.stroke();
+    }
+
+    bar("m-startle", f.arousal); bar("m-habit", f.habituation); bar("m-trust", f.trust); bar("m-settle", f.settle);
+    if (f.phase === "idle" && f.settle > 0.95 && performance.now() - saidAt > 4000) $("said").textContent = "It is resting.";
+    window.__zigtouch = f;                                         // probe handle for the headless gate
+    requestAnimationFrame(frame);
+  }
+
+  /* ---- controls ------------------------------------------------------------ */
+  const toggle = (btn, on, a, b) => { btn.setAttribute("aria-pressed", String(on)); btn.textContent = on ? a : b; };
+  $("b-haptics").addEventListener("click", () => {
+    const on = $("b-haptics").getAttribute("aria-pressed") !== "true";
+    toggle($("b-haptics"), on, "Haptics on", "Haptics off"); haptics.enabled = on;
+  });
+  $("b-readout").addEventListener("click", () => {
+    const on = $("panel").classList.toggle("hidden") === false;
+    toggle($("b-readout"), on, "Readout on", "Readout off");
+  });
+  $("b-forget").addEventListener("click", () => {
+    store.del(MEM); touch.importMemory({ v: 1, trait: { boldness: 0.5, sociability: 0.5 } });
+    $("said").textContent = "Its long memory of you is cleared. This visit's memory stays until you reload.";
+  });
+  if (iOS && typeof navigator.vibrate !== "function") {
+    $("b-ios").hidden = false; toggle($("b-ios"), iosSwitch, "iPhone tick on (test)", "iPhone tick (test)");
+    $("b-ios").addEventListener("click", () => {
+      iosSwitch = !iosSwitch; toggle($("b-ios"), iosSwitch, "iPhone tick on (test)", "iPhone tick (test)"); makeHaptics();
+    });
+  }
+  if (hash.get("haptics") === "off") toggle($("b-haptics"), false, "Haptics on", "Haptics off");
+  if (hash.get("readout") === "off") { $("panel").classList.add("hidden"); toggle($("b-readout"), false, "Readout on", "Readout off"); }
+
+  makeHaptics();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

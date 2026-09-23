@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Zigverse — touch lab v0.2</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Touch lab">
+<meta name="theme-color" content="#010204">
+<!-- v0.2 THE NUCLEUS AND THE WAVE (Bill, 2026-09-22): a held finger becomes
+     the nucleus — trusted shards gather into a small lens around it; a sweep
+     let go while moving is a WAVE that sends what was gathered off along the
+     current, and the body drifts home and settles. A/B dials in the address:
+     #nucleus=0..2 (how strongly a held finger gathers · 1 default) and
+     #throw=0.2..2 (how far a wave can carry, screens/s · 0.9 default). -->
+<!-- ZIGTOUCH LAB 0.1 — a test bench, not a species. The creature here is a
+     small 2D lens that READS touch.field and nothing else; every behaviour you
+     feel comes from engine/zigtouch.js and engine/zighaptics.js, which is the
+     point: the same two files will drive the WebGPU organism, Kelp, Rootwhale,
+     and a lobby screen. 2D canvas on purpose — it opens on any phone, WebGPU
+     or not, so the test is about touch and haptics and nothing else. -->
+<style>
+  :root {
+    color-scheme: dark;
+    --void: #010204; --nacre: #d9dfe4; --moon: #8fa3b8; --amber: #e2b98a; --ice: #bfe6ff; --dim: #6f7b86;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  html, body { margin: 0; height: 100%; background: var(--void); color: var(--nacre); overflow: hidden;
+               font-family: var(--serif); -webkit-text-size-adjust: 100%; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .hint { position: fixed; left: 0; right: 0; top: calc(env(safe-area-inset-top, 0px) + 18px);
+          text-align: center; font-size: 17px; line-height: 1.4; color: var(--moon); pointer-events: none;
+          padding: 0 24px; transition: opacity 1.2s ease; }
+  .panel { position: fixed; left: 0; right: 0; bottom: 0;
+           padding: 14px 20px calc(env(safe-area-inset-bottom, 0px) + 14px);
+           background: linear-gradient(to top, rgba(1,2,4,.92) 60%, rgba(1,2,4,0));
+           font-size: 15px; line-height: 1.45; }
+  .panel.hidden .readout { display: none; }
+  .meters { display: grid; grid-template-columns: 7.5em 1fr; gap: 6px 12px; align-items: center; max-width: 34em; margin: 0 auto; }
+  .meters span { color: var(--dim); }
+  .bar { height: 3px; background: rgba(143,163,184,.18); border-radius: 2px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--moon); }
+  .bar.trust i { background: var(--amber); } .bar.startle i { background: var(--ice); }
+  .said { max-width: 34em; margin: 10px auto 0; color: var(--nacre); min-height: 1.45em; }
+  .why { max-width: 34em; margin: 4px auto 0; color: var(--dim); font-size: 13px; }
+  .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+  button { font: inherit; font-size: 15px; color: var(--nacre); background: transparent;
+           border: 1px solid rgba(143,163,184,.35); border-radius: 999px; padding: 7px 14px; cursor: pointer; }
+  button[aria-pressed="false"] { color: var(--dim); }
+  button:focus-visible { outline: 2px solid var(--ice); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<canvas id="glass" aria-label="A living lens. Tap it, rest a finger on it until it gathers around you, then sweep it away."></canvas>
+<div class="hint" id="hint">Tap it. Rest a finger on it until it gathers, then sweep it away.</div>
+<div class="panel" id="panel">
+  <div class="readout">
+    <div class="meters">
+      <span>Startle</span><div class="bar startle"><i id="m-startle"></i></div>
+      <span>Used to taps</span><div class="bar"><i id="m-habit"></i></div>
+      <span>Trust</span><div class="bar trust"><i id="m-trust"></i></div>
+      <span>Settled</span><div class="bar"><i id="m-settle"></i></div>
+    </div>
+    <div class="said" id="said">It is resting.</div>
+    <div class="why" id="why"></div>
+  </div>
+  <div class="row">
+    <button id="b-haptics" aria-pressed="true">Haptics on</button>
+    <button id="b-readout" aria-pressed="true">Readout on</button>
+    <button id="b-forget">Forget me</button>
+    <button id="b-ios" aria-pressed="false" hidden>iPhone tick (test)</button>
+  </div>
+</div>
+
+<script>
+/* ===== inlined: engine/zigtouch.js ===== */
+/* =============================================================================
+   engine/zigtouch.js — ZIGTOUCH 0.1.1 · a touch is weather, not a command
+   2026-09-22 · the first ZigSense input, for the living-world instrument
+   0.1.1 THE WAVE (Bill, same day): "nucleus when they hold the screen, then a
+   wave can send the shards away with the current." A stroke released while
+   still MOVING is a wave: it carries the direction, the speed, and whatever
+   trust was gathered, so what a hold drew in, a wave lets go. Released after
+   the finger has stopped, it is only a release. Nothing else changed.
+
+   WHY THIS EXISTS
+   v5.3 turned a finger into a MIDI note: press = Perf.hold(), lift under 220ms
+   = Sickle.strike(). That made a phone a performer, and it was right for the
+   Bee. It is wrong for someone who wants "something beautiful to attend to":
+   a finger that commands the organism turns watching into operating. Here a
+   finger changes the organism's WORLD, and the organism answers from its own
+   state — so the tenth tap is met differently from the first, and a hand left
+   still is met differently from one that pokes.
+
+   THE THREE GESTURES (classified per contact, with no mode switch)
+     tap    — down and up before HOLD_MS with no travel → STARTLE + orient.
+              Scaled by habituation, trust, familiarity and trait. Never grows.
+     hold   — still past HOLD_MS → TRUST, earned through two smoothing stages
+              (the charisma curve — ~3.5s to 0.8), felt as a heartbeat that
+              slows and softens as trust rises. Trust outlives the finger.
+     stroke — travel past STROKE_U → a CURRENT with position, velocity and
+              strength that decays after lift. Slow strokes soothe (a little
+              trust); fast strokes stir (a little arousal, habituated).
+
+   THE FOUR MEMORY LAYERS
+     seconds    habituation h (τ 5s) · arousal (τ 1.1s) · the startle reflex
+     minutes    mood.agitation (EMA of arousal, τ 45s) · mood.ease (EMA of trust, τ 90s)
+     session    familiarity — gentle contact-seconds, saturating (1 - e^(-s/120))
+     persistent trait.boldness · trait.sociability — drift ≤ 0.03 per session,
+                exported/imported as JSON; the HOST decides where it lives
+
+   CONTRACT
+     · Pure logic. No DOM, no GPU. The DOM adapter is ZigTouch.attach().
+     · FIXED TIMESTEP (1/120 s). Inputs carry timestamps and are applied at the
+       step their time falls in, so the same gestures give the same field at
+       30, 60, 120 or 144 fps — proven in test/zigtouch_ref.mjs.
+     · Coordinates are SURFACE UNITS: 1.0 = the shorter side of the surface.
+       A phone and a 55" lobby screen classify a stroke the same way; set
+       opts.unit to rescale for physical size later.
+     · The organism READS touch.field. Feeling events (notice · startle ·
+       pulse · trust · current · wave · settle) go to listeners — ZigHaptics renders
+       them, a species may answer them visually. Nothing here moves an agent.
+   ========================================================================== */
+(function (global) {
+  "use strict";
+
+  const VERSION = "0.1.1";
+  const STEP = 1 / 120;                 // behavior clock — rendering never touches it
+  const STEP_MS = 1000 * STEP;
+  const MAX_CATCHUP_MS = 250;           // a backgrounded tab resumes; it does not replay a minute
+
+  const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+  const ease = (cur, tgt, dt, tau) => cur + (tgt - cur) * (1 - Math.exp(-dt / tau));
+  const hyp = (x, y) => Math.sqrt(x * x + y * y);
+
+  /* every number a species or a venue might retune lives here, named */
+  const DEFAULTS = {
+    unit: 1,                 // surface-unit scale (1 = shorter side of the surface)
+    holdMs: 320,             // stillness this long = a hold (v5.3 used 220 for tap/hold)
+    strokeU: 0.045,          // travel beyond this = a stroke
+    jitterU: 0.25,           // speed (u/s) during a hold that counts as fidgeting
+
+    habitUp: 0.40,           // fraction of the remaining headroom one tap consumes
+    habitTau: 5.0,           // s — habituation fades
+    habitDepth: 0.88,        // fully habituated response = 1 - depth
+    novelReach: 0.5,         // u — a tap this far from the last one is fully novel
+    novelWeight: 0.6,        // how much novelty restores the response (dishabituation)
+
+    arousalTau: 1.1,         // s — the startle envelope decays
+    trustTau1: 1.2,          // s — first smoothing stage of trust (÷ with familiarity)
+    trustTau2: 1.0,          // s — second smoothing stage
+    trustKeepTau: 6.0,       // s — trust lingers after the hand leaves
+    trustFire: 0.75,         // trust event threshold (re-arms below trustRearm)
+    trustRearm: 0.40,
+    heartMin: 0.85,          // s — heartbeat period at zero trust
+    heartSpan: 1.10,         // s — added to the period at full trust (slower = calmer)
+
+    currentTau: 1.6,         // s — a current outlives the stroke
+    grainU: 0.07,            // u of travel between 'current' grain events
+    strokeSlow: 0.8,         // u/s — at or below: soothing
+    strokeFast: 2.5,         // u/s — at or above: stirring
+    waveSpeed: 0.9,          // u/s — a stroke let go at this speed or more is a WAVE
+    waveFull: 2.5,           // u/s — a wave at full strength
+
+    settleTau: 4.0,          // s — the world comes to rest
+    settleFire: 0.6,         // settle event threshold
+    settleQuiet: 0.15,       // arousal must be under this before settling begins
+    attentionTau: 3.0,       // s — the organism stops looking where you were
+
+    moodAgitTau: 45, moodEaseTau: 90, famScale: 120,
+    traitDrift: 0.03, traitLo: 0.2, traitHi: 0.8
+  };
+
+  function create(opts) {
+    const o = Object.assign({}, DEFAULTS, opts || {});
+    const listeners = [];
+    const queue = [];                   // pending inputs, applied by timestamp
+    const contacts = new Map();         // pointer id → contact record
+    let simMs = null;                   // behavior clock (ms, same base as input timestamps)
+    let lastTap = null;                 // {x,y} — novelty is measured from here
+    let t1 = 0;                         // trust, first smoothing stage
+    let interacted = false, settleArmed = false, trustArmed = true;
+
+    const field = {
+      phase: "idle",                    // idle · contact · hold · stroke · settling
+      contacts: 0,
+      arousal: 0, trust: 0, settle: 1, habituation: 0,
+      attention: { x: 0.5, y: 0.5, w: 0 },
+      current: { x: 0.5, y: 0.5, vx: 0, vy: 0, s: 0 },
+      mood: { agitation: 0, ease: 0 },
+      familiarity: 0, gentleSec: 0,
+      trait: { boldness: 0.5, sociability: 0.5 },
+      lastStartle: 0,                   // strength of the most recent startle (for probes)
+      time: 0                           // seconds of behavior simulated
+    };
+
+    const emit = (type, strength, x, y, extra) => {
+      const ev = Object.assign({ type, strength: clamp(strength, 0, 1), x, y, t: field.time }, extra || {});
+      for (const fn of listeners) fn(ev, field);
+    };
+
+    /* the startle a single tap earns right now — the heart of the calm */
+    function startleFor(x, y) {
+      const novelty = lastTap ? clamp(hyp(x - lastTap.x, y - lastTap.y) / (o.novelReach * o.unit), 0, 1) : 1;
+      const hEff = field.habituation * (1 - o.novelWeight * novelty);
+      const bold = 1.15 - 0.3 * field.trait.boldness;             // a bold creature flinches less
+      const fam = 1 - 0.4 * field.familiarity;                     // a familiar hand, less
+      const calm = 1 - 0.6 * field.trust;                          // a trusted hand, less still
+      return clamp((1 - o.habitDepth * hEff) * bold * fam * calm, 0, 1);
+    }
+
+    function applyInput(ev) {
+      const u = o.unit;
+      if (ev.kind === "down") {
+        const c = { id: ev.id, x0: ev.x, y0: ev.y, x: ev.x, y: ev.y, t0: ev.t, tLast: ev.t,
+                    vx: 0, vy: 0, travel: 0, grain: 0, kind: "contact", heartIn: 0 };
+        contacts.set(ev.id, c);
+        interacted = true; settleArmed = true;
+        field.settle = 0;
+        field.attention.x = ev.x; field.attention.y = ev.y; field.attention.w = 1;
+        /* notice — the organism feels contact before it knows what kind. Soft,
+           and it habituates with the startle so a tapping hand fades together. */
+        emit("notice", 0.35 * startleFor(ev.x, ev.y), ev.x, ev.y, { id: ev.id });
+      } else if (ev.kind === "move") {
+        const c = contacts.get(ev.id); if (!c) return;
+        const dtm = Math.max(1, ev.t - c.tLast) / 1000;
+        const dx = ev.x - c.x, dy = ev.y - c.y;
+        const k = 1 - Math.exp(-dtm / 0.08);                         // 80ms velocity smoothing
+        c.vx += (dx / dtm - c.vx) * k; c.vy += (dy / dtm - c.vy) * k;
+        c.travel += hyp(dx, dy); c.grain += hyp(dx, dy);
+        c.x = ev.x; c.y = ev.y; c.tLast = ev.t;
+        if (c.kind !== "stroke" && hyp(c.x - c.x0, c.y - c.y0) > o.strokeU * u) c.kind = "stroke";
+        field.attention.x = c.x; field.attention.y = c.y; field.attention.w = 1;
+      } else if (ev.kind === "up" || ev.kind === "cancel") {
+        const c = contacts.get(ev.id); if (!c) return;
+        contacts.delete(ev.id);
+        if (ev.kind === "up" && c.kind === "contact" && (ev.t - c.t0) < o.holdMs) {
+          /* TAP: startle + orient, then habituate. The response is computed
+             BEFORE the increment, so the first tap is always the fullest. */
+          const s = startleFor(c.x, c.y);
+          field.lastStartle = s;
+          field.arousal = Math.max(field.arousal, s);
+          field.habituation += (1 - field.habituation) * o.habitUp;
+          field.trust *= 1 - 0.25 * s; t1 *= 1 - 0.25 * s;           // a poke costs a little trust
+          lastTap = { x: c.x, y: c.y };
+          emit("startle", s, c.x, c.y, { id: c.id });
+        } else if (c.kind === "stroke") {
+          /* THE WAVE — let go while still moving and the gathered body is sent
+             off along the current. Strength = speed × what trust was gathered
+             (a wave from an open hand is light; from a nucleus it carries). */
+          const sp = hyp(c.vx, c.vy);
+          if (sp >= o.waveSpeed * u) {
+            const s = clamp(sp / (o.waveFull * u), 0, 1) * (0.4 + 0.6 * field.trust);
+            field.current.s = Math.max(field.current.s, clamp(sp / (o.waveFull * u), 0, 1));
+            emit("wave", s, c.x, c.y, { id: c.id, vx: c.vx, vy: c.vy, speed: sp, gathered: field.trust });
+          } else emit("release", 0.3 * field.current.s, c.x, c.y, { id: c.id, from: "stroke" });
+        } else if (c.kind === "hold") {
+          emit("release", 0.3 * field.trust, c.x, c.y, { id: c.id, from: "hold" });
+        }
+      }
+    }
+
+    function step(dt) {
+      field.time += dt;
+      /* promote still contacts to holds (time is the classifier's other axis) */
+      let holding = null, stroking = null;
+      for (const c of contacts.values()) {
+        /* a finger that stops sends NO more move events, so its last velocity
+           would freeze — and a stopped finger would throw a wave. Silence on
+           the wire means stillness: velocity bleeds away after 40ms of it. */
+        if (simMs - c.tLast > 40) { const k = Math.exp(-dt / 0.08); c.vx *= k; c.vy *= k; }
+        if (c.kind === "contact" && (simMs - c.t0) >= o.holdMs) { c.kind = "hold"; c.heartIn = 0.25; }
+        if (c.kind === "hold") holding = c;
+        if (c.kind === "stroke") stroking = c;
+      }
+
+      /* ---- seconds layer ---- */
+      field.habituation *= Math.exp(-dt / o.habitTau);
+      field.arousal *= Math.exp(-dt / o.arousalTau);
+
+      /* ---- TRUST: earned by stillness, two stages, familiarity speeds it ---- */
+      const soc = 0.75 + 0.5 * field.trait.sociability;            // 1.0 at the neutral trait
+      const famK = (1 + field.familiarity) * soc;
+      if (holding) {
+        const fidget = clamp(hyp(holding.vx, holding.vy) / o.jitterU, 0, 1);
+        t1 = ease(t1, 1, dt * (1 - 0.7 * fidget), o.trustTau1 / famK);
+        field.trust = ease(field.trust, t1, dt, o.trustTau2);
+        field.gentleSec += dt * (0.5 + 0.5 * field.trust);
+        /* heartbeat — the organism's pulse felt through the glass. Slower and
+           softer as trust rises: this is the settling, rendered in time. */
+        holding.heartIn -= dt;
+        if (holding.heartIn <= 0) {
+          holding.heartIn = o.heartMin + o.heartSpan * field.trust;
+          emit("pulse", 0.25 + 0.45 * (1 - field.trust), holding.x, holding.y, { id: holding.id, trust: field.trust });
+        }
+      } else {
+        const keep = Math.exp(-dt / o.trustKeepTau);                // trust outlives the hand
+        t1 *= keep; field.trust *= keep;
+      }
+      if (trustArmed && field.trust >= o.trustFire) {
+        trustArmed = false;
+        emit("trust", field.trust, field.attention.x, field.attention.y);
+      } else if (!trustArmed && field.trust < o.trustRearm) trustArmed = true;
+
+      /* ---- CURRENT: a stroke is a current to ride ---- */
+      const cur = field.current;
+      if (stroking) {
+        const sp = hyp(stroking.vx, stroking.vy);
+        cur.x = stroking.x; cur.y = stroking.y;
+        cur.vx = stroking.vx; cur.vy = stroking.vy;
+        cur.s = ease(cur.s, clamp(sp / 1.5, 0, 1), dt, 0.08);
+        if (sp <= o.strokeSlow) {                                   // a slow stroke soothes
+          t1 = ease(t1, 0.6, dt, o.trustTau1 * 2 / famK);
+          field.trust = ease(field.trust, t1, dt, o.trustTau2);
+          field.gentleSec += dt * 0.5;
+        } else if (sp >= o.strokeFast) {                            // a fast one stirs — habituated, capped
+          const stir = 0.5 * clamp((sp - o.strokeFast) / o.strokeFast, 0, 1) * (1 - o.habitDepth * field.habituation);
+          field.arousal = Math.max(field.arousal, stir);
+          field.habituation += (1 - field.habituation) * 0.02;
+        }
+        if (stroking.grain >= o.grainU * o.unit) {
+          stroking.grain = 0;
+          emit("current", 0.2 + 0.6 * cur.s, cur.x, cur.y, { id: stroking.id, vx: cur.vx, vy: cur.vy });
+        }
+      } else {
+        cur.s *= Math.exp(-dt / o.currentTau);
+        cur.vx *= Math.exp(-dt / o.currentTau); cur.vy *= Math.exp(-dt / o.currentTau);
+      }
+
+      /* ---- SETTLE: after the hand leaves, the world comes to rest ---- */
+      field.contacts = contacts.size;
+      if (contacts.size === 0) {
+        field.attention.w *= Math.exp(-dt / o.attentionTau);
+        if (field.arousal < o.settleQuiet) field.settle = ease(field.settle, 1, dt, o.settleTau);
+        if (settleArmed && field.settle >= o.settleFire) {
+          settleArmed = false;
+          emit("settle", 0.3 * (0.4 + 0.6 * field.trust), field.attention.x, field.attention.y);
+        }
+      }
+      field.phase = stroking ? "stroke" : holding ? "hold" : contacts.size ? "contact"
+                  : (interacted && field.settle < 0.95) ? "settling" : "idle";
+
+      /* ---- minutes + session layers ---- */
+      field.mood.agitation = ease(field.mood.agitation, field.arousal, dt, o.moodAgitTau);
+      field.mood.ease = ease(field.mood.ease, field.trust, dt, o.moodEaseTau);
+      field.familiarity = 1 - Math.exp(-field.gentleSec / o.famScale);
+      field.arousal = clamp(field.arousal, 0, 1);
+      field.trust = clamp(field.trust, 0, 1);
+    }
+
+    const api = {
+      VERSION, field, options: o,
+      on(fn) { listeners.push(fn); return () => { const i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); }; },
+
+      /* inputs — x,y in surface units, t in ms on the same clock update() is fed */
+      down(id, x, y, t)   { queue.push({ kind: "down", id, x, y, t }); },
+      move(id, x, y, t)   { queue.push({ kind: "move", id, x, y, t }); },
+      up(id, x, y, t)     { queue.push({ kind: "up", id, x, y, t }); },
+      cancel(id, t)       { queue.push({ kind: "cancel", id, x: 0, y: 0, t }); },
+
+      /* advance the behavior clock to nowMs in fixed steps, applying each input
+         at the step its timestamp falls in. Call every frame AND inside input
+         handlers — the second is what lets a haptic land inside the gesture. */
+      update(nowMs) {
+        if (simMs === null) simMs = queue.length ? Math.min(nowMs, queue[0].t) : nowMs;
+        if (nowMs - simMs > MAX_CATCHUP_MS) simMs = nowMs - MAX_CATCHUP_MS;
+        queue.sort((a, b) => a.t - b.t);
+        while (simMs + STEP_MS <= nowMs) {
+          const edge = simMs + STEP_MS;
+          while (queue.length && queue[0].t <= edge) applyInput(queue.shift());
+          simMs = edge;
+          step(STEP);
+        }
+        /* inputs stamped inside the step that has not run yet are applied NOW,
+           to the same state the next step would have applied them to — so a
+           startle is emitted inside the gesture handler (iOS needs that for
+           haptics) and the result is still identical at every frame rate */
+        while (queue.length && queue[0].t <= nowMs) applyInput(queue.shift());
+        return field;
+      },
+
+      /* ---- persistent layer — the HOST stores the JSON (localStorage, a venue file) ---- */
+      exportMemory() {
+        return { v: 1, trait: { boldness: field.trait.boldness, sociability: field.trait.sociability } };
+      },
+      importMemory(m) {
+        if (!m || m.v !== 1 || !m.trait) return false;
+        field.trait.boldness = clamp(+m.trait.boldness || 0.5, o.traitLo, o.traitHi);
+        field.trait.sociability = clamp(+m.trait.sociability || 0.5, o.traitLo, o.traitHi);
+        return true;
+      },
+      /* close the session: traits DRIFT toward what this session was like —
+         lightly, bounded, never more than traitDrift per session */
+      commitSession() {
+        const d = o.traitDrift;
+        const sessionBold = clamp(0.5 + 0.5 * field.familiarity - 0.6 * field.mood.agitation, 0, 1);
+        const sessionSoc = clamp(0.5 + 0.8 * (field.mood.ease - 0.25), 0, 1);
+        field.trait.boldness = clamp(field.trait.boldness + clamp(sessionBold - field.trait.boldness, -1, 1) * d, o.traitLo, o.traitHi);
+        field.trait.sociability = clamp(field.trait.sociability + clamp(sessionSoc - field.trait.sociability, -1, 1) * d, o.traitLo, o.traitHi);
+        return api.exportMemory();
+      }
+    };
+    return api;
+  }
+
+  /* ===========================================================================
+     ZigTouch.attach(el, touch) — the DOM adapter. Pointer events → surface
+     units, with the phone's own gestures (scroll, zoom, callout, context menu,
+     text selection) taken off the glass so a hold is ALWAYS a hold.
+     Returns detach(). opts.onInput(kind) fires after each input is applied,
+     inside the gesture — ZigHaptics needs that for iOS.
+     ======================================================================== */
+  function attach(el, touch, opts) {
+    opts = opts || {};
+    const now = () => (global.performance && performance.now ? performance.now() : Date.now());
+    const pos = (e) => {
+      const r = el.getBoundingClientRect(), m = Math.max(1, Math.min(r.width, r.height));
+      return [(e.clientX - r.left) / m, (e.clientY - r.top) / m];
+    };
+    /* event.timeStamp shares performance.now()'s origin in every current
+       browser; fall back to now() if it looks like an epoch value */
+    const stamp = (e) => (e.timeStamp > 0 && e.timeStamp < 1e11) ? e.timeStamp : now();
+    const flush = (kind) => { touch.update(now()); if (opts.onInput) opts.onInput(kind); };
+
+    el.style.touchAction = "none";
+    el.style.userSelect = "none"; el.style.webkitUserSelect = "none";
+    el.style.webkitTouchCallout = "none";
+    el.style.webkitTapHighlightColor = "transparent";
+
+    const onDown = (e) => {
+      if (el.setPointerCapture) { try { el.setPointerCapture(e.pointerId); } catch (_) {} }
+      const [x, y] = pos(e); touch.down(e.pointerId, x, y, stamp(e)); flush("down"); e.preventDefault();
+    };
+    const onMove = (e) => {
+      const list = (e.getCoalescedEvents && e.getCoalescedEvents().length) ? e.getCoalescedEvents() : [e];
+      for (const ce of list) { const [x, y] = pos(ce); touch.move(e.pointerId, x, y, stamp(ce)); }
+    };
+    const onUp = (e) => { const [x, y] = pos(e); touch.up(e.pointerId, x, y, stamp(e)); flush("up"); };
+    const onCancel = (e) => { touch.cancel(e.pointerId, stamp(e)); flush("cancel"); };
+    const block = (e) => e.preventDefault();
+
+    el.addEventListener("pointerdown", onDown);
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup", onUp);
+    el.addEventListener("pointercancel", onCancel);
+    el.addEventListener("contextmenu", block);                         // Android long-press menu
+    el.addEventListener("touchstart", block, { passive: false });      // iOS callout / magnifier
+    el.addEventListener("gesturestart", block);                        // iOS pinch
+    return function detach() {
+      el.removeEventListener("pointerdown", onDown); el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup", onUp); el.removeEventListener("pointercancel", onCancel);
+      el.removeEventListener("contextmenu", block); el.removeEventListener("touchstart", block);
+      el.removeEventListener("gesturestart", block);
+    };
+  }
+
+  /* ===========================================================================
+     ZigTouch.legacyBridge — TEMPORARY. Drives v5.3's Perf/strike chain from
+     the field so the WebGPU organism can feel ZigTouch before ZigField exists
+     in the engine. Delete it the day species read ZigField directly.
+       startle → strike(x, y, strength)   (already habituated)
+       hold    → Perf.hold(true, 0.30 + 0.55 * trust) — dwell still accrues,
+                 so the Bee's charisma keeps working
+       release → Perf.hold(false)
+     Stroke has no v5.3 consumer: field.current is exposed and unread until
+     the flock's flow kernel reads ZigField. That is the next splice.
+     ======================================================================== */
+  function legacyBridge(touch, perf, strike) {
+    touch.on((ev, f) => {
+      if (ev.type === "startle" && strike) strike(ev.x, ev.y, 0.35 + 0.6 * ev.strength);
+      if (ev.type === "release" && perf) perf.hold(false);
+    });
+    return function frame() {
+      const f = touch.field;
+      if (perf && f.phase === "hold") perf.hold(true, 0.30 + 0.55 * f.trust);
+    };
+  }
+
+  const ZigTouch = { VERSION, STEP, DEFAULTS, create, attach, legacyBridge };
+  global.ZigTouch = ZigTouch;
+
+  /* declare the capability in the Canon when the engine is present */
+  const C = global.ZigCore && global.ZigCore.Canon;
+  if (C && Array.isArray(C.laws) && !C.laws.some((l) => l.id === "touch-field")) {
+    C.laws.push({ id: "touch-field", pillar: "experience", since: "touch 0.1.0",
+      enables: "A TOUCH IS WEATHER, NOT A COMMAND - tap startles and habituates, a still hand earns trust on the charisma curve, a stroke leaves a current; four memory layers (seconds/minutes/session/persistent) on a fixed 120Hz clock, so the tenth tap is met differently from the first and the same gestures give the same organism at any frame rate",
+      proof: "zigtouch_ref" });
+  }
+  if (typeof module !== "undefined" && module.exports) module.exports = ZigTouch;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>
+/* ===== inlined: engine/zighaptics.js ===== */
+/* =============================================================================
+   engine/zighaptics.js — ZIGHAPTICS 0.1.0 · the organism's feelings, in the hand
+   2026-09-22
+
+   The organism EMITS feelings (ZigTouch: notice · startle · pulse · trust ·
+   current · settle · release). This layer RENDERS them on whatever the
+   platform has. A species never calls navigator.vibrate; it never learns what
+   phone it is on. Swap the backend, keep every organism.
+
+   BACKENDS (auto-chosen in this order)
+     "capacitor"  iOS/Android native app — @capacitor/haptics via
+                  window.Capacitor.Plugins.Haptics. STUBBED: the mapping is
+                  written and exercised by the test with a fake plugin; it goes
+                  live the day the Capacitor shell exists. Taptic impact styles
+                  carry STRENGTH, which web vibration cannot.
+     "vibrate"    Android Chrome / Firefox — navigator.vibrate(pattern). WORKS
+                  NOW. Duration only, no amplitude: strength is spent as
+                  pulse length and pattern shape. Chrome needs one prior tap on
+                  the page (sticky activation) and blocks it in cross-origin
+                  iframes.
+     "ios-switch" iOS 18+ Safari — EXPERIMENTAL, off unless opts.iosSwitch.
+                  Clicking a <label> for an <input type=checkbox switch> ticks
+                  the Taptic Engine. One fixed tick, only inside a gesture
+                  handler, so tap-feelings may land and heartbeats will not.
+     "none"       graceful silence. onVisual still fires for every feeling, so
+                  a species can answer with light instead.
+
+   RULES
+     · Rate-limited (minGapMs) with priority: a startle pre-empts a grain tick;
+       a grain tick never pre-empts a startle.
+     · Strength is scaled by gain and floored: below `floor` a feeling is
+       rendered visually only — the calm is also knowing when not to buzz.
+     · Everything fails silent. A haptic error never reaches the organism.
+   ========================================================================== */
+(function (global) {
+  "use strict";
+
+  const VERSION = "0.1.1";
+  const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+
+  /* THE PROFILE — feeling → how each backend renders it. `vib(s)` returns a
+     navigator.vibrate pattern; `nat(s)` a Capacitor call. prio orders
+     collisions. This table is the one place the FEEL of the organism is tuned. */
+  const PROFILE = {
+    notice:  { prio: 1, vib: (s) => [Math.round(10 + 8 * s)],
+                        nat: (s) => ({ fn: "selectionChanged" }) },
+    startle: { prio: 4, vib: (s) => [Math.round(18 + 34 * s)],
+                        nat: (s) => ({ fn: "impact", style: s > 0.66 ? "HEAVY" : s > 0.33 ? "MEDIUM" : "LIGHT" }) },
+    pulse:   { prio: 2, vib: (s) => [Math.round(10 + 14 * s), 110, Math.round(6 + 8 * s)],      // lub … dub
+                        nat: (s) => ({ fn: "impact", style: s > 0.5 ? "MEDIUM" : "LIGHT", dub: true }) },
+    trust:   { prio: 3, vib: (s) => [14, 70, 14, 70, 22],                                        // a small, warm answer
+                        nat: (s) => ({ fn: "notification", type: "SUCCESS" }) },
+    current: { prio: 0, vib: (s) => [Math.round(9 + 11 * s)],                                    // grain under the finger (≥9ms: shorter is below many phone motors)
+                        nat: (s) => ({ fn: "selectionChanged" }) },
+    wave:    { prio: 3, vib: (s) => [Math.round(16 + 20 * s), 45, Math.round(11 + 12 * s), 60, Math.round(8 + 6 * s)],  // a swell that runs away from the hand
+                        nat: (s) => ({ fn: "impact", style: s > 0.5 ? "MEDIUM" : "LIGHT", dub: true }) },
+    release: { prio: 1, vib: (s) => null, nat: (s) => null },                                    // felt as absence
+    settle:  { prio: 1, vib: (s) => [10, 180, 8],                                                // an exhale
+                        nat: (s) => ({ fn: "impact", style: "LIGHT" }) }
+  };
+
+  function detect(opts) {
+    const nav = global.navigator || {};
+    const cap = global.Capacitor;
+    const native = cap && typeof cap.isNativePlatform === "function" && cap.isNativePlatform();
+    const plugin = native && cap.Plugins && cap.Plugins.Haptics;
+    if (plugin) return { name: "capacitor", plugin };
+    const inFrame = (() => { try { return global.self !== global.top; } catch (_) { return true; } })();
+    if (typeof nav.vibrate === "function") return { name: "vibrate", inFrame };
+    const iOS = /iPad|iPhone|iPod/.test(nav.userAgent || "") ||
+                (nav.platform === "MacIntel" && (nav.maxTouchPoints || 0) > 1);
+    if (iOS && opts.iosSwitch && global.document) return { name: "ios-switch" };
+    return { name: "none", iOS };
+  }
+
+  function create(opts) {
+    opts = Object.assign({ gain: 1, floor: 0.06, minGapMs: 60, enabled: true, profile: PROFILE,
+                           backend: "auto", iosSwitch: false, onVisual: null, now: null }, opts || {});
+    const now = opts.now || (() => (global.performance && performance.now ? performance.now() : Date.now()));
+    const B = opts.backend === "auto" ? detect(opts) : { name: opts.backend };
+    if (B.name === "capacitor" && !B.plugin && opts.plugin) B.plugin = opts.plugin;   // test/injection seam
+    let lastAt = -1e9, lastPrio = -1, sent = 0, blocked = 0, sw = null;
+
+    if (B.name === "ios-switch") {
+      /* the switch must be in the DOM, visually absent, and reachable by a label */
+      const id = "zighaptic-" + Math.random().toString(36).slice(2, 8);
+      const input = document.createElement("input");
+      input.type = "checkbox"; input.setAttribute("switch", ""); input.id = id;
+      const label = document.createElement("label"); label.htmlFor = id;
+      for (const n of [input, label]) Object.assign(n.style, { position: "fixed", left: "-9999px", opacity: "0", pointerEvents: "none" });
+      document.body.appendChild(input); document.body.appendChild(label);
+      sw = label;
+    }
+
+    function render(kind, s) {
+      const p = opts.profile[kind]; if (!p) return false;
+      try {
+        if (B.name === "vibrate") {
+          const pat = p.vib(s); if (!pat) return false;
+          const ok = global.navigator.vibrate(pat);
+          if (ok === false) blocked++;
+          return ok !== false;
+        }
+        if (B.name === "capacitor" && B.plugin) {
+          const n = p.nat(s); if (!n) return false;
+          const H = B.plugin;
+          if (n.fn === "impact") {
+            H.impact({ style: n.style });
+            if (n.dub) setTimeout(() => { try { H.impact({ style: "LIGHT" }); } catch (_) {} }, 110);
+          } else if (n.fn === "notification") H.notification({ type: n.type });
+          else if (n.fn === "selectionChanged") { H.selectionStart && H.selectionStart(); H.selectionChanged(); H.selectionEnd && H.selectionEnd(); }
+          return true;
+        }
+        if (B.name === "ios-switch" && sw) {
+          if (kind === "current" || kind === "pulse") return false;   // can't land outside a gesture — don't pretend
+          sw.click(); return true;
+        }
+      } catch (_) { blocked++; }
+      return false;
+    }
+
+    const api = {
+      VERSION,
+      get backend() { return B.name; },
+      get enabled() { return opts.enabled; },
+      set enabled(v) { opts.enabled = !!v; if (!v && B.name === "vibrate") { try { global.navigator.vibrate(0); } catch (_) {} } },
+      get gain() { return opts.gain; }, set gain(v) { opts.gain = clamp(+v || 0, 0, 2); },
+
+      /* feel(event) — accepts a ZigTouch event {type, strength, x, y}. Returns
+         true if the hand should have felt something. Always calls onVisual. */
+      feel(ev) {
+        const kind = ev.type, s = clamp((ev.strength || 0) * opts.gain, 0, 1);
+        if (opts.onVisual) { try { opts.onVisual(ev, B.name); } catch (_) {} }
+        if (!opts.enabled || B.name === "none" || s < opts.floor) return false;
+        const p = opts.profile[kind]; if (!p) return false;
+        const t = now();
+        if (t - lastAt < opts.minGapMs && p.prio <= lastPrio) return false;   // too soon, not more important
+        const ok = render(kind, s);
+        if (ok) { lastAt = t; lastPrio = p.prio; sent++; }
+        return ok;
+      },
+
+      status() {
+        const why = {
+          capacitor: "native Taptic / Android haptics via Capacitor",
+          vibrate: B.inFrame ? "Android vibration — but this page is inside a frame, where Chrome blocks it"
+                             : "Android vibration (duration only — strength becomes length)",
+          "ios-switch": "iOS switch tick (experimental — taps only)",
+          none: B.iOS ? "iPhone browsers have no web vibration — the native app will add it"
+                      : "no haptics on this device — the organism answers with light"
+        }[B.name];
+        return { backend: B.name, sent, blocked, why };
+      },
+
+      /* stop anything in flight — call on visibilitychange/pagehide */
+      silence() { if (B.name === "vibrate") { try { global.navigator.vibrate(0); } catch (_) {} } }
+    };
+    return api;
+  }
+
+  /* ===========================================================================
+     CAPACITOR BUILD NOTES (the stub's other half, for the native shell)
+       npm i @capacitor/core @capacitor/haptics && npx cap sync ios
+       Nothing in this file changes: detect() finds window.Capacitor.Plugins
+       .Haptics on a native platform and the profile's `nat` column goes live.
+     LATER: continuous feelings (a heartbeat whose intensity and sharpness
+       follow trust) want Core Haptics — CHHapticEngine + AHAP — which
+       @capacitor/haptics does not expose. That is a small custom plugin
+       ("ZigHapticsNative") and a third column in PROFILE; not v1.
+     ======================================================================== */
+
+  const ZigHaptics = { VERSION, PROFILE, create, detect };
+  global.ZigHaptics = ZigHaptics;
+  if (typeof module !== "undefined" && module.exports) module.exports = ZigHaptics;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const hash = new URLSearchParams(location.hash.slice(1));
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} },
+    del(k) { try { localStorage.removeItem(k); } catch (_) {} }
+  };
+  const MEM = "zigtouch.memory.v1";
+  const NUCLEUS = Math.max(0, Math.min(2, parseFloat(hash.get("nucleus") || "1")));
+  const THROW = Math.max(0.2, Math.min(2, parseFloat(hash.get("throw") || "0.9")));   // wave launch cap, screens per second
+  let scatter = 0;                                               // 1 right after a wave, bleeds to 0: the body lets go, then comes home
+
+  /* ---- the touch field + its memory --------------------------------------- */
+  const touch = ZigTouch.create();
+  try { touch.importMemory(JSON.parse(store.get(MEM) || "null")); } catch (_) {}
+  const commit = () => store.set(MEM, JSON.stringify(touch.commitSession()));
+  addEventListener("pagehide", commit);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) { commit(); haptics.silence(); } });
+
+  /* ---- haptics ------------------------------------------------------------ */
+  const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  let iosSwitch = hash.get("ios") === "1";
+  let haptics;
+  const lastFelt = { ms: 0 };
+  function makeHaptics() {
+    haptics = ZigHaptics.create({ iosSwitch, onVisual: answer });
+    haptics.enabled = hash.get("haptics") !== "off" && $("b-haptics").getAttribute("aria-pressed") === "true";
+    $("why").textContent = "Haptics: " + haptics.status().why + ".";
+  }
+
+  /* ---- the organism: a lens of shards that READS the field ---------------- */
+  const cv = $("glass"), g = cv.getContext("2d");
+  let W = 0, H = 0, DPR = 1, M = 1, cx = 0, cy = 0, RX = 1, RY = 1, portrait = true;
+  const N = 520, P = [];
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < N; i++) {
+    const r = Math.sqrt(rnd()), a = rnd() * Math.PI * 2;
+    P.push({ hu: r * Math.cos(a), hv: r * Math.sin(a), x: 0, y: 0, vx: 0, vy: 0, ang: a, len: 0.6 + 0.8 * rnd(),
+             ph: rnd() * Math.PI * 2, warm: 0, gath: 0 });
+  }
+  function resize() {
+    DPR = Math.min(2, devicePixelRatio || 1);
+    W = cv.clientWidth; H = cv.clientHeight; cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    M = Math.min(W, H); portrait = H >= W;
+    cx = W / 2; cy = H * (portrait ? 0.40 : 0.42);
+    /* one creature, two poses: the standing spindle in portrait, the lens in landscape */
+    RX = portrait ? M * 0.24 : M * 0.62; RY = portrait ? M * 0.55 : M * 0.22;
+    for (const p of P) if (!p.x) { p.x = cx + p.hu * RX; p.y = cy + p.hv * RY; }
+  }
+  addEventListener("resize", resize); resize();
+
+  /* surface units (1 = shorter side) → screen px */
+  const sx = (u) => u * M, sy = (v) => v * M;
+
+  /* feelings the organism answers with light — the visual half of every
+     haptic, and the whole response on a phone that cannot buzz */
+  const rings = [];
+  function answer(ev) {
+    const x = sx(ev.x), y = sy(ev.y);
+    if (ev.type === "startle") {
+      for (const p of P) {                                   // the flinch: pushed from the touch, scaled by the (habituated) strength
+        const dx = p.x - x, dy = p.y - y, d = Math.hypot(dx, dy) + 20;
+        const k = ev.strength * 2600 / d;
+        p.vx += dx / d * k; p.vy += dy / d * k;
+      }
+      rings.push({ x, y, r: 6, a: 0.5 * ev.strength, grow: 260, col: "191,230,255" });
+    } else if (ev.type === "notice") rings.push({ x, y, r: 4, a: 0.35 * ev.strength + 0.05, grow: 90, col: "143,163,184" });
+    else if (ev.type === "pulse") rings.push({ x, y, r: 10, a: 0.18 + 0.2 * ev.strength, grow: 70, col: "226,185,138" });
+    else if (ev.type === "trust") rings.push({ x, y, r: 12, a: 0.35, grow: 140, col: "226,185,138" });
+    else if (ev.type === "wave") {
+      /* THE WAVE: what the hold gathered is thrown along the current. Launch
+         = the hand's own velocity × how gathered each shard was, fanned a
+         little either side so it leaves as a swell, not a bullet. */
+      const vx = ev.vx * M, vy = ev.vy * M, sp = Math.hypot(vx, vy) + 1e-6, nx = -vy / sp, ny = vx / sp;
+      for (const p of P) {
+        const near = Math.exp(-Math.hypot(p.x - x, p.y - y) / (0.15 * M));
+        const w = Math.max(p.gath, 0.15 * near);                  // what was GATHERED goes; the rest stays home
+        /* a swell, not a cannon: launch speed capped at ~0.9 screen/s, so the
+           gathered shards travel a third of the glass and come home */
+        const cap = Math.min(1, THROW * M / sp);
+        const k = (0.55 + 0.35 * ev.strength) * w * cap, fan = Math.sin(p.ph * 7.3) * 0.3 * sp * k;
+        p.vx += vx * k + nx * fan; p.vy += vy * k + ny * fan;
+        p.gath = 0;
+      }
+      scatter = Math.max(scatter, 0.4 + 0.6 * ev.strength);
+      rings.push({ x, y, r: 8, a: 0.3 + 0.3 * ev.strength, grow: 320, col: "217,223,228" });
+    }
+    say(ev);
+  }
+
+  /* ---- plain-language readout -------------------------------------------- */
+  const WORDS = {
+    notice: "It noticed you.", startle: "You tapped — it startled", pulse: "You're holding — its heartbeat",
+    trust: "It trusts your hand.", current: "You're stroking — it rides the current", release: "You let go.",
+    wave: "You swept it away — the current carries it off.",
+    settle: "It is settling."
+  };
+  let saidAt = 0;
+  function say(ev) {
+    if (ev.type === "current" && performance.now() - saidAt < 400) return;
+    let s = WORDS[ev.type] || ev.type;
+    if (ev.type === "startle") s += " (" + Math.round(ev.strength * 100) + "%)" + (ev.strength < 0.45 ? ", less than before." : ".");
+    if (ev.type === "pulse") s += ev.trust > 0.5 ? ", slowing." : ".";
+    if (ev.type === "current") s += ".";
+    $("said").textContent = s; saidAt = performance.now();
+  }
+
+  ZigTouch.attach(cv, touch, {});
+  touch.on((ev) => {
+    const felt = haptics.feel(ev);
+    if (felt) lastFelt.ms = performance.now();
+    if (ev.type !== "settle") $("hint").style.opacity = "0";
+  });
+
+  /* ---- frame --------------------------------------------------------------- */
+  let last = performance.now(), breath = 0;
+  const bar = (id, v) => { $(id).style.width = Math.round(Math.max(0, Math.min(1, v)) * 100) + "%"; };
+  function frame(now) {
+    const f = touch.update(now);
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+
+    const period = 5.5 + 3.0 * f.settle + 2.0 * f.trust;           // calmer = slower, deeper
+    breath += dt * Math.PI * 2 / period;
+    const depth = 0.04 + 0.04 * f.settle;
+    const scale = (1 + depth * Math.sin(breath)) * (1 - 0.10 * f.arousal);
+    const ax = sx(f.attention.x), ay = sy(f.attention.y);
+    const toA = Math.hypot(ax - cx, ay - cy) + 1;
+    /* the body leans toward a trusted hand and recoils from a startle */
+    const lean = f.attention.w * (0.08 * f.trust - 0.10 * f.arousal) * M;
+    const ox = (ax - cx) / toA * lean, oy = (ay - cy) / toA * lean;
+    const curX = sx(f.current.x), curY = sy(f.current.y);
+    scatter *= Math.exp(-dt / 2.2);
+    /* after a wave the body's hold on its shards loosens, so they travel far
+       and come home slowly — the settle is the return, not a snap back */
+    const spring = (5 + 5 * f.settle - 3 * f.current.s) * (1 - 0.85 * scatter), damp = (2.6 + 1.2 * f.settle) * (1 - 0.6 * scatter);
+    const jitter = 30 + 260 * f.arousal;
+
+    g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    g.globalCompositeOperation = "source-over";
+    g.fillStyle = "rgba(1,2,4," + (0.28 + 0.2 * f.settle) + ")";   // a short afterimage; the black is protected
+    g.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = "lighter";
+    g.lineCap = "round";
+
+    for (const p of P) {
+      p.ph += dt * (0.7 + p.len);
+      const tx = cx + ox + p.hu * RX * scale, ty = cy + oy + p.hv * RY * scale;
+      let axx = (tx - p.x) * spring - p.vx * damp + Math.sin(p.ph * 1.3) * jitter * 0.3;
+      let ayy = (ty - p.y) * spring - p.vy * damp + Math.cos(p.ph) * jitter * 0.3;
+      /* THE NUCLEUS: trusted shards gather into a small lens around a still
+         hand — each keeps its place in the body, scaled down, so the gathering
+         has a shape of its own instead of collapsing to a point */
+      const dA = Math.hypot(p.x - ax, p.y - ay);
+      const nearA = Math.exp(-dA / (0.20 * M)) * f.attention.w;
+      const pull = NUCLEUS * f.trust * nearA;
+      if (f.phase === "hold") {
+        const gx = ax + p.hu * RX * 0.28, gy = ay + p.hv * RY * 0.28;
+        axx += (gx - p.x) * 7 * pull; ayy += (gy - p.y) * 7 * pull;
+        p.gath += (Math.min(1, pull * 1.6) - p.gath) * Math.min(1, dt / 0.6);
+      } else if (f.phase !== "stroke") p.gath *= Math.exp(-dt / 3);
+      /* current: shards near the stroke ride it */
+      if (f.current.s > 0.01) {
+        const nearC = Math.exp(-Math.hypot(p.x - curX, p.y - curY) / (0.2 * M));
+        axx += f.current.vx * M * 6 * f.current.s * nearC; ayy += f.current.vy * M * 6 * f.current.s * nearC;
+      }
+      /* the world has an edge: a soft wall keeps every shard on the glass,
+         so a wave carries the body across its world, never out of it */
+      const pad = 0.16 * M;                                       // a cushion, not a wall: it brakes as well as pushes
+      const edge = (d) => d > 0 ? d / pad : 0;
+      const ex = edge(pad - p.x) - edge(p.x - (W - pad)), ey = edge(pad - p.y) - edge(p.y - (H - pad));
+      if (ex) { axx += ex * Math.abs(ex) * 900 - p.vx * 6 * Math.abs(ex); }
+      if (ey) { ayy += ey * Math.abs(ey) * 900 - p.vy * 6 * Math.abs(ey); }
+      p.vx += axx * dt; p.vy += ayy * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      p.warm += ((0.15 + 0.85 * nearA) * f.trust - p.warm) * Math.min(1, dt * 1.5);
+
+      const sp = Math.hypot(p.vx, p.vy);
+      const tang = Math.atan2(p.hv * RY, p.hu * RX) + Math.PI / 2;
+      const ang = sp > 25 ? Math.atan2(p.vy, p.vx) : tang;
+      p.ang += Math.atan2(Math.sin(ang - p.ang), Math.cos(ang - p.ang)) * Math.min(1, dt * 4);
+      const L = (3 + 4 * p.len) * (1 + Math.min(1.5, sp / 300));
+      const w = p.warm, ice = f.arousal * Math.exp(-dA / (0.3 * M));
+      const r = Math.round(217 * (1 - w) + 236 * w - 20 * ice), gg = Math.round(223 * (1 - w) + 162 * w + 7 * ice),
+            b = Math.round(228 * (1 - w) + 84 * w + 27 * ice);
+      g.strokeStyle = "rgba(" + r + "," + gg + "," + b + "," + (0.34 + 0.25 * p.len) + ")";
+      g.lineWidth = 1.1 + 0.5 * p.len;
+      g.beginPath();
+      g.moveTo(p.x - Math.cos(p.ang) * L, p.y - Math.sin(p.ang) * L);
+      g.lineTo(p.x + Math.cos(p.ang) * L, p.y + Math.sin(p.ang) * L);
+      g.stroke();
+    }
+    for (let i = rings.length - 1; i >= 0; i--) {
+      const q = rings[i]; q.r += q.grow * dt; q.a *= Math.exp(-dt / 0.35);
+      if (q.a < 0.01) { rings.splice(i, 1); continue; }
+      g.strokeStyle = "rgba(" + q.col + "," + q.a.toFixed(3) + ")"; g.lineWidth = 1.2;
+      g.beginPath(); g.arc(q.x, q.y, q.r, 0, Math.PI * 2); g.stroke();
+    }
+
+    bar("m-startle", f.arousal); bar("m-habit", f.habituation); bar("m-trust", f.trust); bar("m-settle", f.settle);
+    if (f.phase === "idle" && f.settle > 0.95 && performance.now() - saidAt > 4000) $("said").textContent = "It is resting.";
+    window.__zigtouch = f;                                         // probe handle for the headless gate
+    requestAnimationFrame(frame);
+  }
+
+  /* ---- controls ------------------------------------------------------------ */
+  const toggle = (btn, on, a, b) => { btn.setAttribute("aria-pressed", String(on)); btn.textContent = on ? a : b; };
+  $("b-haptics").addEventListener("click", () => {
+    const on = $("b-haptics").getAttribute("aria-pressed") !== "true";
+    toggle($("b-haptics"), on, "Haptics on", "Haptics off"); haptics.enabled = on;
+  });
+  $("b-readout").addEventListener("click", () => {
+    const on = $("panel").classList.toggle("hidden") === false;
+    toggle($("b-readout"), on, "Readout on", "Readout off");
+  });
+  $("b-forget").addEventListener("click", () => {
+    store.del(MEM); touch.importMemory({ v: 1, trait: { boldness: 0.5, sociability: 0.5 } });
+    $("said").textContent = "Its long memory of you is cleared. This visit's memory stays until you reload.";
+  });
+  if (iOS && typeof navigator.vibrate !== "function") {
+    $("b-ios").hidden = false; toggle($("b-ios"), iosSwitch, "iPhone tick on (test)", "iPhone tick (test)");
+    $("b-ios").addEventListener("click", () => {
+      iosSwitch = !iosSwitch; toggle($("b-ios"), iosSwitch, "iPhone tick on (test)", "iPhone tick (test)"); makeHaptics();
+    });
+  }
+  if (hash.get("haptics") === "off") toggle($("b-haptics"), false, "Haptics on", "Haptics off");
+  if (hash.get("readout") === "off") { $("panel").classList.add("hidden"); toggle($("b-readout"), false, "Readout on", "Readout off"); }
+
+  makeHaptics();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
