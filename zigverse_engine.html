@@ -78,6 +78,7 @@
   <div class="med"><label>FLASH</label> <select id="nfpick" title="Each note flashes the shards. The cupped INSIDE takes the note's own colour — twelve pitch classes around the hue wheel, the same mapping the melodic strata use — while the OUTSIDE flashes one fixed colour. A turning field alternates a constant skin with an interior that is different for every pitch."></select></div>
   <div class="med"><label>BEE</label> <select id="beepick" title="She lands with a note and NOTHING happens. Only a HELD note earns the field's attention, and it grows with the dwell — nearest shards first, then the cluster, then the mass. Release and it breaks. She is agent #0: the same letterform as every shard, only larger and lit. A queen is the same species as her workers."></select></div>
   <div class="med"><label>MOOD</label> <select id="bmpick" title="the Bee's BEHAVIOUR toward the field. off = she is a costume, drawn larger but the compute kernel has never heard of her. cozy = the field is drawn IN to her. agitate = the field is driven OFF. Breath drives only the MAGNITUDE, so the mode is your decision and a fierce cozy or a gentle agitation are each playable. Requires BEE above to be anything but off."></select></div>
+  <div class="med"><label>TOUCH</label> <select id="touchpick" title="How a finger on the glass reaches the organism. off = v5.3, a finger is a MIDI note (press = breath, quick tap = strike). field = ZigTouch: a tap STARTLES and the startle habituates (the tenth tap is met differently from the first), a still hand earns trust, a stroke becomes the world's current. nucleus = field, plus a trusted hold makes your finger the Bee's position so the field gathers to your hand, and a sweep let go while moving is a WAVE that throws her along the current with her followers. nucleus arms BEE curious + MOOD cozy if they are off. Dials in the hash: #nucleus=0..2 · #throw=0.2..2 · #haptics=off — reloads"></select></div>
   <div class="med"><label>CROWD</label> <select id="cntpick" title="how many shards exist. At 6000 on a 2560x1440 glass each gets roughly 10x10 pixels — a coloured dot, with no room to show an edge, a facing or a depth. Fewer means bigger and legible; more means the murmur has more to travel through."></select></div>
   <div class="med"><label>UNSEEN</label> <select id="unspick" title="a share of the crowd that is PRESENT but not DRAWN. They still flock, collide, carry contagion and count as neighbours — you just cannot see them. The shards you DO see are moved by neighbours you cannot, so the crowd keeps its numbers while the eye gets a thinner field."></select></div>
   <div class="med"><label>HEFT</label> <select id="heftpick" title="the shard's cross-section. foil = a single cambered sheet, which is what it has always been. Above that a back centre dips below the edges, closing it into a LENS — thick in the middle, sharp at the rim — so the blade reads as matter. cupped curves the back the same way as the front instead: a concave shell. Baked into the mesh, so this one RELOADS."></select></div>
@@ -243,6 +244,22 @@
   window.ZIG_BEEMODENAME = (function () { var v = (location.hash.match(/beemode=([a-z]+)/i) || [])[1];
     return ["off","cozy","agitate"].includes(v) ? v : "off"; })();
   window.ZIG_BEEMODE = (window.ZIG_BEEMODENAME === "off") ? null : window.ZIG_BEEMODENAME;
+  /* ZIGTOUCH (touch 0.1.2) — off · field · nucleus. off leaves v5.3's finger-as-
+     note untouched. nucleus NEEDS the Bee: it moves agent #0 and PRESENCE draws
+     the field to her, so arming it arms BEE + MOOD when they are off — and
+     rewrites the hash too, because the species reads #beemode first and a
+     stale "beemode=off" would silently disarm her (a dial that lies). */
+  window.ZIG_TOUCHNAME = (function () { var v = (location.hash.match(/[#&]touch=([a-z]+)/i) || [])[1];
+    return ["off","field","nucleus"].includes(v) ? v : "off"; })();
+  window.ZIG_TOUCH = (window.ZIG_TOUCHNAME === "off") ? null : window.ZIG_TOUCHNAME;
+  if (window.ZIG_TOUCH === "nucleus") {
+    var h0 = location.hash || "";
+    if (!(window.ZIG_BEE > 0)) { window.ZIG_BEENAME = "curious"; window.ZIG_BEE = 6;
+      h0 = /([#&])bee=[a-z]+/i.test(h0) ? h0.replace(/([#&])bee=[a-z]+/i, "$1bee=curious") : h0 + "&bee=curious"; }
+    if (!window.ZIG_BEEMODE) { window.ZIG_BEEMODENAME = "cozy"; window.ZIG_BEEMODE = "cozy";
+      h0 = /([#&])beemode=[a-z]+/i.test(h0) ? h0.replace(/([#&])beemode=[a-z]+/i, "$1beemode=cozy") : h0 + "&beemode=cozy"; }
+    if (h0 !== (location.hash || "")) history.replaceState(null, "", "#" + h0.replace(/^#&?/, ""));
+  }
   window.ZIG_BEEIGNORE = 0.28;   // seconds below which a note is simply ignored
   window.ZIG_BEEFULL   = 1.9;    // seconds at which the whole field has committed
   window.ZIG_AVATAR = (window.ZIG_BEE > 0) ? 1 : 0;
@@ -299,6 +316,10 @@
   // not the visuals. The capability remains in the engine — set = 1 to bring it back.
   window.ZIG_AMBIENCE = 0;
   window.ZIG_VOICE = "Motu M|M2|MOTU";
+  /* AUDIO GAIN — how far the horn reaches into the body. Live on Alt+[ / Alt+],
+     Alt+\\ snaps between off and 1. Pinned here (or #audio=) so a capture session
+     can be reproduced: the dial is a performance control, the hash is the record. */
+  window.ZIG_AUDIOGAIN = (function () { var v = (location.hash.match(/audio=([0-9.]+)/i) || [])[1]; return v === undefined ? undefined : +v; })();
   // MELODIC STRATA — OFF (Bill, 2026-08): the EWI note→light was too much for now. The
   // capability remains (set = 1 to bring it back); we'll design the note's role fresh later.
   window.ZIG_STRATA = 0;
@@ -314,6 +335,8 @@
   window.ZIG_LAWS = { radiance: { room: window.ZIG_ROOM } };
 </script>
 <script src="engine/zigcore.js"></script>
+<script src="engine/zigtouch.js"></script>
+<script src="engine/zighaptics.js"></script>
 <script src="engine/zigmesh.js"></script>
 <script src="engine/zigmidi.js"></script>
 <script src="engine/zigwebgpu.js"></script>
@@ -341,13 +364,18 @@
     (function () { const t = document.getElementById("bare-t");
       if (t) t.addEventListener("click", (e) => { document.body.classList.toggle("bare"); e.stopPropagation(); }); })();
     const bmsel = document.getElementById("bmpick");   // PRESENCE mood — declared with the other selects so btail() can never hit a dead zone
+    const tosel = document.getElementById("touchpick");   // ZIGTOUCH — declared with the others, riding btail() AND the reload rail below
     const lsel = document.getElementById("lightpick");
     const gsel = document.getElementById("gempick"), fbsel = document.getElementById("fabpick"), gfsel = document.getElementById("gemfacepick");
     const g2sel = document.getElementById("gem2pick");
     const fill = (sel, names, cur) => { if (!sel) return; for (const n of names) { const o = document.createElement("option"); o.value = n; o.textContent = n; if (n === cur) o.selected = true; sel.appendChild(o); } };
+    /* the touch dials and AUDIO GAIN have no dropdown (they are feel, tuned by hand) — carry
+       whatever the hash holds across every reload so a dropdown never erases them */
+    const touchDials = () => ["nucleus", "throw", "haptics", "audio"].map((k) => {
+      const m = (location.hash || "").match(new RegExp("[#&]" + k + "=([a-z0-9.]+)", "i")); return m ? "&" + k + "=" + m[1] : ""; }).join("");
     const skinTail = () => "&gem=" + (gsel ? gsel.value : "none") + "&gem2=" + (g2sel ? g2sel.value : "none") + "&fab=" + (fbsel ? fbsel.value : "none") + "&gface=" + (gfsel ? gfsel.value : "both");   // GEM · GEM FACE · FABRIC persist across every reload
     const bondTail = () => "&bond=" + (bdsel ? bdsel.value : "none") + "&spread=" + (spsel ? spsel.value : "field") + "&still=" + (stsel ? stsel.value : "restless") + "&contact=" + (ctsel ? ctsel.value : "off") + "&onset=" + (onsel ? onsel.value : "snap") + "&crowding=" + (cwsel ? cwsel.value : "loose") + "&summon=" + (susel ? susel.value : "note") + "&heft=" + (hfsel ? hfsel.value : "cupped") + "&crowd=" + (cnsel ? cnsel.value : "6000") + "&unseen=" + (unsel ? unsel.value : "all") + "&bee=" + (besel ? besel.value : "off") + "&flash=" + (nfsel ? nfsel.value : "off");   // BOND rides along in either mode
-    const btail = () => "&beemode=" + (bmsel ? bmsel.value : "off") + bondTail() + "&breath=" + (bsel ? bsel.value : "easy") + "&stage=" + (vsel ? vsel.value : "soft") + "&radiance=" + (lsel ? lsel.value : "dark") + skinTail();   // presentation + skins ride along in either mode
+    const btail = () => "&beemode=" + (bmsel ? bmsel.value : "off") + "&touch=" + (tosel ? tosel.value : "off") + touchDials() + bondTail() + "&breath=" + (bsel ? bsel.value : "easy") + "&stage=" + (vsel ? vsel.value : "soft") + "&radiance=" + (lsel ? lsel.value : "dark") + skinTail();   // presentation + skins ride along in either mode
     const dialsHash = () => "world=custom&med=" + msel.value + "&force=" + fsel.value + "&cur=" + csel.value + "&bound=" + (bnsel ? bnsel.value : "none") + "&mat=" + ssel.value + btail();
     /* a named world reloads BARE unless a sub-dial deviates from the world's NATIVE value — then
        only the deviating override rides in the hash (native skin & shape keep following the world). */
@@ -373,6 +401,7 @@
     fill(nfsel, ["off", "hint", "lit", "vivid"], window.ZIG_FLASHNAME);
     fill(besel, ["off", "shy", "curious", "magnetic"], window.ZIG_BEENAME);
     fill(bmsel, ["off", "cozy", "agitate"], window.ZIG_BEEMODENAME);
+    fill(tosel, ["off", "field", "nucleus"], window.ZIG_TOUCHNAME);
     fill(cnsel, ["600", "1500", "3000", "6000", "12000"], window.ZIG_CROWDNAME);
     fill(unsel, ["all", "third", "half", "most"], window.ZIG_UNSEENNAME);
     fill(hfsel, ["foil", "cupped", "leaf", "blade", "stone"], window.ZIG_HEFTNAME);
@@ -432,7 +461,7 @@
        rate. They cannot be applied to a running flock from here (the species reads
        its globals at boot), so for honesty they reload too rather than pretending
        to take effect. Better a visible reload than a dial that lies. */
-    for (const s of [hfsel, bdsel, ctsel, onsel, spsel, stsel, susel, cnsel, unsel, besel, bmsel, nfsel, cwsel])
+    for (const s of [hfsel, bdsel, ctsel, onsel, spsel, stsel, susel, cnsel, unsel, besel, bmsel, tosel, nfsel, cwsel])
       if (s) s.addEventListener("change", () => { location.hash = curHash(); location.reload(); });
 
     /* RADIANCE: the room's four numbers are COMPILED into the fragment shader as consts

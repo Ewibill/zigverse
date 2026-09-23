@@ -1,5 +1,5 @@
 /* =============================================================================
-   test/zigtouch_ref.mjs — CPU proof of ZIGTOUCH 0.1.0 (engine/zigtouch.js)
+   test/zigtouch_ref.mjs — CPU proof of ZIGTOUCH 0.1.2 (engine/zigtouch.js)
    (run: node test/zigtouch_ref.mjs)
    Proves the calming mechanism is a LAW, not a feel: taps habituate and never
    escalate, trust is earned slowly and outlives the hand, the world settles
@@ -200,6 +200,111 @@ console.log("[memory layers]");
   const next = ZT.create(); next.importMemory(JSON.parse(JSON.stringify(known.t.exportMemory())));
   say(JSON.stringify(next.field.trait) === JSON.stringify(known.t.field.trait), "persistent: memory survives a JSON round trip");
   say(next.importMemory({ v: 9 }) === false && next.importMemory(null) === false, "persistent: foreign or empty memory is refused, not guessed at");
+}
+
+
+console.log("[0.1.2 legacyBridge — every road out of a hold lets the note go]");
+{
+  const perf = { down: false, hold(on) { this.down = !!on; } };
+  const r = rig(); const frame = ZT.legacyBridge(r.t, perf, null);
+  const run = (ms) => { const end = r.now + ms; while (r.now < end) { r.now = Math.min(end, r.now + 1000 / 60); r.t.update(r.now); frame(); } };
+  r.t.down(1, 0.5, 0.5, r.now); run(2000);
+  const heldDuring = perf.down;
+  let x = 0.5; for (let i = 0; i < 12; i++) { run(16); x += 0.04; r.t.move(1, x, 0.5, r.now); }
+  r.t.up(1, x, 0.5, r.now); run(20);
+  say(heldDuring && of(r.log, "wave").length === 1 && !perf.down,
+    "hold → stroke → WAVE releases Perf.hold (0.1.1 left the note down forever)");
+}
+
+console.log("[0.1.2 THE NUCLEUS — earned, lingering, thrown]");
+const nrig = (opts) => { const r = rig(); const n = ZT.nucleus(r.t, Object.assign({ bounds: () => ({ w: 1, h: 2.1 }) }, opts)); return { r, n: n.out }; };
+{
+  const { r, n } = nrig(); r.tap(0.5, 0.5); r.run(300);
+  say(n.w < 0.02, `a stab is ignored — nucleus ${n.w.toFixed(3)}`);
+}
+let heldW = 0;
+{
+  const { r, n } = nrig();
+  r.t.down(1, 0.3, 0.8, r.now); r.run(500); const early = n.w; r.run(3500); heldW = n.w;
+  say(early < 0.12 && heldW > 0.7, `a still hand BECOMES the nucleus over seconds (0.5s ${early.toFixed(2)} → 4s ${heldW.toFixed(2)})`);
+  say(Math.abs(n.x - 0.3) < 1e-9 && Math.abs(n.y - 0.8) < 1e-9, "…and the nucleus sits under the finger");
+  say(n.breath > 0.7, `…and the held hand breathes (${n.breath.toFixed(2)})`);
+  r.t.up(1, 0.3, 0.8, r.now); r.run(1000);
+  say(n.w > 0.3 && n.w < heldW && Math.abs(n.x - 0.3) < 1e-9 && n.breath === 0, `plain release LINGERS where the hand was (1s after: ${n.w.toFixed(2)})`);
+  r.run(12000);
+  say(n.w < 0.05, `…then the organism takes its body back (${n.w.toFixed(3)} at 13s)`);
+}
+const waveFrom = (holdMs) => {
+  const { r, n } = nrig();
+  r.t.down(1, 0.5, 1.0, r.now); r.run(holdMs);
+  let x = 0.5; for (let i = 0; i < 10; i++) { r.run(16); x += 0.035; r.t.move(1, x, 1.0, r.now); }
+  r.t.up(1, x, 1.0, r.now); r.run(20);
+  const at = { x: n.x, w: n.w, thrown: n.thrown, g: n.gathered }; r.run(1200); const mid = n.w; r.run(9000);
+  return { r, n, lift: x, at, mid, end: n.w };
+};
+{
+  const W = waveFrom(4000);
+  say(W.at.thrown && W.at.x > W.lift + 0.05 && W.at.x <= 1 - 0.08 + 1e-9,
+    `a WAVE sends the body along the hand (lift at ${W.lift.toFixed(2)} → landed ${W.at.x.toFixed(2)}, inside the glass)`);
+  say(W.mid > 0.2 && W.end < 0.02, `…carries it, then lets go entirely (1.2s ${W.mid.toFixed(2)} → 10s ${W.end.toFixed(3)})`);
+  say(!W.n.thrown === false && Math.abs(W.n.x - W.lift) > 0.05, "…and it does NOT come back to the finger");
+  const O = waveFrom(100);
+  say(W.at.w > O.at.w * 1.5, `a wave from a nucleus carries more than one from an open hand (${W.at.w.toFixed(2)} vs ${O.at.w.toFixed(2)})`);
+}
+{
+  const { r, n } = nrig({ bounds: () => ({ w: 1, h: 2.1 }), throw: 2 });
+  r.t.down(1, 0.8, 1.0, r.now); r.run(3000);
+  let x = 0.8; for (let i = 0; i < 6; i++) { r.run(10); x += 0.03; r.t.move(1, x, 1.0, r.now); }
+  r.t.up(1, x, 1.0, r.now); r.run(20);
+  say(n.x <= 0.92 + 1e-9, `a flick at the edge lands inside the world, never off it (x ${n.x.toFixed(3)} ≤ 0.92)`);
+}
+{
+  const { r, n } = nrig(); r.t.down(1, 0.5, 0.5, r.now); r.run(3000); r.t.up(1, 0.5, 0.5, r.now);
+  r.t.down(2, 0.2, 0.5, r.now); r.run(10);
+  say(!n.thrown && Math.abs(n.x - 0.2) < 0.01, "a new contact takes the nucleus back to the new finger");
+}
+{
+  const script = (fps) => {
+    const { r, n } = nrig(); const trace = [];
+    const wrap = (fn) => (id, x, y, now) => fn(id, x, y, Math.round(now / 5) * 5);
+    r.t.down = wrap(r.t.down); r.t.move = wrap(r.t.move); r.t.up = wrap(r.t.up);
+    const step = (ms) => { r.run(ms, fps); trace.push(JSON.stringify(n)); };
+    r.t.down(1, 0.4, 0.9, r.now); step(3000);
+    let x = 0.4; for (let i = 0; i < 12; i++) { r.run(25, fps); x += 0.04; r.t.move(1, x, 0.9, r.now); }
+    r.t.up(1, x, 0.9, r.now); step(500); step(3000);
+    return trace.join("|");
+  };
+  const res = [30, 60, 120, 144].map(script);
+  say(res.every((v) => v === res[0]), "nucleus rides the fixed clock: 30 · 60 · 120 · 144 fps give the same body directive, byte for byte");
+}
+
+console.log("[0.1.2 SURFACE → WORLD]");
+{
+  /* the same matrices ZigWebGPU.mat builds (column-major, clip z 0..1) */
+  const persp = (fovY, a, n, f) => { const k = 1 / Math.tan(fovY / 2), o = new Float64Array(16); o[0] = k / a; o[5] = k; o[10] = f / (n - f); o[11] = -1; o[14] = n * f / (n - f); return o; };
+  const lookAt = (e, c, up) => {
+    const zl = Math.hypot(e[0]-c[0], e[1]-c[1], e[2]-c[2]); const Z = [(e[0]-c[0])/zl, (e[1]-c[1])/zl, (e[2]-c[2])/zl];
+    let X = [up[1]*Z[2]-up[2]*Z[1], up[2]*Z[0]-up[0]*Z[2], up[0]*Z[1]-up[1]*Z[0]]; const xl = Math.hypot(...X); X = X.map((v) => v / xl);
+    const Y = [Z[1]*X[2]-Z[2]*X[1], Z[2]*X[0]-Z[0]*X[2], Z[0]*X[1]-Z[1]*X[0]]; const o = new Float64Array(16);
+    o[0]=X[0];o[1]=Y[0];o[2]=Z[0];o[4]=X[1];o[5]=Y[1];o[6]=Z[1];o[8]=X[2];o[9]=Y[2];o[10]=Z[2];
+    o[12]=-(X[0]*e[0]+X[1]*e[1]+X[2]*e[2]);o[13]=-(Y[0]*e[0]+Y[1]*e[1]+Y[2]*e[2]);o[14]=-(Z[0]*e[0]+Z[1]*e[1]+Z[2]*e[2]);o[15]=1; return o; };
+  const mul = (a, b) => { const o = new Float64Array(16); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k*4+r] * b[c*4+k]; o[c*4+r] = s; } return o; };
+  const eye = [140, 70, 40], ctr = [0, 62, 0], W = 390, H = 844;
+  const vp = Float32Array.from(mul(persp(0.9, W / H, 0.5, 1200), lookAt(eye, ctr, [0, 1, 0])));
+  const fwd = [ctr[0]-eye[0], ctr[1]-eye[1], ctr[2]-eye[2]]; const fl = Math.hypot(...fwd); const N = fwd.map((v) => v / fl);
+  let worst = 0;
+  for (const P of [[0, 62, 0], [20, 80, -10], [-35, 40, 25]]) {
+    const q = [0, 1, 2, 3].map((r) => vp[r] * P[0] + vp[4 + r] * P[1] + vp[8 + r] * P[2] + vp[12 + r]);
+    const ndc = [q[0] / q[3], q[1] / q[3]];
+    const got = ZT.toWorld(vp, ndc[0], ndc[1], P, N);
+    worst = Math.max(worst, Math.hypot(got[0] - P[0], got[1] - P[1], got[2] - P[2]));
+  }
+  say(worst < 1e-2, `a projected point unprojects to itself on the view plane (worst ${worst.toExponential(1)} world units)`);
+  const m = ZT.surfaceToNdc(W / Math.min(W, H) / 2, H / Math.min(W, H) / 2, W, H);
+  const tl = ZT.surfaceToNdc(0, 0, W, H);
+  say(Math.abs(m[0]) < 1e-12 && Math.abs(m[1]) < 1e-12 && tl[0] === -1 && tl[1] === 1, "surface centre → NDC 0,0 · top-left → -1,+1 (y up)");
+  const up = ZT.toWorld(vp, 0, 0.5, ctr, N), dn = ZT.toWorld(vp, 0, -0.5, ctr, N);
+  say(up[1] > dn[1], "higher on the glass is higher in the world");
 }
 
 console.log(fail ? `\nZIGTOUCH_REF FAIL (${fail})` : "\nZIGTOUCH_REF PASS");

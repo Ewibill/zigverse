@@ -2808,3 +2808,23 @@ Get-Clipboard | Add-Content briefs\Session_Log.md
 **Passed:** `node --check` clean · reference gate **48/48** (zigtouch_ref +4 wave cases, zighaptics_ref +1) · headless Pixel 7: hold → wave → home measured by pixel probe, 0 errors.
 
 **Open:** Bill's hand on the dials (nucleus strength, throw distance, whether a flick may reach the edge) · the GPU port — Option A (legacyBridge) vs B (ZigField read by the compute kernel), with the touch nucleus as the Bee's position · the nucleus/wave behaviours are lab code today; they become engine laws in B.
+
+
+**2026-09-23 · ZIGTOUCH INTO THE ENGINE (Option A) + AUDIO GAIN RESTORED** · ZigTouch **0.1.1 → 0.1.2** · sickleswarm **0.31.0 → 0.32.0** · host → `dist/Zigverse_Engine_v5_4_Touch.html` · ZigWebGPU **0.47.0 untouched**
+
+**Why.** The GPU organism had to feel ZigTouch, and Bill's nucleus/wave decision had to become engine law rather than lab drawing code.
+
+**ZigTouch 0.1.2.** `onStep()` lets a law share the fixed 120Hz clock. **`ZigTouch.nucleus()`** — the nucleus and the wave as a BODY DIRECTIVE any species with a distinguished body reads (where, how strongly held, charisma, thrown): earned by trust (stab ignored; 0.82 at 4s), a plain release lingers, a wave sends the body along the hand (distance grows with speed, capped by `throw`, kept inside the glass) and it does NOT come back to the finger; byte-identical at 30/60/120/144fps. **`ZigTouch.toWorld()` / `surfaceToNdc()`** — any camera, any species. **Bug fixed:** `legacyBridge` released Perf.hold only on `release`; a hold → stroke → WAVE emits `wave`, so the note stayed down forever.
+
+**sickleswarm 0.32.0.** `#touch=field|nucleus` (host dropdown TOUCH: off · field · nucleus). Absent → the v5.3 block runs verbatim (kept un-reindented in an else branch; the diff removes only the version string and the boot status line). field = habituating startle → strike · hold → Perf.hold × trust · stroke → `state.wind`. nucleus = field + the trusted finger IS the Bee's position, charisma = BEE × trust (PRESENCE cozy gathers the field to the hand), breath via Perf.sim so the Bee's DWELL stays the EWI's; a wave throws her along the current. **Zero WGSL on any path** — avatarA/avatarB, PRESENCE, and the Sim `wind` uniform that has always existed and always been zero here. The field gets its own wind array so the Resonator (stateB shared it by reference) never hears a finger. Dials `#nucleus=0..2` · `#throw=0.2..2` · `#haptics=off`. Choosing nucleus arms BEE curious + MOOD cozy in panel AND hash (the species reads `#beemode` first, so a stale `beemode=off` would have silently disarmed her).
+
+**AUDIO GAIN restored.** Built 2026-09-21 as `v5_3_AudioDial` (Alt+[ / Alt+] / Alt+\, `#audio=0..4`, HUD `GAIN`, `audio_ref`) and **never landed** — it existed only in Downloads. Folded in with the identical edits; `#audio=` now also survives a dropdown reload (v5.3 dropped it). DUAL GEM (0.47.0) was already on main and is untouched.
+
+**Passed:** `node --check` clean · reference gate **49/49** (+`audio_ref`, `zigtouch_ref` +13) · byte-identity **5/5 IDENTICAL** · **boot gate headless PASS, 0 driver errors** on off / field / nucleus / nucleus+agitate / audio=0,2,4 / diamond+emerald+audio=4+nucleus · **new `test/_touchboot.mjs` PASS** — a real pointer on the live WebGPU page: panel arms it, stab ignored, hold → nucleus 0.90 under the finger, Bee's target = the finger's world point, charisma 5.4/6, sweep throws her the way the hand went with the wind the same way, then full release; taps habituate 95 → 30%.
+**Not measured:** shard gathering/travel — GPU readback (`mapAsync`) never resolves under SwiftShader. Bill's eye, or `_touchboot` on eyeZ (it prints the centroid there).
+
+**Open:** Bill's hand on a phone (placeholders for lab verdict and phone model arrived unfilled — defaults used) · Metal gate on the Air (confirmation only) · PRESENCE reach 14 vs a field 130 across may make the nucleus a small cluster — Shift+↑ is the dial · ZigField proper (Option B) · installable/PWA wrapping of v5.4 if wanted.
+
+**Bill's verdict (2026-09-23):** AUDIO GAIN range is right; gain 1 stays default. At gain 1 the shards and music danced together well to a Michael Hedges recording - audio-only life (Timbre, no EWI) reads on someone else's music. Candidate: mic-as-climate for the app's WATCH mode.
+
+**Metal (2026-09-23):** v5.4 bundle runs on the MacBook Air in Chrome (Metal) - checked by eye, Bill. Scripted metal_gate.mjs still to run next time on the Air.

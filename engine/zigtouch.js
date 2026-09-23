@@ -1,6 +1,14 @@
 /* =============================================================================
-   engine/zigtouch.js — ZIGTOUCH 0.1.1 · a touch is weather, not a command
+   engine/zigtouch.js — ZIGTOUCH 0.1.2 · a touch is weather, not a command
    2026-09-22 · the first ZigSense input, for the living-world instrument
+   0.1.2 INTO THE ENGINE (2026-09-23, Option A): the nucleus and the wave
+   become a LAW any species with a distinguished body can read —
+   ZigTouch.nucleus() — stepped on the same fixed clock as the field (onStep),
+   so it too is identical at every frame rate. ZigTouch.toWorld() casts a
+   surface point through any view-projection onto a plane, so a GPU species
+   can put the nucleus where the finger is. legacyBridge fixed: a hold that
+   turned into a stroke and was thrown as a WAVE never released Perf.hold —
+   the note stayed down forever.
    0.1.1 THE WAVE (Bill, same day): "nucleus when they hold the screen, then a
    wave can send the shards away with the current." A stroke released while
    still MOVING is a wave: it carries the direction, the speed, and whatever
@@ -48,7 +56,7 @@
 (function (global) {
   "use strict";
 
-  const VERSION = "0.1.1";
+  const VERSION = "0.1.2";
   const STEP = 1 / 120;                 // behavior clock — rendering never touches it
   const STEP_MS = 1000 * STEP;
   const MAX_CATCHUP_MS = 250;           // a backgrounded tab resumes; it does not replay a minute
@@ -98,6 +106,7 @@
   function create(opts) {
     const o = Object.assign({}, DEFAULTS, opts || {});
     const listeners = [];
+    const stepHooks = [];               // run at the end of every fixed step (0.1.2)
     const queue = [];                   // pending inputs, applied by timestamp
     const contacts = new Map();         // pointer id → contact record
     let simMs = null;                   // behavior clock (ms, same base as input timestamps)
@@ -270,11 +279,15 @@
       field.familiarity = 1 - Math.exp(-field.gentleSec / o.famScale);
       field.arousal = clamp(field.arousal, 0, 1);
       field.trust = clamp(field.trust, 0, 1);
+      for (const fn of stepHooks) fn(dt, field);
     }
 
     const api = {
       VERSION, field, options: o,
       on(fn) { listeners.push(fn); return () => { const i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); }; },
+      /* onStep(fn(dt, field)) — a law that must share the behavior clock (the
+         nucleus) hooks here, so it inherits the fixed-timestep guarantee */
+      onStep(fn) { stepHooks.push(fn); return () => { const i = stepHooks.indexOf(fn); if (i >= 0) stepHooks.splice(i, 1); }; },
 
       /* inputs — x,y in surface units, t in ms on the same clock update() is fed */
       down(id, x, y, t)   { queue.push({ kind: "down", id, x, y, t }); },
@@ -385,22 +398,149 @@
        startle → strike(x, y, strength)   (already habituated)
        hold    → Perf.hold(true, 0.30 + 0.55 * trust) — dwell still accrues,
                  so the Bee's charisma keeps working
-       release → Perf.hold(false)
-     Stroke has no v5.3 consumer: field.current is exposed and unread until
-     the flock's flow kernel reads ZigField. That is the next splice.
+       leaving the hold by ANY road (release · wave · the hold becoming a
+                 stroke) → Perf.hold(false)
+     0.1.2 fix: 0.1.1 released only on a `release` event. A hold that turned
+     into a stroke and was let go moving emits `wave`, not `release`, so the
+     note stayed down for the rest of the session and the Bee kept her
+     charisma with no hand on the glass.
      ======================================================================== */
   function legacyBridge(touch, perf, strike) {
-    touch.on((ev, f) => {
+    let held = false;
+    const let_go = () => { if (held && perf) perf.hold(false); held = false; };
+    touch.on((ev) => {
       if (ev.type === "startle" && strike) strike(ev.x, ev.y, 0.35 + 0.6 * ev.strength);
-      if (ev.type === "release" && perf) perf.hold(false);
+      if (ev.type === "release" || ev.type === "wave") let_go();
     });
     return function frame() {
       const f = touch.field;
-      if (perf && f.phase === "hold") perf.hold(true, 0.30 + 0.55 * f.trust);
+      if (perf && f.phase === "hold") { perf.hold(true, 0.30 + 0.55 * f.trust); held = true; }
+      else let_go();
     };
   }
 
-  const ZigTouch = { VERSION, STEP, DEFAULTS, create, attach, legacyBridge };
+  /* ===========================================================================
+     ZigTouch.nucleus(touch, opts) — THE NUCLEUS AND THE WAVE, as a law.
+     Bill, 2026-09-22: "nucleus when they hold the screen, then a wave can send
+     the shards away with the current." In the lab this was drawing code; here
+     it is a BODY DIRECTIVE any species with a distinguished body reads (the
+     Bee today; Rootwhale's head, Kelp's holdfast tomorrow). It never moves an
+     agent. It says, every step:
+       out.w         0..1  how much the body belongs to the hand now
+       out.x, out.y        where the body should be (surface units)
+       out.charisma  0..strength  how hard the field is drawn to the body
+       out.steer     0..1  how surely the body goes there
+       out.breath    0..1  a held hand breathes (0 when no hold)
+       out.thrown          true between a wave and the next contact
+     Earned, not granted: w follows TRUST while a finger is down, so a stab is
+     ignored and a still hand becomes the nucleus over seconds. A plain release
+     lingers (trust × attention — the organism keeps looking where you were).
+     A WAVE hands the body to the current: it is sent to a point along the
+     hand's direction, a distance that grows with speed and is capped by
+     opts.throw and kept inside opts.bounds, carrying what was gathered, and
+     then let go entirely (τ 2.2 s) — it does not come back to the finger.
+     Stepped on the touch's own fixed clock, so identical at every frame rate.
+     ======================================================================== */
+  function nucleus(touch, opts) {
+    const o = Object.assign({
+      strength: 1,        // charisma ceiling multiplier (#nucleus in the hosts)
+      throw: 0.9,         // how far a wave may carry, in surface units ÷ 0.4 (#throw)
+      reach: 0.35,        // s — a wave travels speed × reach before the cap
+      bounds: null,       // () => ({ w, h }) in surface units — the glass
+      margin: 0.08,       // u — a wave lands this far inside the edge
+      riseTau: 0.25, fallTau: 0.5, waveTau: 2.2
+    }, opts || {});
+    const out = { w: 0, x: 0.5, y: 0.5, charisma: 0, steer: 0, breath: 0, thrown: false, wave: 0, gathered: 0 };
+    let wH = 0, waveEnv = 0, gath = 0, thrown = false;
+    const thr = { x: 0.5, y: 0.5 };
+    touch.on((ev) => {
+      if (ev.type === "notice") thrown = false;               // a new contact takes the nucleus back
+      if (ev.type === "wave") {
+        const sp = ev.speed || hyp(ev.vx, ev.vy) || 1e-6;
+        const d = Math.min(sp * o.reach, o.throw * 0.4);
+        let x = ev.x + ev.vx / sp * d, y = ev.y + ev.vy / sp * d;
+        if (o.bounds) {
+          const b = o.bounds();
+          x = clamp(x, o.margin, Math.max(o.margin, b.w - o.margin));
+          y = clamp(y, o.margin, Math.max(o.margin, b.h - o.margin));
+        }
+        thr.x = x; thr.y = y; thrown = true;
+        gath = clamp(ev.gathered || 0, 0, 1);
+        waveEnv = Math.max(waveEnv, 0.4 + 0.6 * ev.strength);
+      }
+    });
+    touch.onStep((dt, f) => {
+      const contact = f.contacts > 0;
+      const tgt = contact ? f.trust : (thrown ? 0 : f.trust * f.attention.w);
+      wH = ease(wH, tgt, dt, tgt > wH ? o.riseTau : o.fallTau);
+      waveEnv *= Math.exp(-dt / o.waveTau);
+      const wE = thrown ? waveEnv * (0.35 + 0.65 * gath) : 0;   // an open hand throws little
+      /* once thrown, WHERE belongs to the current alone; the hand's fading
+         trust only keeps the body's pull alive while it travels */
+      if (thrown) { out.x = thr.x; out.y = thr.y; }
+      else if (wH > 1e-6) { out.x = f.attention.x; out.y = f.attention.y; }
+      out.w = Math.max(wH, wE);
+      out.charisma = o.strength * out.w;
+      out.steer = out.w;
+      out.breath = f.phase === "hold" ? 0.30 + 0.55 * f.trust : 0;
+      out.thrown = thrown; out.wave = waveEnv; out.gathered = gath;
+    });
+    return { out, options: o };
+  }
+
+  /* ===========================================================================
+     SURFACE → WORLD. A touch lives on the glass; a GPU organism lives in a
+     world seen through a camera. Any species can put a touch in its world:
+       const n = ZigTouch.surfaceToNdc(u, v, canvasW, canvasH);
+       const p = ZigTouch.toWorld(viewProj, n[0], n[1], planePoint, planeNormal);
+     viewProj is column-major (ZigWebGPU.mat), any clip-depth convention.
+     Returns [x,y,z] or null when the ray runs parallel to the plane.
+     ======================================================================== */
+  function surfaceToNdc(u, v, W, H) {
+    const m = Math.max(1, Math.min(W, H));
+    return [u * m / Math.max(1, W) * 2 - 1, 1 - v * m / Math.max(1, H) * 2];
+  }
+  function inv4(m) {
+    const a = Array.from(m), r = new Array(16);
+    r[0] = a[5]*a[10]*a[15]-a[5]*a[11]*a[14]-a[9]*a[6]*a[15]+a[9]*a[7]*a[14]+a[13]*a[6]*a[11]-a[13]*a[7]*a[10];
+    r[4] = -a[4]*a[10]*a[15]+a[4]*a[11]*a[14]+a[8]*a[6]*a[15]-a[8]*a[7]*a[14]-a[12]*a[6]*a[11]+a[12]*a[7]*a[10];
+    r[8] = a[4]*a[9]*a[15]-a[4]*a[11]*a[13]-a[8]*a[5]*a[15]+a[8]*a[7]*a[13]+a[12]*a[5]*a[11]-a[12]*a[7]*a[9];
+    r[12] = -a[4]*a[9]*a[14]+a[4]*a[10]*a[13]+a[8]*a[5]*a[14]-a[8]*a[6]*a[13]-a[12]*a[5]*a[10]+a[12]*a[6]*a[9];
+    r[1] = -a[1]*a[10]*a[15]+a[1]*a[11]*a[14]+a[9]*a[2]*a[15]-a[9]*a[3]*a[14]-a[13]*a[2]*a[11]+a[13]*a[3]*a[10];
+    r[5] = a[0]*a[10]*a[15]-a[0]*a[11]*a[14]-a[8]*a[2]*a[15]+a[8]*a[3]*a[14]+a[12]*a[2]*a[11]-a[12]*a[3]*a[10];
+    r[9] = -a[0]*a[9]*a[15]+a[0]*a[11]*a[13]+a[8]*a[1]*a[15]-a[8]*a[3]*a[13]-a[12]*a[1]*a[11]+a[12]*a[3]*a[9];
+    r[13] = a[0]*a[9]*a[14]-a[0]*a[10]*a[13]-a[8]*a[1]*a[14]+a[8]*a[2]*a[13]+a[12]*a[1]*a[10]-a[12]*a[2]*a[9];
+    r[2] = a[1]*a[6]*a[15]-a[1]*a[7]*a[14]-a[5]*a[2]*a[15]+a[5]*a[3]*a[14]+a[13]*a[2]*a[7]-a[13]*a[3]*a[6];
+    r[6] = -a[0]*a[6]*a[15]+a[0]*a[7]*a[14]+a[4]*a[2]*a[15]-a[4]*a[3]*a[14]-a[12]*a[2]*a[7]+a[12]*a[3]*a[6];
+    r[10] = a[0]*a[5]*a[15]-a[0]*a[7]*a[13]-a[4]*a[1]*a[15]+a[4]*a[3]*a[13]+a[12]*a[1]*a[7]-a[12]*a[3]*a[5];
+    r[14] = -a[0]*a[5]*a[14]+a[0]*a[6]*a[13]+a[4]*a[1]*a[14]-a[4]*a[2]*a[13]-a[12]*a[1]*a[6]+a[12]*a[2]*a[5];
+    r[3] = -a[1]*a[6]*a[11]+a[1]*a[7]*a[10]+a[5]*a[2]*a[11]-a[5]*a[3]*a[10]-a[9]*a[2]*a[7]+a[9]*a[3]*a[6];
+    r[7] = a[0]*a[6]*a[11]-a[0]*a[7]*a[10]-a[4]*a[2]*a[11]+a[4]*a[3]*a[10]+a[8]*a[2]*a[7]-a[8]*a[3]*a[6];
+    r[11] = -a[0]*a[5]*a[11]+a[0]*a[7]*a[9]+a[4]*a[1]*a[11]-a[4]*a[3]*a[9]-a[8]*a[1]*a[7]+a[8]*a[3]*a[5];
+    r[15] = a[0]*a[5]*a[10]-a[0]*a[6]*a[9]-a[4]*a[1]*a[10]+a[4]*a[2]*a[9]+a[8]*a[1]*a[6]-a[8]*a[2]*a[5];
+    const det = a[0] * r[0] + a[1] * r[4] + a[2] * r[8] + a[3] * r[12];
+    if (!det || !isFinite(det)) return null;
+    for (let i = 0; i < 16; i++) r[i] /= det;
+    return r;
+  }
+  function toWorld(vp, ndcX, ndcY, P, N) {
+    const inv = inv4(vp); if (!inv) return null;
+    const un = (z) => {                                   // column-major: v' = M · [x y z 1]
+      const x = inv[0] * ndcX + inv[4] * ndcY + inv[8] * z + inv[12];
+      const y = inv[1] * ndcX + inv[5] * ndcY + inv[9] * z + inv[13];
+      const zz = inv[2] * ndcX + inv[6] * ndcY + inv[10] * z + inv[14];
+      const w = inv[3] * ndcX + inv[7] * ndcY + inv[11] * z + inv[15];
+      return [x / w, y / w, zz / w];
+    };
+    const a = un(0), b = un(0.5);                         // two points on the ray, valid in either depth convention
+    const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const den = d[0] * N[0] + d[1] * N[1] + d[2] * N[2];
+    if (Math.abs(den) < 1e-12) return null;
+    const t = ((P[0] - a[0]) * N[0] + (P[1] - a[1]) * N[1] + (P[2] - a[2]) * N[2]) / den;
+    return [a[0] + d[0] * t, a[1] + d[1] * t, a[2] + d[2] * t];
+  }
+
+  const ZigTouch = { VERSION, STEP, DEFAULTS, create, attach, legacyBridge, nucleus, surfaceToNdc, toWorld };
   global.ZigTouch = ZigTouch;
 
   /* declare the capability in the Canon when the engine is present */
@@ -408,6 +548,11 @@
   if (C && Array.isArray(C.laws) && !C.laws.some((l) => l.id === "touch-field")) {
     C.laws.push({ id: "touch-field", pillar: "experience", since: "touch 0.1.0",
       enables: "A TOUCH IS WEATHER, NOT A COMMAND - tap startles and habituates, a still hand earns trust on the charisma curve, a stroke leaves a current; four memory layers (seconds/minutes/session/persistent) on a fixed 120Hz clock, so the tenth tap is met differently from the first and the same gestures give the same organism at any frame rate",
+      proof: "zigtouch_ref" });
+  }
+  if (C && Array.isArray(C.laws) && !C.laws.some((l) => l.id === "touch-nucleus")) {
+    C.laws.push({ id: "touch-nucleus", pillar: "experience", since: "touch 0.1.2",
+      enables: "THE NUCLEUS AND THE WAVE - a still hand earns the organism's distinguished body (trust, not a switch); a stroke let go while moving hands it to the current and it does not come back to the finger; a body directive any species reads, on the touch's fixed clock",
       proof: "zigtouch_ref" });
   }
   if (typeof module !== "undefined" && module.exports) module.exports = ZigTouch;

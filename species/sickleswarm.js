@@ -46,7 +46,7 @@
   const LETTER = global.ZIG_LETTER || "sicklePetal";
   const PETAL = Object.assign({}, ZM && ZM.presets[LETTER] ? ZM.presets[LETTER] : {});
 
-  const Sickle = global.SickleField = { version: "0.31.0", flock: null, gpu: null, stage: "loaded", booted: false };   // 0.28: MEDIUM · 0.29: FORCES · 0.30: ENVIRONMENT·CURRENT (ZIG_CURRENT drift/gyre/eddy — the world's flow the field rides, composes with medium+forces)   // 0.26: note-impulse + MIDI monitor + ribbon-off bugfix · 0.27: SMOKE/FOG (ZIG_SMOKE — breath lifts & billows luminous puffs, notes puff bursts, silence thins them)   // 0.25: melodic ribbon (shelved) · 0.26: NOTE-IMPULSE (ZIG_NOTEPULSE — each note is a nerve pulse traveling through the organism, flaring the tissue; energy of the notes INTO the body)   // 0.24.1: fly dolly smoothed · 0.25: MELODIC RIBBON (ZIG_RIBBON — pitch draws a glowing streamer through the field; the note-twin of breath, so the ribbon of notes finally has a body)
+  const Sickle = global.SickleField = { version: "0.32.0", flock: null, gpu: null, stage: "loaded", booted: false };   // 0.28: MEDIUM · 0.29: FORCES · 0.30: ENVIRONMENT·CURRENT (ZIG_CURRENT drift/gyre/eddy — the world's flow the field rides, composes with medium+forces)   // 0.26: note-impulse + MIDI monitor + ribbon-off bugfix · 0.27: SMOKE/FOG (ZIG_SMOKE — breath lifts & billows luminous puffs, notes puff bursts, silence thins them)   // 0.25: melodic ribbon (shelved) · 0.26: NOTE-IMPULSE (ZIG_NOTEPULSE — each note is a nerve pulse traveling through the organism, flaring the tissue; energy of the notes INTO the body)   // 0.24.1: fly dolly smoothed · 0.25: MELODIC RIBBON (ZIG_RIBBON — pitch draws a glowing streamer through the field; the note-twin of breath, so the ribbon of notes finally has a body)
   /* v0.2 — THE PULSE: the ZigPhase heartbeat in the spectral register.
      Every stroke carries a blink oscillator; breath = coupling. In spectral
      ink (P), the flash is a surge of pure rainbow — six thousand color-
@@ -209,6 +209,37 @@
     })();
     const PRESENCE = (BEE > 0 && BEEMODE) ? { mode: BEEMODE } : null;
     let beeAttn = 0, beeHue = 0;
+    /* ZIGTOUCH (0.32.0 · touch 0.1.2) — Option A: the finger reaches the GPU
+       organism through ZigTouch instead of the v5.3 finger-as-note block.
+          window.ZIG_TOUCH = "field" | "nucleus"   ·   #touch=nucleus
+       field    tap = a HABITUATING startle → strike · hold = Perf.hold scaled
+                by trust (dwell still earns the Bee) · stroke = the world's
+                current (state.wind) · the v5.3 chain, fed by a calmer hand
+       nucleus  field, plus: a trusted hold makes the finger the BEE'S
+                POSITION, charisma rides trust (so PRESENCE cozy gathers the
+                field to the hand), and a stroke let go moving is a WAVE that
+                throws her along the current — her followers go with her
+       Dials: #nucleus=0..2 (charisma ceiling ×, 1) · #throw=0.2..2 (wave reach
+       and current strength, 0.9) · #haptics=off.
+       Absent, or ZigTouch not loaded → the v5.3 block runs, untouched, and not
+       one uniform differs. No WGSL is touched on EITHER path: the nucleus
+       rides avatarA/avatarB and PRESENCE, the current rides the wind uniform
+       that has always been in Sim and always been zero here. */
+    const TOUCH = (function () {
+      if (!global.ZigTouch || !global.ZigTouch.nucleus) return null;
+      const h = (global.location && global.location.hash) || "";
+      const m = h.match(/[#&]touch=([a-z]+)/i);
+      const v = String((m && m[1]) || global.ZIG_TOUCH || "").toLowerCase();
+      return (v === "field" || v === "nucleus") ? v : null;
+    })();
+    const touchNum = (key, lo, hi, def) => {
+      const h = (global.location && global.location.hash) || "";
+      const m = h.match(new RegExp("[#&]" + key + "=([0-9.]+)", "i"));
+      const v = m ? +m[1] : def; return Math.max(lo, Math.min(hi, isFinite(v) ? v : def));
+    };
+    const TOUCH_NUC = touchNum("nucleus", 0, 2, 1), TOUCH_THROW = touchNum("throw", 0.2, 2, 0.9);
+    const TOUCH_HAPTICS = !/[#&]haptics=off/i.test((global.location && global.location.hash) || "");
+    let zt = null;                         // the touch runtime — built at the end of boot, read every frame
     /* NOTE FLASH — inside takes the note's colour, outside takes one. */
     const NOTEFLASH_ON  = (+global.ZIG_NOTEFLASH > 0);
     const NOTEFLASH_AMT = NOTEFLASH_ON ? Math.min(1, +global.ZIG_NOTEFLASH) : 0;
@@ -588,6 +619,12 @@
       knobsB: [3, 16, 0.85, 0.25]            // gentle surge when rung · soft shove · low churn
     });
 
+    /* ZIGTOUCH current: the field gets its OWN wind array. stateB was built
+       with Object.assign, so it shares state.wind by reference — without this
+       a stroke would reach the Resonator, which by design hears only the
+       impulse queue. */
+    if (TOUCH) state.wind = [0, 0, 0];
+
     Sickle.strike = function (x, y, z, strength) {
       const im = impulses[impPtr]; impPtr = (impPtr + 1) % 8;
       im.o = [x, y, z]; im.t0 = state.time; im.strength = strength || 0.85; im.kick = 1;   // full shove — the falcon strike
@@ -667,6 +704,7 @@
        object: correct code, never consulted. */
     let frameZoom = 1.0;
     const dial = { ink: (global.ZIG_INK !== undefined ? +global.ZIG_INK : 1.8), moon: 1.6, camRad: CAM0, fov: 1.02, spectral: false, Kmax: 3.0, paceGain: 2.2, time: 0.55,
+                   audio: (global.ZIG_AUDIOGAIN !== undefined ? Math.max(0, Math.min(4, +global.ZIG_AUDIOGAIN)) : 1),   // AUDIO GAIN (Alt+[ / Alt+]): how far the horn reaches into the body. 0 = audio drives NOTHING (the mappings vanish, not fade) · 1 = the conservative defaults · 4 = as far as they go. Scales BOTH the voice path and the ambience path, so one dial means the same thing whichever is armed.
                    hueRot: HUEROT0, hueSpan: HUESPAN0,   // ZIGSPECTRUM: rotation around the wheel (Q) · base→tip span
                    shadowComp: (global.ZIG_SHADOWCOMP !== undefined ? +global.ZIG_SHADOWCOMP : 0),   // SHADOW COMPLEMENT (9/0): dark side → the material's complementary colour instead of black
                    hueSpread: (global.ZIG_HUESPREAD !== undefined ? +global.ZIG_HUESPREAD : 0),   // SPECTRUM SPREAD (7/8): 0 = one coherent band (Q sweeps it) → up = the WHOLE spectrum across the field at once
@@ -1062,6 +1100,7 @@
         state.avatarB[0] = 0.85 * (0.25 + 0.75 * beeAttn);       // she steers more surely the more she is attended
         view[69] = dial.cockpit ? 0 : (0.9 + 2.6 * beeAttn);     // and lights up as the field turns
       }
+      if (zt) zt.frame(dt);                                     // ZIGTOUCH — after the Bee has spoken, so the hand can only ADD to her
       view[68] = 0;                                             // render2.x avatar idx
       view[69] = dial.cockpit ? 0 : [0, 0.9, 3.0][dial.mark];  // beacon off in first person
       /* cockpit proxy — fly the path the melody commands, smoothly */
@@ -1164,12 +1203,15 @@
       if (!AMBIENCE_ON) {
         ZC.Timbre.update(dt);
         if (ZC.Timbre.live) {
-          view[74] *= 1 + 0.45 * ZC.Timbre.body;
+          view[74] *= 1 + 0.45 * dial.audio * ZC.Timbre.body;
           if (!dial.spectral) {
-            const bl = 1 + 0.5 * ZC.Timbre.brightness;
+            const bl = 1 + 0.5 * dial.audio * ZC.Timbre.brightness;
             view[52] *= bl; view[53] *= bl; view[54] *= bl;
           }
-          if (ZC.Timbre.flux > 0.55 && t - lastFluxT > 0.25) {
+          /* the STRIKE threshold moves the other way: more gain means the horn
+             crosses it sooner. Floored at 0.15 so a high gain cannot strike on
+             room noise, and skipped entirely at gain 0 — silence must be silent. */
+          if (dial.audio > 0 && ZC.Timbre.flux > Math.max(0.15, 0.55 / dial.audio) && t - lastFluxT > 0.25) {
             lastFluxT = t;
             Sickle.strike(state.avatarA[1] || ANCHOR[0], state.avatarA[2] || ANCHOR[1],
                           state.avatarA[3] || ANCHOR[2], 0.45 + 0.5 * ZC.Timbre.flux);
@@ -1269,12 +1311,12 @@
            light & shimmer only — never a frame-trail, never a twitchy strike, never a
            change to the FORM (that stays MIDI's alone). */
         const life = 0.55 * A.energy + 0.95 * L.glow;        // glow rides the ringing tail → the life lingers
-        view[74] *= 1 + 0.65 * life;                          // INK / iridescence swells & lingers with the sound
+        view[74] *= 1 + 0.65 * dial.audio * life;             // INK / iridescence swells & lingers with the sound
         if (!dial.spectral) {
-          const bl = 1 + 0.55 * A.brightness;                 // shine in the sound → shine in the body
+          const bl = 1 + 0.55 * dial.audio * A.brightness;    // shine in the sound → shine in the body
           view[52] *= bl; view[53] *= bl; view[54] *= bl;
         }
-        view[70] *= 1 + 0.9 * A.onset;                        // moonpath glint FLARES softly on each attack
+        view[70] *= 1 + 0.9 * dial.audio * A.onset;           // moonpath glint FLARES softly on each attack
       }
 
       /* THE COLOR ECOLOGY (ZIG_ECOLOGY worlds · ZigCore v0.6): material ·
@@ -1465,7 +1507,8 @@
               " · L body " + bar(ZC.Timbre.L.body) + " bite " + bar(ZC.Timbre.L.flux) +
               " · R body " + bar(ZC.Timbre.R.body) + " bite " + bar(ZC.Timbre.R.flux)
             : "VOICE " + ZC.Timbre.device.slice(0, 22) +
-              " · body " + bar(ZC.Timbre.body) + " · shine " + bar(ZC.Timbre.brightness) + " · bite " + bar(ZC.Timbre.flux));
+              " · body " + bar(ZC.Timbre.body) + " · shine " + bar(ZC.Timbre.brightness) + " · bite " + bar(ZC.Timbre.flux)
+              + " · GAIN " + (dial.audio === 0 ? "off" : dial.audio.toFixed(2) + "\u00d7"));
         }
         H.line("engine", (dial.cockpit ? "COCKPIT · " : "") + (dial.genesis ? "GENESIS · " : "") + (dial.spectral ? "SPECTRAL INK · " : "moonlit · ") +
           "time " + dial.time.toFixed(2) + "\u00d7 \u00b7 " + "ink " + dial.ink.toFixed(2) + " · moon " + dial.moon.toFixed(2) +
@@ -1631,8 +1674,16 @@
                                 else dial.camRad = clamp(dial.camRad - 5, 22, 170); }
       if (e.code === "Minus") { if (AUTOFRAME) frameZoom = clamp(frameZoom + 0.07, 0.35, 2.6);
                                 else dial.camRad = clamp(dial.camRad + 5, 22, 170); }
+      /* AUDIO GAIN rides the ALT layer — every letter, digit and bracket was already
+         spoken for, and Alt was virgin. Checked BEFORE the bare-bracket FOV binding so
+         one keystroke never moves two dials. */
+      if (e.altKey && e.code === "BracketRight") { dial.audio = clamp(dial.audio + 0.25, 0, 4); e.preventDefault(); }
+      else if (e.altKey && e.code === "BracketLeft") { dial.audio = clamp(dial.audio - 0.25, 0, 4); e.preventDefault(); }
+      else if (e.altKey && e.code === "Backslash") { dial.audio = dial.audio === 1 ? 0 : 1; e.preventDefault(); }   // Alt+\ — snap between OFF and the defaults, for an honest A/B while playing
+      else {
       if (e.code === "BracketRight") dial.fov = clamp(dial.fov + 0.05, 0.5, 1.4);
       if (e.code === "BracketLeft") dial.fov = clamp(dial.fov - 0.05, 0.5, 1.4);
+      }
       if (e.code === "KeyP") dial.spectral = !dial.spectral;   // P — spectral ink toggle
       if (e.code === "KeyJ") dial.Kmax = clamp(dial.Kmax + 0.2, 0, 6);   // J/M — heartbeat depth
       if (e.code === "KeyM" && e.shiftKey) { dial.memBack = dial.memBack > 0 ? 0 : 1;   // Shift+M — MEMORY UNDERSIDE on/off (the 2nd performance surface)
@@ -1726,6 +1777,83 @@
       applyDials();
     });
     global.addEventListener("keyup", (e) => { if (e.code === "KeyB") ZC.Perf.sim(0); });
+    if (TOUCH) {
+      /* ===== ZIGTOUCH INTO THE ENGINE (Option A · 2026-09-23) ===============
+         A touch is weather, not a command. The field (engine/zigtouch.js)
+         decides what a hand MEANS — the tenth tap is met differently from the
+         first, a still hand earns trust, a stroke is a current — and this block
+         only translates its directives into the uniforms the organism already
+         reads. Haptics render the organism's feelings in the hand. */
+      const ZT = global.ZigTouch, ZH = global.ZigHaptics;
+      const touch = ZT.create();
+      const MEM = "zigtouch.memory.v1";          // same key as the lab: one creature's temperament, wherever you meet it
+      try { touch.importMemory(JSON.parse(global.localStorage.getItem(MEM) || "null")); } catch (_) {}
+      const haptics = ZH ? ZH.create({ enabled: TOUCH_HAPTICS }) : null;
+      const commit = () => { try { global.localStorage.setItem(MEM, JSON.stringify(touch.commitSession())); } catch (_) {} };
+      global.addEventListener("pagehide", commit);
+      if (global.document) global.document.addEventListener("visibilitychange", () => {
+        if (global.document.hidden) { commit(); if (haptics) haptics.silence(); } });
+      const glass = () => { const r = canvas.getBoundingClientRect(), m = Math.max(1, Math.min(r.width, r.height)); return { w: r.width / m, h: r.height / m }; };
+      const nuc = TOUCH === "nucleus" ? ZT.nucleus(touch, { strength: TOUCH_NUC, throw: TOUCH_THROW, bounds: glass }).out : null;
+      const bridge = TOUCH === "field" ? ZT.legacyBridge(touch, ZC.Perf, null) : null;
+      /* the glass → the world: a ray through last frame's camera onto the plane
+         through the anchor that faces the lens, so a finger lands where it looks */
+      const toWorld = (u, v) => {
+        const n = ZT.surfaceToNdc(u, v, canvas.clientWidth, canvas.clientHeight);
+        const p = ZT.toWorld(view.subarray(0, 16), n[0], n[1], ANCHOR, [view[28], view[29], view[30]]);
+        return (p && isFinite(p[0]) && isFinite(p[1]) && isFinite(p[2])) ? p : [ANCHOR[0], ANCHOR[1], ANCHOR[2]];
+      };
+      const WORDS = { startle: "it startled", trust: "it trusts your hand — you are the nucleus",
+                      wave: "you swept it away — the current carries it off", settle: "it is settling" };
+      touch.on((ev) => {
+        if (haptics) haptics.feel(ev);
+        if (ev.type === "startle") {                     // habituated already: the tenth tap is not the first
+          const p = toWorld(ev.x, ev.y);
+          Sickle.strike(p[0], p[1], p[2], 0.35 + 0.6 * ev.strength);
+        }
+        if (WORDS[ev.type]) H.line("status", "TOUCH " + TOUCH + " — " + WORDS[ev.type] +
+          (ev.type === "startle" ? " (" + Math.round(ev.strength * 100) + "%)" : ""));
+      });
+      ZT.attach(canvas, touch, {});
+      let simOn = false;
+      const CURK = 0.07, WINDMAX = 9;                    // world accel per world-unit/s of stroke · a ceiling so a flick is a gust, not a gale
+      zt = {
+        touch, haptics, nucleus: nuc, at: null, wind: state.wind,
+        avatar: () => [state.avatarA[1], state.avatarA[2], state.avatarA[3], state.avatarB[3]],   // probe: the Bee's target + charisma, read-only
+        frame(dt) {
+          const f = touch.update((global.performance && performance.now) ? performance.now() : Date.now());
+          if (bridge) bridge();
+          if (nuc) {
+            /* a held hand breathes (Perf.sim: breath without a note, so the
+               Bee's DWELL path stays the EWI's and TRUST is the hand's) */
+            if (nuc.breath > 0) { ZC.Perf.sim(nuc.breath); simOn = true; }
+            else if (simOn) { ZC.Perf.sim(0); simOn = false; }
+            if (nuc.w > 0.002) {
+              const p = toWorld(nuc.x, nuc.y), k = Math.min(1, nuc.w * 1.6);
+              zt.at = p;                                                                        // probe: where the hand has put her
+              state.avatarA[1] += (p[0] - state.avatarA[1]) * k;
+              state.avatarA[2] += (p[1] - state.avatarA[2]) * k;
+              state.avatarA[3] += (p[2] - state.avatarA[3]) * k;
+              if (BEE > 0) {
+                state.avatarB[3] = Math.max(state.avatarB[3], BEE * nuc.charisma);             // the field is drawn to the hand
+                state.avatarB[0] = Math.max(state.avatarB[0], 0.85 * (0.25 + 0.75 * nuc.steer)); // and she goes there surely
+              }
+            }
+          }
+          /* the stroke's current → the world's wind (both modes) */
+          const c = f.current, w = state.wind;
+          if (c.s > 0.002 && (c.vx || c.vy)) {
+            const a = toWorld(c.x, c.y), b = toWorld(c.x + c.vx * 0.1, c.y + c.vy * 0.1);
+            let wx = (b[0] - a[0]) * 10 * c.s * CURK * TOUCH_THROW,
+                wy = (b[1] - a[1]) * 10 * c.s * CURK * TOUCH_THROW,
+                wz = (b[2] - a[2]) * 10 * c.s * CURK * TOUCH_THROW;
+            const L = Math.hypot(wx, wy, wz); if (L > WINDMAX) { wx *= WINDMAX / L; wy *= WINDMAX / L; wz *= WINDMAX / L; }
+            w[0] = wx; w[1] = wy; w[2] = wz;
+          } else { w[0] = 0; w[1] = 0; w[2] = 0; }
+        }
+      };
+      Sickle.touch = zt;
+    } else {
     /* TOUCH AS BREATH. A phone has no MIDI and no keyboard, so without this the
        organism drifts on idle auto-breath and NOTHING is caused — the opposite
        of the one thing the summit said had to read: the chain from a person to
@@ -1760,9 +1888,14 @@
     };
     canvas.addEventListener("pointerup", lift);
     canvas.addEventListener("pointercancel", lift);
+    }   // v5.3 touch — deliberately NOT re-indented, so the diff proves not one line of it changed
 
     Sickle.stage = "alive"; Sickle.booted = true;
-    H.line("status", "alive — hold B or PRESS THE GLASS to breathe · tap or Space to strike · watch for faces");
+    H.line("status", TOUCH
+      ? ("alive — TOUCH " + TOUCH + " · tap it · rest a finger until it gathers" + (TOUCH === "nucleus" ? ", then sweep it away" : "") +
+         (TOUCH === "nucleus" && !(BEE > 0 && PRESENCE) ? " · (the nucleus needs BEE on and MOOD cozy)" : "") +
+         (zt && zt.haptics ? " · haptics: " + zt.haptics.status().backend : ""))
+      : "alive — hold B or PRESS THE GLASS to breathe · tap or Space to strike · watch for faces");
     return { ok: true, flock };
   };
 
