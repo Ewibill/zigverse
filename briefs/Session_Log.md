@@ -2828,3 +2828,15 @@ Get-Clipboard | Add-Content briefs\Session_Log.md
 **Bill's verdict (2026-09-23):** AUDIO GAIN range is right; gain 1 stays default. At gain 1 the shards and music danced together well to a Michael Hedges recording - audio-only life (Timbre, no EWI) reads on someone else's music. Candidate: mic-as-climate for the app's WATCH mode.
 
 **Metal (2026-09-23):** v5.4 bundle runs on the MacBook Air in Chrome (Metal) - checked by eye, Bill. Scripted metal_gate.mjs still to run next time on the Air.
+
+**v5.4 TOUCH - what this build is (plain English, Bill):**
+`dist/Zigverse_Engine_v5_4_Touch.html` - one self-contained file. Runs on eyeZ (RTX), the MacBook Air (Metal), and phones.
+Everything v5.1 had, plus three things:
+- DUAL GEM - each shard can wear two stones at once: one on the outer shell, a different one in the cupped interior (e.g. diamond outside, emerald inside). Panel: GEM + GEM 2.
+- AUDIO GAIN - how strongly sound drives the shards. Alt+] more, Alt+[ less, Alt+\ snaps between off and 1. #audio=0..4 pins it. Verdict: gain 1 is right; audio alone (a Michael Hedges recording, no EWI) made the shards and music dance together.
+- ZIGTOUCH - a finger on the glass is weather, not a command. Panel TOUCH: off / field / nucleus.
+  off = the old v5.3 touch (press = breath, tap = strike).
+  field = a tap startles, and the startle fades with repetition (the tenth tap is met differently from the first); a still hand earns trust; a stroke becomes a current.
+  nucleus = field, plus a finger held still becomes the Bee's position and the field is drawn toward the hand; a sweep let go while moving throws her away along the current, and she does not come back to the finger. Arms BEE curious + MOOD cozy automatically.
+  Dials in the address: #nucleus=0..2 (pull strength) - #throw=0.2..2 (how far a sweep carries) - #haptics=off. Android phones vibrate with it; iPhone stays silent until the native app.
+Measured on eyeZ: the hand's control is exact, but the gather is still small (field tightens ~10%, centre barely moves) - the Bee's reach (14) is short against a body ~100 across. Tune by eye next: hold the glass, Shift+Up to widen her reach, pick the reach that reads as "I am the nucleus."
