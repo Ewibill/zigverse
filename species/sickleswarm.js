@@ -46,7 +46,7 @@
   const LETTER = global.ZIG_LETTER || "sicklePetal";
   const PETAL = Object.assign({}, ZM && ZM.presets[LETTER] ? ZM.presets[LETTER] : {});
 
-  const Sickle = global.SickleField = { version: "0.32.0", flock: null, gpu: null, stage: "loaded", booted: false };   // 0.28: MEDIUM · 0.29: FORCES · 0.30: ENVIRONMENT·CURRENT (ZIG_CURRENT drift/gyre/eddy — the world's flow the field rides, composes with medium+forces)   // 0.26: note-impulse + MIDI monitor + ribbon-off bugfix · 0.27: SMOKE/FOG (ZIG_SMOKE — breath lifts & billows luminous puffs, notes puff bursts, silence thins them)   // 0.25: melodic ribbon (shelved) · 0.26: NOTE-IMPULSE (ZIG_NOTEPULSE — each note is a nerve pulse traveling through the organism, flaring the tissue; energy of the notes INTO the body)   // 0.24.1: fly dolly smoothed · 0.25: MELODIC RIBBON (ZIG_RIBBON — pitch draws a glowing streamer through the field; the note-twin of breath, so the ribbon of notes finally has a body)
+  const Sickle = global.SickleField = { version: "0.33.0", flock: null, gpu: null, stage: "loaded", booted: false };   // 0.28: MEDIUM · 0.29: FORCES · 0.30: ENVIRONMENT·CURRENT (ZIG_CURRENT drift/gyre/eddy — the world's flow the field rides, composes with medium+forces)   // 0.26: note-impulse + MIDI monitor + ribbon-off bugfix · 0.27: SMOKE/FOG (ZIG_SMOKE — breath lifts & billows luminous puffs, notes puff bursts, silence thins them)   // 0.25: melodic ribbon (shelved) · 0.26: NOTE-IMPULSE (ZIG_NOTEPULSE — each note is a nerve pulse traveling through the organism, flaring the tissue; energy of the notes INTO the body)   // 0.24.1: fly dolly smoothed · 0.25: MELODIC RIBBON (ZIG_RIBBON — pitch draws a glowing streamer through the field; the note-twin of breath, so the ribbon of notes finally has a body)
   /* v0.2 — THE PULSE: the ZigPhase heartbeat in the spectral register.
      Every stroke carries a blink oscillator; breath = coupling. In spectral
      ink (P), the flash is a surge of pure rainbow — six thousand color-
@@ -238,6 +238,12 @@
       const v = m ? +m[1] : def; return Math.max(lo, Math.min(hi, isFinite(v) ? v : def));
     };
     const TOUCH_NUC = touchNum("nucleus", 0, 2, 1), TOUCH_THROW = touchNum("throw", 0.2, 2, 0.9);
+    /* #reach= (0.33.0): the HAND'S reach — how far the gather spreads once the
+       hand is fully trusted. The Bee's reach GROWS from her resting reach toward
+       this with trust, so a tap is felt nearby and a still hand widens the
+       gather outward from the finger. 60 = gathering; ~100+ = the whole body
+       comes. Shift+↑/↓ moves this number in nucleus mode. */
+    const TOUCH_REACH = touchNum("reach", 4, 200, 60);
     const TOUCH_HAPTICS = !/[#&]haptics=off/i.test((global.location && global.location.hash) || "");
     let zt = null;                         // the touch runtime — built at the end of boot, read every frame
     /* NOTE FLASH — inside takes the note's colour, outside takes one. */
@@ -702,8 +708,24 @@
        without this silently broke both keys — they went on adjusting a number
        nothing read any more, which is the same failure as a method on the wrong
        object: correct code, never consulted. */
-    let frameZoom = 1.0;
-    const dial = { ink: (global.ZIG_INK !== undefined ? +global.ZIG_INK : 1.8), moon: 1.6, camRad: CAM0, fov: 1.02, spectral: false, Kmax: 3.0, paceGain: 2.2, time: 0.55,
+    /* VIEW (0.33.0) — a phone has no + − [ ] keys, so the camera's distance and
+       lens need a control a finger can reach. window.ZIG_VIEW (the host's VIEW
+       dropdown) picks a starting frame; #zoom= and #fov= override it:
+          close  0.72× · 1.02     normal 1.00× · 1.02 (today's frame, exactly)
+          far    1.60× · 1.02     wide   1.35× · 1.30 (further AND a wider lens)
+       zoom multiplies the distance auto-frame chooses (the same number − and =
+       move); C now resets to the VIEW, not to normal. */
+    const VIEW0 = (function () {
+      const V = { close: [0.72, 1.02], normal: [1, 1.02], far: [1.6, 1.02], wide: [1.35, 1.3] };
+      const v = (V[String(global.ZIG_VIEW || "normal").toLowerCase()] || V.normal).slice();
+      const h = (global.location && global.location.hash) || "";
+      const z = h.match(/[#&]zoom=([0-9.]+)/i), f = h.match(/[#&]fov=([0-9.]+)/i);
+      if (z && isFinite(+z[1])) v[0] = Math.max(0.35, Math.min(2.6, +z[1]));
+      if (f && isFinite(+f[1])) v[1] = Math.max(0.5, Math.min(1.4, +f[1]));
+      return v;
+    })();
+    let frameZoom = VIEW0[0];
+    const dial = { ink: (global.ZIG_INK !== undefined ? +global.ZIG_INK : 1.8), moon: 1.6, camRad: AUTOFRAME ? CAM0 : CAM0 * VIEW0[0], fov: VIEW0[1], spectral: false, Kmax: 3.0, paceGain: 2.2, time: 0.55,
                    audio: (global.ZIG_AUDIOGAIN !== undefined ? Math.max(0, Math.min(4, +global.ZIG_AUDIOGAIN)) : 1),   // AUDIO GAIN (Alt+[ / Alt+]): how far the horn reaches into the body. 0 = audio drives NOTHING (the mappings vanish, not fade) · 1 = the conservative defaults · 4 = as far as they go. Scales BOTH the voice path and the ambience path, so one dial means the same thing whichever is armed.
                    hueRot: HUEROT0, hueSpan: HUESPAN0,   // ZIGSPECTRUM: rotation around the wheel (Q) · base→tip span
                    shadowComp: (global.ZIG_SHADOWCOMP !== undefined ? +global.ZIG_SHADOWCOMP : 0),   // SHADOW COMPLEMENT (9/0): dark side → the material's complementary colour instead of black
@@ -817,12 +839,19 @@
         if (measured && measured.r > 1) {
           const aspect2 = gpu.canvas.clientWidth / Math.max(1, gpu.canvas.clientHeight);
           const want = ZC.Frame.fit(measured.r, dial.fov, aspect2, FRAME_MARGIN) * frameZoom;
-          autoRad = ZC.Frame.ease(autoRad, Math.max(14, Math.min(400, want)), dt, 0.9);
+          /* CAMERA HOLD (0.33.0): while a hand is the nucleus, auto-frame keeps
+             its distance and its aim. Otherwise the gather tightens the body,
+             the camera dives after it, and the shards turn into props — you
+             should WATCH the field come to you, not be flown into it. When the
+             hand and the thrown body are both let go, it eases back as before. */
+          if (!(zt && zt.holdCam())) autoRad = ZC.Frame.ease(autoRad, Math.max(14, Math.min(400, want)), dt, 0.9);
           /* AIM AT THE FLOCK, not at a drifting target. Being off-centre cost as
              much of the frame as being too close did. */
+          if (!(zt && zt.holdCam())) {
           aimP[0] += (measured.cx - aimP[0]) * Math.min(1, dt * 0.8);
           aimP[1] += (measured.cy - aimP[1]) * Math.min(1, dt * 0.8);
           aimP[2] += (measured.cz - aimP[2]) * Math.min(1, dt * 0.8);
+          }
         }
       }
       const baseRad = AUTOFRAME ? autoRad : dial.camRad;
@@ -1538,7 +1567,7 @@
              two lines up, and the reason three separate causes hid this one on
              2026-08-25. The reach is live on Shift+↑/↓; read it off here. */
           (flock.presence ? " · BEE " + (flock.presence.sign < 0 ? "agitate" : "cozy") +
-                            " reach " + flock.presence.r.toFixed(0) : "") +
+                            " reach " + flock.presence.r.toFixed(0) + (zt && zt.nucleus ? "\u2192" + zt.reachMax : "") : "") +
           (MAT ? " · " + matName + (WORLD && !global.ZIG_MATERIAL ? " (native)" : "") : "") +
           " · cam " + (AUTOFRAME ? autoRad.toFixed(0) + (measured ? "\u2194" + measured.r.toFixed(0) : "") + (Math.abs(frameZoom-1) > 0.01 ? " \u00d7" + frameZoom.toFixed(2) : "") : dial.camRad.toFixed(0)) + " · fov " + dial.fov.toFixed(2) +
           " · " + (WNAMES.length > 1
@@ -1735,7 +1764,7 @@
       if (e.code === "Comma") dial.time = clamp(dial.time / 1.15, 0.15, 1.6);   // , slower
       if (e.code === "Period") dial.time = clamp(dial.time * 1.15, 0.15, 1.6);  // . faster
       if (e.code === "KeyC") {                                 // C — center: reset the view
-        dial.camRad = CAM0; dial.fov = 1.02; frameZoom = 1.0;
+        dial.camRad = AUTOFRAME ? CAM0 : CAM0 * VIEW0[0]; dial.fov = VIEW0[1]; frameZoom = VIEW0[0];   // back to the VIEW (normal = the old 1.0 · 1.02)
         camPhase = -t * 0.021; hPhase = -t * 0.05;             // square to the anchor, level the bob
       }
       if (e.code === "Semicolon") agitF = Math.max(0.2, agitF - 0.1);   // ; — calmer letters (live)
@@ -1759,7 +1788,14 @@
          14 against a field 130 across is a whisper in a stadium; this is the
          dial that finds the true one, and the HUD prints it so the number
          SURVIVES the tab closing. */
-      if ((e.code === "ArrowUp" || e.code === "ArrowDown") && e.shiftKey && flock.presence) {
+      if ((e.code === "ArrowUp" || e.code === "ArrowDown") && e.shiftKey && flock.presence && zt && zt.nucleus) {
+        /* nucleus mode: the reach is the HAND'S now (it grows with trust), so the
+           dial moves the hand's reach — writing presence.r directly would be
+           overwritten next frame, a dial that lies */
+        zt.reachMax = clamp(zt.reachMax + ((e.code === "ArrowUp") ? 4 : -4), 4, 200);
+        H.line("status", "HAND REACH " + zt.reachMax + " — a trusted hand is felt out to " + zt.reachMax + " (#reach=" + zt.reachMax + " keeps it)");
+        e.preventDefault();
+      } else if ((e.code === "ArrowUp" || e.code === "ArrowDown") && e.shiftKey && flock.presence) {
         const d = (e.code === "ArrowUp") ? 4 : -4;
         flock.presence.r = clamp(flock.presence.r + d, 1, 200);
         H.line("status", "BEE REACH " + flock.presence.r.toFixed(0) +
@@ -1819,6 +1855,10 @@
       const CURK = 0.07, WINDMAX = 9;                    // world accel per world-unit/s of stroke · a ceiling so a flick is a gust, not a gale
       zt = {
         touch, haptics, nucleus: nuc, at: null, wind: state.wind,
+        restR: flock.presence ? flock.presence.r : 14, reachMax: TOUCH_REACH,
+        /* the camera holds while a finger is down, and while the nucleus is
+           still held or still travelling on a wave */
+        holdCam: () => touch.field.contacts > 0 || !!(nuc && nuc.w > 0.15),
         avatar: () => [state.avatarA[1], state.avatarA[2], state.avatarA[3], state.avatarB[3]],   // probe: the Bee's target + charisma, read-only
         frame(dt) {
           const f = touch.update((global.performance && performance.now) ? performance.now() : Date.now());
@@ -1828,6 +1868,7 @@
                Bee's DWELL path stays the EWI's and TRUST is the hand's) */
             if (nuc.breath > 0) { ZC.Perf.sim(nuc.breath); simOn = true; }
             else if (simOn) { ZC.Perf.sim(0); simOn = false; }
+            if (flock.presence) flock.presence.r = zt.restR + (zt.reachMax - zt.restR) * nuc.w;   // the gather spreads with trust
             if (nuc.w > 0.002) {
               const p = toWorld(nuc.x, nuc.y), k = Math.min(1, nuc.w * 1.6);
               zt.at = p;                                                                        // probe: where the hand has put her

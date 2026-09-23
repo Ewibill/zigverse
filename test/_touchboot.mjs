@@ -95,12 +95,21 @@ const W = 1280, H = 720, fx = 900, fy = 300;
   const d = s.at ? Math.hypot(s.av[0] - s.at[0], s.av[1] - s.at[1], s.av[2] - s.at[2]) : 1e9;
   say(s.at && d < 3, `the Bee's target is the finger's point in the world (${s.at && s.at.map((v) => v.toFixed(1)).join(", ")} · off by ${d.toFixed(2)})`);
   say(s.av[3] > 3, `charisma rides trust: ${s.av[3].toFixed(2)} (BEE curious ceiling 6)`);
+  const g = await page.evaluate(() => ({ r: window.SickleField.flock.presence.r, max: window.SickleField.touch.reachMax,
+    rest: window.SickleField.touch.restR, hold: window.SickleField.touch.holdCam() }));
+  say(g.r > g.rest + 0.6 * (g.max - g.rest) && g.r <= g.max, `v5.5 the gather spreads with trust: Bee reach ${g.rest} → ${g.r.toFixed(1)} (hand reach ${g.max})`);
+  say(g.hold, "v5.5 the camera holds while the hand is down");
   say(s.sim > 0.6 && s.notes === 0, `the held hand breathes (Perf.sim ${s.sim.toFixed(2)}) without posting a note — TRUST, not dwell, is the hand's`);
   if (c0 && c1 && s.at) {
     const before = Math.hypot(c0.cx - s.at[0], c0.cy - s.at[1], c0.cz - s.at[2]);
     const after = Math.hypot(c1.cx - s.at[0], c1.cy - s.at[1], c1.cz - s.at[2]);
     console.log(`     centroid → finger point: ${before.toFixed(1)} → ${after.toFixed(1)} world units · spread r ${c0.r.toFixed(1)} → ${c1.r.toFixed(1)}`);
-    say(after < before, "the field's centre of mass moved toward the hand");
+    /* 0.33.0 fix: the old check asked whether the CENTRE moved toward the
+       finger — but the probe's finger lands ~10 units from the centre, so there
+       is nowhere to move and the result was noise (passed by 0.1, then failed at
+       0.0 on eyeZ). A gather is a TIGHTENING: the spread is the honest measure. */
+    const tight = c1.r / Math.max(1e-6, c0.r);
+    say(tight < 0.95, `the field GATHERS: spread ${c0.r.toFixed(1)} → ${c1.r.toFixed(1)} (${Math.round((1 - tight) * 100)}% tighter)`);
   } else console.log("     centroid: NOT MEASURED here (GPU readback does not resolve under SwiftShader) — body motion is Bill's eye / eyeZ");
 
   console.log("[WAVE — sweep and let go while moving]");
@@ -123,6 +132,33 @@ const W = 1280, H = 720, fx = 900, fy = 300;
   await sleep(9000);
   const z = await page.evaluate(() => { const t = window.SickleField.touch; return { w: t.nucleus.w, wind: Math.hypot(...t.wind), sim: ZigCore.Perf._sim }; });
   say(z.w < 0.05 && z.wind < 0.05 && z.sim === 0, `then let go: nucleus ${z.w.toFixed(3)} · wind ${z.wind.toFixed(3)} · breath released`);
+}
+
+{
+  const z = await page.evaluate(() => ({ r: window.SickleField.flock.presence.r, rest: window.SickleField.touch.restR, hold: window.SickleField.touch.holdCam() }));
+  say(Math.abs(z.r - z.rest) < 0.5 && !z.hold, `v5.5 hand gone → reach back to rest (${z.r.toFixed(1)}) and the camera free again`);
+}
+
+console.log("[PHONE — 390×844 portrait, touch screen]");
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
+  const ph = await ctx.newPage(); ph.on("pageerror", (e) => errors.push("phone: " + e.message));
+  await ph.goto(url("#touch=nucleus"), { waitUntil: "load" }); await boot(ph);
+  const v = await ph.evaluate(() => ({ view: document.getElementById("viewpick").value, zv: window.ZIG_VIEW }));
+  say(v.view === "far" && v.zv === "far", "a phone in portrait starts at VIEW far");
+  /* squeeze the glass until the panel CANNOT fit (your iPhone draws taller
+     dropdowns than headless Chrome), then prove the last control is reachable */
+  await ph.setViewportSize({ width: 390, height: 420 }); await sleep(300);
+  const sc = await ph.evaluate(() => { const p = document.getElementById("picks");
+    const sels = p.querySelectorAll("select"), last = sels[sels.length - 1], g2 = document.getElementById("gem2pick");
+    const out0 = last.getBoundingClientRect().bottom > innerHeight;
+    p.scrollTop = p.scrollHeight;
+    const r = last.getBoundingClientRect(); g2.scrollIntoView({ block: "nearest" }); const q = g2.getBoundingClientRect();
+    return { tall: p.scrollHeight > p.clientHeight, fits: p.getBoundingClientRect().bottom <= innerHeight + 1, out0,
+             lastVis: r.top >= 0 && r.bottom <= innerHeight + 1, g2Vis: q.top >= 0 && q.bottom <= innerHeight + 1, n: sels.length }; });
+  say(sc.tall && sc.out0 && sc.fits, `on a 420px-tall glass the panel is taller than the screen, and is held inside it (${sc.n} controls)`);
+  say(sc.lastVis && sc.g2Vis, "scrolling the panel brings the LAST control and GEM 2 into view — nothing is unreachable");
+  await ctx.close();
 }
 
 console.log("[FIELD — taps habituate]");

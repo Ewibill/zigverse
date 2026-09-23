@@ -2840,3 +2840,21 @@ Everything v5.1 had, plus three things:
   nucleus = field, plus a finger held still becomes the Bee's position and the field is drawn toward the hand; a sweep let go while moving throws her away along the current, and she does not come back to the finger. Arms BEE curious + MOOD cozy automatically.
   Dials in the address: #nucleus=0..2 (pull strength) - #throw=0.2..2 (how far a sweep carries) - #haptics=off. Android phones vibrate with it; iPhone stays silent until the native app.
 Measured on eyeZ: the hand's control is exact, but the gather is still small (field tightens ~10%, centre barely moves) - the Bee's reach (14) is short against a body ~100 across. Tune by eye next: hold the glass, Shift+Up to widen her reach, pick the reach that reads as "I am the nucleus."
+
+
+**2026-09-23 (later) · v5.5 MOBILE NUCLEUS** · sickleswarm **0.32.0 → 0.33.0** · host → `dist/Zigverse_Engine_v5_5_Mobile.html` · ZigTouch 0.1.2 · ZigWebGPU 0.47.0 untouched · **no WGSL**
+
+**Plain English (Bill):** v5.4 plus four things that make the nucleus work on a phone.
+- The **panel scrolls** on a phone — every setting, GEM and GEM 2 included, is reachable (the iPhone photo showed them cut off below the screen).
+- **The camera holds still while your finger is down** (and while a thrown nucleus is still travelling), then eases back. Before, the gather tightened the body, auto-frame dove in after it, and the shards read as video-game props.
+- **The gather spreads with trust.** A tap is felt only near the finger; a hand held still widens the Bee's reach from 14 out to 60 over the ~4 s trust takes. `#reach=` sets that full size (60 gathers · ~100+ brings the whole body); Shift+Up/Down moves it in nucleus mode and the HUD reads `reach 37→60`.
+- **VIEW dropdown** — close · normal · far · wide — the phone's version of the − = [ ] keys. Phones in portrait start at **far**. `#zoom=0.35..2.6` and `#fov=0.5..1.4` override it from the address bar.
+Unchanged when not used: desktop with no `#view=` and `#touch=off` is v5.4 exactly.
+
+**Why.** Bill: shards looked like a video game when large; the camera was the cause, not the shards. A phone has no keyboard, so reach and zoom needed finger-reachable controls. Pinch-to-zoom deferred — two fingers are two touches to the organism, so it needs its own session.
+
+**Passed:** reference gate **50/50** (+`mobile_ref`, 26 checks) · byte-identity **5/5** · boot gate headless 0 driver errors: touch off · view far+nucleus · view wide+zoom 2+fov 1.3 · view close+reach 120+nucleus+two gems+audio 2 · bundle · **`_touchboot` PASS on page and bundle**, now also: reach grows 14 → 59.3 with trust and returns to 14 when the hand is gone · camera holds while the hand is down and is free after · a phone in portrait starts at far · on a 420 px-tall glass the panel (28 controls) is held inside the screen and scrolling reaches the last control and GEM 2.
+**Not measured:** how it LOOKS — Bill on the iPhone: `…/dist/Zigverse_Engine_v5_5_Mobile.html#touch=nucleus`, then A/B `&reach=40` · `&reach=100` · VIEW far vs wide.
+**Held:** shard-size dial (judge after the camera hold) · more-smaller-shards A/B · pinch-to-zoom · scripted metal_gate on the Air.
+
+**Probe fix (2026-09-23):** _touchboot's 'centre moved toward the hand' check was noise (finger lands ~10 units from centre). Replaced with 'the field GATHERS' - spread must tighten 5%+. eyeZ measured 53.8 -> 47.7 (11%) at hand reach 60. Gates on eyeZ: ref 50/0 � bundle 740.2 KB � boot 165 fps, 0 driver errors � TOUCHBOOT PASS.
