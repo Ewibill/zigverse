@@ -2857,4 +2857,4 @@ Unchanged when not used: desktop with no `#view=` and `#touch=off` is v5.4 exact
 **Not measured:** how it LOOKS — Bill on the iPhone: `…/dist/Zigverse_Engine_v5_5_Mobile.html#touch=nucleus`, then A/B `&reach=40` · `&reach=100` · VIEW far vs wide.
 **Held:** shard-size dial (judge after the camera hold) · more-smaller-shards A/B · pinch-to-zoom · scripted metal_gate on the Air.
 
-**Probe fix (2026-09-23):** _touchboot's 'centre moved toward the hand' check was noise (finger lands ~10 units from centre). Replaced with 'the field GATHERS' - spread must tighten 5%+. eyeZ measured 53.8 -> 47.7 (11%) at hand reach 60. Gates on eyeZ: ref 50/0 � bundle 740.2 KB � boot 165 fps, 0 driver errors � TOUCHBOOT PASS.
+**Probe fix (2026-09-23):** _touchboot's 'centre moved toward the hand' check was noise (finger lands ~10 units from centre). Replaced with 'the field GATHERS' - spread must tighten 5%+. eyeZ measured 53.8 -> 47.7 (11%) at hand reach 60. Gates on eyeZ: ref 50/0 - bundle 740.2 KB - boot 165 fps, 0 driver errors - TOUCHBOOT PASS.
