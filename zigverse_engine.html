@@ -85,6 +85,8 @@
   <div class="med"><label>MOOD</label> <select id="bmpick" title="the Bee's BEHAVIOUR toward the field. off = she is a costume, drawn larger but the compute kernel has never heard of her. cozy = the field is drawn IN to her. agitate = the field is driven OFF. Breath drives only the MAGNITUDE, so the mode is your decision and a fierce cozy or a gentle agitation are each playable. Requires BEE above to be anything but off."></select></div>
   <div class="med"><label>TOUCH</label> <select id="touchpick" title="How a finger on the glass reaches the organism. off = v5.3, a finger is a MIDI note (press = breath, quick tap = strike). field = ZigTouch: a tap STARTLES and the startle habituates (the tenth tap is met differently from the first), a still hand earns trust, a stroke becomes the world's current. nucleus = field, plus a trusted hold makes your finger the Bee's position so the field gathers to your hand, and a sweep let go while moving is a WAVE that throws her along the current with her followers. nucleus arms BEE curious + MOOD cozy if they are off. Dials in the hash: #nucleus=0..2 · #throw=0.2..2 · #haptics=off — reloads"></select></div>
   <div class="med"><label>VIEW</label> <select id="viewpick" title="How far the camera sits and how wide the lens is — the phone's version of the − = [ ] keys. close · normal (the old frame) · far (1.6× further) · wide (further AND a wider lens). Phones in portrait start at far. #zoom=0.35..2.6 and #fov=0.5..1.4 in the address override it — reloads"></select></div>
+  <div class="med"><label>SKY</label> <select id="skypick" title="The OVERHEAD light. lit = today's sky (and, in a water medium, the surface window, sun and god rays). none = no overhead light: sun disc, sky glow and god rays go dark - the god rays share one number with the Bee's lantern ember, so her glow goes out too (she stays a shard). Phones start at none - reloads"></select></div>
+  <div class="med"><label>MIC</label> <select id="micpick" title="Let the organism HEAR the room. listen = your first tap on the glass opens the microphone (the phone asks once; if it stays quiet, tap again). Uses the device's own mic when the MOTU is absent. Sound is analysed live on the device - nothing is recorded or sent. #audio= sets the gain - reloads"></select></div>
   <div class="med"><label>CROWD</label> <select id="cntpick" title="how many shards exist. At 6000 on a 2560x1440 glass each gets roughly 10x10 pixels — a coloured dot, with no room to show an edge, a facing or a depth. Fewer means bigger and legible; more means the murmur has more to travel through."></select></div>
   <div class="med"><label>UNSEEN</label> <select id="unspick" title="a share of the crowd that is PRESENT but not DRAWN. They still flock, collide, carry contagion and count as neighbours — you just cannot see them. The shards you DO see are moved by neighbours you cannot, so the crowd keeps its numbers while the eye gets a thinner field."></select></div>
   <div class="med"><label>HEFT</label> <select id="heftpick" title="the shard's cross-section. foil = a single cambered sheet, which is what it has always been. Above that a back centre dips below the edges, closing it into a LENS — thick in the middle, sharp at the rim — so the blade reads as matter. cupped curves the back the same way as the front instead: a concave shell. Baked into the mesh, so this one RELOADS."></select></div>
@@ -256,7 +258,7 @@
      rewrites the hash too, because the species reads #beemode first and a
      stale "beemode=off" would silently disarm her (a dial that lies). */
   window.ZIG_TOUCHNAME = (function () { var v = (location.hash.match(/[#&]touch=([a-z]+)/i) || [])[1];
-    return ["off","field","nucleus"].includes(v) ? v : "off"; })();
+    return ["off","field","nucleus"].includes(v) ? v : (window.ZIG_APP ? "nucleus" : "off"); })();   // an installed app opens as the living-world instrument
   window.ZIG_TOUCH = (window.ZIG_TOUCHNAME === "off") ? null : window.ZIG_TOUCHNAME;
   if (window.ZIG_TOUCH === "nucleus") {
     var h0 = location.hash || "";
@@ -264,7 +266,11 @@
       h0 = /([#&])bee=[a-z]+/i.test(h0) ? h0.replace(/([#&])bee=[a-z]+/i, "$1bee=curious") : h0 + "&bee=curious"; }
     if (!window.ZIG_BEEMODE) { window.ZIG_BEEMODENAME = "cozy"; window.ZIG_BEEMODE = "cozy";
       h0 = /([#&])beemode=[a-z]+/i.test(h0) ? h0.replace(/([#&])beemode=[a-z]+/i, "$1beemode=cozy") : h0 + "&beemode=cozy"; }
-    if (h0 !== (location.hash || "")) history.replaceState(null, "", "#" + h0.replace(/^#&?/, ""));
+    /* a sandboxed frame (the Claude file preview, an embed, some venue players)
+       forbids rewriting the address and THROWS — which used to abort this whole
+       settings block, so VIEW / SKY / MIC / phone defaults below never ran. The
+       rewrite is only for honesty in the address bar; the page runs without it. */
+    if (h0 !== (location.hash || "")) { try { history.replaceState(null, "", "#" + h0.replace(/^#&?/, "")); } catch (e) { /* sandboxed: keep the address as it is */ } }
   }
   /* VIEW — close · normal · far · wide. A phone in portrait starts at far: its
      glass is narrow, so the frame eyeZ composes puts the shards too close. */
@@ -272,6 +278,19 @@
     if (["close","normal","far","wide"].includes(v)) return v;
     return (window.matchMedia && matchMedia("(max-width: 820px) and (orientation: portrait)").matches) ? "far" : "normal"; })();
   window.ZIG_VIEW = window.ZIG_VIEWNAME;
+  /* PHONE DEFAULTS (v5.6) — a coarse pointer is a finger. The hash always wins. */
+  var ZPHONE = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
+  window.ZIG_SKYNAME = (function () { var v = (location.hash.match(/[#&]sky=([a-z]+)/i) || [])[1];
+    return ["lit","none"].includes(v) ? v : (ZPHONE ? "none" : "lit"); })();
+  window.ZIG_SKYLIGHT = window.ZIG_SKYNAME === "none" ? "none" : null;
+  window.ZIG_MICNAME = (function () { var v = (location.hash.match(/[#&]mic=([a-z]+)/i) || [])[1];
+    return ["off","listen"].includes(v) ? v : "off"; })();
+  window.ZIG_MIC = window.ZIG_MICNAME === "listen" ? "listen" : null;
+  if (ZPHONE) {
+    window.ZIG_NUCLEUS = 0.6;          // a softer pull (#nucleus= overrides)
+    window.ZIG_NUCRISE = 1.0;          // and a slower gather: w follows trust with τ 1.0 s, not 0.25
+    if (!/[#&]audio=/i.test(location.hash)) window.ZIG_AUDIOGAIN = 1.5;   // a phone mic is quieter than the MOTU line
+  }
   window.ZIG_BEEIGNORE = 0.28;   // seconds below which a note is simply ignored
   window.ZIG_BEEFULL   = 1.9;    // seconds at which the whole field has committed
   window.ZIG_AVATAR = (window.ZIG_BEE > 0) ? 1 : 0;
@@ -378,6 +397,7 @@
     const bmsel = document.getElementById("bmpick");   // PRESENCE mood — declared with the other selects so btail() can never hit a dead zone
     const tosel = document.getElementById("touchpick");   // ZIGTOUCH — declared with the others, riding btail() AND the reload rail below
     const vwsel = document.getElementById("viewpick");   // VIEW — rides btail() AND the reload rail
+    const skysel = document.getElementById("skypick"), micsel = document.getElementById("micpick");   // SKY · MIC — tail AND rail
     const lsel = document.getElementById("lightpick");
     const gsel = document.getElementById("gempick"), fbsel = document.getElementById("fabpick"), gfsel = document.getElementById("gemfacepick");
     const g2sel = document.getElementById("gem2pick");
@@ -388,7 +408,7 @@
       const m = (location.hash || "").match(new RegExp("[#&]" + k + "=([a-z0-9.]+)", "i")); return m ? "&" + k + "=" + m[1] : ""; }).join("");
     const skinTail = () => "&gem=" + (gsel ? gsel.value : "none") + "&gem2=" + (g2sel ? g2sel.value : "none") + "&fab=" + (fbsel ? fbsel.value : "none") + "&gface=" + (gfsel ? gfsel.value : "both");   // GEM · GEM FACE · FABRIC persist across every reload
     const bondTail = () => "&bond=" + (bdsel ? bdsel.value : "none") + "&spread=" + (spsel ? spsel.value : "field") + "&still=" + (stsel ? stsel.value : "restless") + "&contact=" + (ctsel ? ctsel.value : "off") + "&onset=" + (onsel ? onsel.value : "snap") + "&crowding=" + (cwsel ? cwsel.value : "loose") + "&summon=" + (susel ? susel.value : "note") + "&heft=" + (hfsel ? hfsel.value : "cupped") + "&crowd=" + (cnsel ? cnsel.value : "6000") + "&unseen=" + (unsel ? unsel.value : "all") + "&bee=" + (besel ? besel.value : "off") + "&flash=" + (nfsel ? nfsel.value : "off");   // BOND rides along in either mode
-    const btail = () => "&beemode=" + (bmsel ? bmsel.value : "off") + "&touch=" + (tosel ? tosel.value : "off") + "&view=" + (vwsel ? vwsel.value : "normal") + touchDials() + bondTail() + "&breath=" + (bsel ? bsel.value : "easy") + "&stage=" + (vsel ? vsel.value : "soft") + "&radiance=" + (lsel ? lsel.value : "dark") + skinTail();   // presentation + skins ride along in either mode
+    const btail = () => "&beemode=" + (bmsel ? bmsel.value : "off") + "&touch=" + (tosel ? tosel.value : "off") + "&view=" + (vwsel ? vwsel.value : "normal") + "&sky=" + (skysel ? skysel.value : "lit") + "&mic=" + (micsel ? micsel.value : "off") + touchDials() + bondTail() + "&breath=" + (bsel ? bsel.value : "easy") + "&stage=" + (vsel ? vsel.value : "soft") + "&radiance=" + (lsel ? lsel.value : "dark") + skinTail();   // presentation + skins ride along in either mode
     const dialsHash = () => "world=custom&med=" + msel.value + "&force=" + fsel.value + "&cur=" + csel.value + "&bound=" + (bnsel ? bnsel.value : "none") + "&mat=" + ssel.value + btail();
     /* a named world reloads BARE unless a sub-dial deviates from the world's NATIVE value — then
        only the deviating override rides in the hash (native skin & shape keep following the world). */
@@ -416,6 +436,8 @@
     fill(bmsel, ["off", "cozy", "agitate"], window.ZIG_BEEMODENAME);
     fill(tosel, ["off", "field", "nucleus"], window.ZIG_TOUCHNAME);
     fill(vwsel, ["close", "normal", "far", "wide"], window.ZIG_VIEWNAME);
+    fill(skysel, ["lit", "none"], window.ZIG_SKYNAME);
+    fill(micsel, ["off", "listen"], window.ZIG_MICNAME);
     fill(cnsel, ["600", "1500", "3000", "6000", "12000"], window.ZIG_CROWDNAME);
     fill(unsel, ["all", "third", "half", "most"], window.ZIG_UNSEENNAME);
     fill(hfsel, ["foil", "cupped", "leaf", "blade", "stone"], window.ZIG_HEFTNAME);
@@ -475,7 +497,13 @@
        rate. They cannot be applied to a running flock from here (the species reads
        its globals at boot), so for honesty they reload too rather than pretending
        to take effect. Better a visible reload than a dial that lies. */
-    for (const s of [hfsel, bdsel, ctsel, onsel, spsel, stsel, susel, cnsel, unsel, besel, bmsel, tosel, vwsel, nfsel, cwsel])
+    /* THE BEE'S OFF-SWITCH, HONEST (v5.6). Nucleus mode arms the Bee on every
+       load (it IS her), so turning BEE or MOOD off used to be undone by the very
+       reload it caused. Leaving the Bee now means leaving nucleus: TOUCH steps
+       down to field. Registered BEFORE the rail so the tail it writes is right. */
+    for (const s of [besel, bmsel]) if (s) s.addEventListener("change", () => {
+      if (s.value === "off" && tosel && tosel.value === "nucleus") tosel.value = "field"; });
+    for (const s of [hfsel, bdsel, ctsel, onsel, spsel, stsel, susel, cnsel, unsel, besel, bmsel, tosel, vwsel, skysel, micsel, nfsel, cwsel])
       if (s) s.addEventListener("change", () => { location.hash = curHash(); location.reload(); });
 
     /* RADIANCE: the room's four numbers are COMPILED into the fragment shader as consts
@@ -492,7 +520,7 @@
     if (bsel) bsel.addEventListener("change", () => {
       const f = window.ZIG_BREATHFEEL[bsel.value] || window.ZIG_BREATHFEEL.easy;
       if (window.ZigCore && ZigCore.Perf && ZigCore.Perf._opts) { ZigCore.Perf._opts.gain = f[0]; ZigCore.Perf._opts.curve = f[1]; }
-      history.replaceState(null, "", "#" + curHash());
+      try { history.replaceState(null, "", "#" + curHash()); } catch (e) { /* sandboxed frame: the live change already applied */ }
     });
     /* CLEAN FRAME for recording — the backtick/tilde key ( ` ) hides all overlay chrome
        (pickers · HUD · hint) so the capture is pure field; press again to bring it back. */

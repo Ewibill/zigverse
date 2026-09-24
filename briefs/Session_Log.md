@@ -2858,3 +2858,21 @@ Unchanged when not used: desktop with no `#view=` and `#touch=off` is v5.4 exact
 **Held:** shard-size dial (judge after the camera hold) · more-smaller-shards A/B · pinch-to-zoom · scripted metal_gate on the Air.
 
 **Probe fix (2026-09-23):** _touchboot's 'centre moved toward the hand' check was noise (finger lands ~10 units from centre). Replaced with 'the field GATHERS' - spread must tighten 5%+. eyeZ measured 53.8 -> 47.7 (11%) at hand reach 60. Gates on eyeZ: ref 50/0 - bundle 740.2 KB - boot 165 fps, 0 driver errors - TOUCHBOOT PASS.
+
+
+**2026-09-24 - v5.6 APP** - sickleswarm 0.33.0 -> 0.34.0 - host -> `dist/Zigverse_v5_6_App.html` (bundled with --app) - ZigTouch 0.1.2 - ZigWebGPU 0.47.0 untouched - **no WGSL**
+
+**Plain English (Bill):** after the first iPhone run ("a great looking app") - six things.
+- **The Bee's off-switch is honest.** Nucleus mode used to switch BEE and MOOD back on at every reload, so turning them off undid itself. Now turning BEE or MOOD off while TOUCH is nucleus steps TOUCH down to field.
+- **The camera is smooth.** Under a held finger the camera was chasing the hand at a capped speed (hard starts and stops) - measured: it moved 53.4 units in 4.5 s of holding still. Now 1.7 (just the slow orbit), jerk 99% lower. A hand's breath no longer dollies the camera in, and auto-frame's 4-per-second targets are eased twice. `#camsmooth=0` gives the old camera for an A/B.
+- **SKY: lit / none.** The overhead light was the WATER sky: surface window, sun disc and god rays. none turns them off. The god rays share one number with the Bee's lantern ember, so none also puts out her glow (she stays a shard); separating them would need a shader change + Metal gate. Phones start at none.
+- **The gather is gentler on phones:** pull 0.6 (was 1) and it builds over about 1 s more slowly. `#nucleus=` still overrides.
+- **MIC: off / listen.** listen = the first tap on the glass opens the microphone (the phone asks once; if it stays quiet, tap again). Uses the phone's own mic when the MOTU is absent. Phones start at gain 1.5. Analysed live on the device - nothing recorded or sent.
+- **The app.** `node tools/bundle.mjs <host.html> <out.html> --app` - any species - inlines a home-screen icon (tools/app_icon.png), adds the Apple app tags if missing, and opens the engine as the instrument (TOUCH nucleus) when the address says nothing. On the iPhone: open the link in Safari, Share -> Add to Home Screen. The address you add it from (e.g. `#mic=listen`) becomes the app's settings.
+
+**Passed (Glyph's container):** reference gate **51/51** (+`app_ref`; `mobile_ref`'s guard-count and rail-order checks updated to their intent) - byte-identity 5/5 - boot gate 0 driver errors: touch off - sky none + nucleus - mic listen + far + nucleus + two gems - old camera - the app bundle - `_touchboot` PASS: camera jerk 99% lower and 1.7 vs 53.4 units of chase - BEE off stays off (TOUCH -> field) - MIC silent until tapped, then listening (synthetic mic) - the app bundle opens in app mode with icon + tags. Probe fix: a changed #hash on the same page is not a reload; every v5.6 test now loads fresh.
+**Not measured:** auto-frame's share of the camera jerk (needs GPU readback - eyeZ prints it) - how it looks and sounds - Bill on the iPhone.
+**Held:** pinch-to-zoom - true App Store app (Capacitor, adds iPhone haptics) - splitting god rays from the Bee's ember (shader + Metal gate).
+
+
+**2026-09-24 - v5.6 sandbox fix** - the Claude file preview showed "SecurityError: Failed to execute 'replaceState'". A sandboxed frame (the preview, a website embed, some venue players) forbids rewriting the address; the app build opens as nucleus, arms the Bee and rewrites its address - that threw and silently skipped the rest of the settings block (VIEW, SKY, MIC, phone defaults). Both address rewrites in the host are now guarded; the page keeps its address and runs. Reproduced and proven in a sandboxed srcdoc frame: 1 error -> 0, and every setting now arrives. Normal pages (GitHub Pages, the iPhone) were never affected. app_ref gains check G (no unguarded replaceState).

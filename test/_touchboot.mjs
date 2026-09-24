@@ -22,7 +22,8 @@ let pw; try { pw = await import("playwright-core"); } catch (_) { pw = await imp
 /* SAME LAUNCHER AS tools/boot_gate.mjs — the first cut forced SwiftShader on
    EVERY browser, which on eyeZ handed real Chrome no adapter at all: the page
    never booted and the probe timed out. SwiftShader is only the LAST resort. */
-const args = ["--enable-unsafe-webgpu", "--enable-features=Vulkan", "--no-sandbox", "--disable-gpu-sandbox"];
+const args = ["--enable-unsafe-webgpu", "--enable-features=Vulkan", "--no-sandbox", "--disable-gpu-sandbox",
+  "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"];   // v5.6: MIC listen is proved with a synthetic mic, never a real one
 const SW = ["--use-angle=vulkan", "--use-vulkan=swiftshader"];
 const { existsSync } = await import("node:fs");
 async function openBrowser() {
@@ -38,6 +39,9 @@ let fail = 0;
 const say = (ok, msg) => { console.log((ok ? "  ✓ " : "  ✗ ") + msg); if (!ok) fail++; };
 const url = (h) => pathToFileURL(path.resolve(FILE)).href + h;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/* a changed #hash on the same page is NOT a reload — the page keeps the
+   settings it booted with. Every v5.6 test starts from a truly fresh load. */
+const fresh = async (pg, hash) => { await pg.goto("about:blank"); await pg.goto(url(hash), { waitUntil: "load" }); };
 const boot = async (page) => page.waitForFunction(() => window.SickleField && window.SickleField.booted, null, { timeout: 60000 });
 /* GPU readback (flock.measure → mapAsync) never resolves under SwiftShader —
    on a real GPU (eyeZ) it does, and the centroid lines print numbers.
@@ -159,6 +163,59 @@ console.log("[PHONE — 390×844 portrait, touch screen]");
   say(sc.tall && sc.out0 && sc.fits, `on a 420px-tall glass the panel is taller than the screen, and is held inside it (${sc.n} controls)`);
   say(sc.lastVis && sc.g2Vis, "scrolling the panel brings the LAST control and GEM 2 into view — nothing is unreachable");
   await ctx.close();
+}
+
+console.log("[v5.6 CAMERA — the jerk, measured, smooth vs old]");
+{
+  /* per-frame camera eye → speed; the JERK is how much that speed CHANGES
+     frame to frame (hard starts/stops), averaged over a held finger */
+  const jerkOf = async (hash) => {
+    await fresh(page, hash); await boot(page); await sleep(1500);
+    const framing = !!(await centroid(page));             // auto-frame needs GPU readback — real on eyeZ, absent headless
+    await page.mouse.move(820, 330); await page.mouse.down();
+    const r = await page.evaluate(() => new Promise((res) => { const z = window.SickleField.touch, P = []; const t0 = performance.now();
+      const f = () => { P.push(z.eye()); if (performance.now() - t0 < 4500) requestAnimationFrame(f); else res(P); }; requestAnimationFrame(f); }));
+    await page.mouse.up(); await sleep(200);
+    const v = []; for (let i = 1; i < r.length; i++) v.push(Math.hypot(r[i][0] - r[i - 1][0], r[i][1] - r[i - 1][1], r[i][2] - r[i - 1][2]));
+    let j = 0; for (let i = 1; i < v.length; i++) j += Math.abs(v[i] - v[i - 1]);
+    const travel = v.reduce((a, b) => a + b, 0);
+    return { jerk: j / Math.max(1, v.length - 1), travel, framing };
+  };
+  const old = await jerkOf("#touch=nucleus&camsmooth=0"), smooth = await jerkOf("#touch=nucleus");
+  console.log(`     held 4.5 s — old: jerk ${old.jerk.toExponential(2)} · camera travel ${old.travel.toFixed(2)}   smooth: jerk ${smooth.jerk.toExponential(2)} · travel ${smooth.travel.toFixed(2)}`);
+  /* the Bee-chase is measurable everywhere; auto-frame's share only where GPU
+     readback works (eyeZ). Assert on what this machine can actually see. */
+  say(smooth.jerk <= old.jerk * 0.5, `the camera is smoother under a held finger (jerk ${Math.round((1 - smooth.jerk / Math.max(1e-12, old.jerk)) * 100)}% lower)`);
+  say(smooth.travel <= old.travel * 0.5, `…and it no longer chases the hand (moved ${smooth.travel.toFixed(1)} vs ${old.travel.toFixed(1)} units while held)`);
+  if (!(old.framing && smooth.framing)) console.log("     (auto-frame's share: NOT MEASURED here — needs GPU readback, real on eyeZ)");
+}
+
+console.log("[v5.6 BEE — the off-switch is honest]");
+{
+  await fresh(page, "#touch=nucleus"); await boot(page);
+  await Promise.all([page.waitForEvent("load"), page.selectOption("#beepick", "off")]); await boot(page);
+  const b = await page.evaluate(() => ({ bee: document.getElementById("beepick").value, touch: document.getElementById("touchpick").value, h: location.hash }));
+  say(b.bee === "off" && b.touch === "field" && /touch=field/.test(b.h) && /bee=off/.test(b.h), `BEE off in nucleus → stays off, TOUCH steps to field (bee ${b.bee} · touch ${b.touch})`);
+}
+
+console.log("[v5.6 MIC — a tap lets it hear]");
+{
+  await fresh(page, "#mic=listen"); await boot(page); await sleep(500);
+  const before = await page.evaluate(() => !!(ZigCore.Timbre.live || (ZigCore.Ambience && ZigCore.Ambience.src === "live")));
+  await page.mouse.click(640, 360); await sleep(2500);
+  const a = await page.evaluate(() => ({ live: !!(ZigCore.Timbre.live || (ZigCore.Ambience && ZigCore.Ambience.src === "live")), dev: ZigCore.Timbre.device || "", err: ZigCore.Timbre.err || "" }));
+  say(!before && a.live, `silent until touched, then listening (${a.live ? "device: " + (a.dev || "default mic") : "err: " + a.err})`);
+}
+
+console.log("[v5.6 APP — the home-screen build]");
+{
+  const APPF = path.resolve(path.dirname(FILE), "dist", "Zigverse_v5_6_App.html");
+  if (existsSync(APPF)) {
+    await page.goto("about:blank"); await page.goto(pathToFileURL(APPF).href, { waitUntil: "load" }); await boot(page);
+    const a = await page.evaluate(() => ({ app: !!window.ZIG_APP, touch: document.getElementById("touchpick").value,
+      icon: !!document.querySelector('link[rel="apple-touch-icon"][href^="data:image/png"]'), cap: !!document.querySelector('meta[name="apple-mobile-web-app-capable"]') }));
+    say(a.app && a.touch === "nucleus" && a.icon && a.cap, "opened with no address: app mode, TOUCH nucleus, home-screen icon + tags present");
+  } else console.log("     (dist/Zigverse_v5_6_App.html not built yet — bundle with --app first)");
 }
 
 console.log("[FIELD — taps habituate]");

@@ -34,7 +34,10 @@ chk("phones in portrait start at far", /orientation: portrait\)"\)\.matches\) \?
 console.log("\nB — CAMERA HOLD");
 chk("auto-frame distance guarded", SP.includes("if (!(zt && zt.holdCam())) autoRad = ZC.Frame.ease("));
 chk("auto-frame aim guarded", /if \(!\(zt && zt\.holdCam\(\)\)\) \{\s*aimP\[0\] \+= \(measured\.cx/.test(SP));
-chk("exactly two guards (nothing else frozen)", (SP.match(/zt\.holdCam\(\)/g) || []).length === 2);
+/* v5.6: CAMERA SMOOTH adds more hold guards (dolly, orbit, aim chase) on purpose —
+   the claim that survives is that the hold only ever GUARDS camera state */
+chk("every hold guard sits in the camera (v5.6: dolly · orbit · chase · frame)",
+    (SP.match(/zt\.holdCam\(\)/g) || []).length >= 2 && !/holdCam\(\)[^\n]*(state\.|flock\.)/.test(SP));
 chk("holds on contact OR a held/travelling nucleus", SP.includes("touch.field.contacts > 0 || !!(nuc && nuc.w > 0.15)"));
 chk("touch off → zt is null → no hold (today's camera)", SP.includes("let zt = null;"));
 
@@ -54,7 +57,7 @@ chk("panel height-limited to the glass", /#picks \{[^}]*max-height: calc\(100dvh
 chk("panel scrolls", /#picks \{[^}]*overflow-y: auto/.test(HT));
 chk("VIEW dropdown exists", HT.includes('<select id="viewpick"'));
 chk("VIEW rides the hash tail", HT.includes('"&view=" + (vwsel ? vwsel.value : "normal")'));
-chk("VIEW rides the reload rail", /tosel, vwsel, nfsel/.test(HT));
+chk("VIEW rides the reload rail", /tosel, vwsel,/.test(HT));
 chk("reach · zoom · fov survive a dropdown reload", HT.includes('"reach", "zoom", "fov"]'));
 
 console.log("\n" + (bad ? `FAIL — ${bad} check(s)` : "PASS — all checks"));

@@ -46,7 +46,7 @@
   const LETTER = global.ZIG_LETTER || "sicklePetal";
   const PETAL = Object.assign({}, ZM && ZM.presets[LETTER] ? ZM.presets[LETTER] : {});
 
-  const Sickle = global.SickleField = { version: "0.33.0", flock: null, gpu: null, stage: "loaded", booted: false };   // 0.28: MEDIUM · 0.29: FORCES · 0.30: ENVIRONMENT·CURRENT (ZIG_CURRENT drift/gyre/eddy — the world's flow the field rides, composes with medium+forces)   // 0.26: note-impulse + MIDI monitor + ribbon-off bugfix · 0.27: SMOKE/FOG (ZIG_SMOKE — breath lifts & billows luminous puffs, notes puff bursts, silence thins them)   // 0.25: melodic ribbon (shelved) · 0.26: NOTE-IMPULSE (ZIG_NOTEPULSE — each note is a nerve pulse traveling through the organism, flaring the tissue; energy of the notes INTO the body)   // 0.24.1: fly dolly smoothed · 0.25: MELODIC RIBBON (ZIG_RIBBON — pitch draws a glowing streamer through the field; the note-twin of breath, so the ribbon of notes finally has a body)
+  const Sickle = global.SickleField = { version: "0.34.0", flock: null, gpu: null, stage: "loaded", booted: false };   // 0.28: MEDIUM · 0.29: FORCES · 0.30: ENVIRONMENT·CURRENT (ZIG_CURRENT drift/gyre/eddy — the world's flow the field rides, composes with medium+forces)   // 0.26: note-impulse + MIDI monitor + ribbon-off bugfix · 0.27: SMOKE/FOG (ZIG_SMOKE — breath lifts & billows luminous puffs, notes puff bursts, silence thins them)   // 0.25: melodic ribbon (shelved) · 0.26: NOTE-IMPULSE (ZIG_NOTEPULSE — each note is a nerve pulse traveling through the organism, flaring the tissue; energy of the notes INTO the body)   // 0.24.1: fly dolly smoothed · 0.25: MELODIC RIBBON (ZIG_RIBBON — pitch draws a glowing streamer through the field; the note-twin of breath, so the ribbon of notes finally has a body)
   /* v0.2 — THE PULSE: the ZigPhase heartbeat in the spectral register.
      Every stroke carries a blink oscillator; breath = coupling. In spectral
      ink (P), the flash is a surge of pure rainbow — six thousand color-
@@ -237,7 +237,7 @@
       const m = h.match(new RegExp("[#&]" + key + "=([0-9.]+)", "i"));
       const v = m ? +m[1] : def; return Math.max(lo, Math.min(hi, isFinite(v) ? v : def));
     };
-    const TOUCH_NUC = touchNum("nucleus", 0, 2, 1), TOUCH_THROW = touchNum("throw", 0.2, 2, 0.9);
+    const TOUCH_NUC = touchNum("nucleus", 0, 2, global.ZIG_NUCLEUS != null ? +global.ZIG_NUCLEUS : 1), TOUCH_THROW = touchNum("throw", 0.2, 2, 0.9);
     /* #reach= (0.33.0): the HAND'S reach — how far the gather spreads once the
        hand is fully trusted. The Bee's reach GROWS from her resting reach toward
        this with trust, so a tap is felt nearby and a still hand widens the
@@ -685,6 +685,18 @@
       setV4(44, K.hor[0], K.hor[1], K.hor[2], 0.0);   // horizon
       setV4(48, K.mid[0] * 0.92, K.mid[1] * 0.92, K.mid[2] * 0.92, 0.0);   // ground plane, a shade under the sky
     }
+    /* SKY (0.34.0) — window.ZIG_SKYLIGHT = "none" puts out the OVERHEAD light:
+       the sun disc (sunDir.w — read only by the sky passes), the lit sky
+       gradient and, in a water medium, Snell's window. The god rays are scaled
+       by render2.y, which the SAME uniform uses as the Bee's lantern ember —
+       so "none" also dims her ember (below, per frame). She stays a shard;
+       only her glow goes out. Splitting the two needs a shader change (a
+       Metal gate), deliberately not done. Absent = today, byte-identical. */
+    const SKY_NONE = String(global.ZIG_SKYLIGHT || "").toLowerCase() === "none";
+    if (SKY_NONE) {
+      view[35] = 0;                                              // sun disc off
+      for (const o of [36, 40, 44]) { view[o] = view[48]; view[o + 1] = view[49]; view[o + 2] = view[50]; }   // sky = the ground's dark
+    }
     /* LIVE DIALS — start hot (the extremes hunt), tune with keys, read the
        numbers off the HUD when a sweet spot lands */
     const CAM0 = global.ZIG_CAM || 54;
@@ -702,6 +714,7 @@
     const AUTOFRAME = (global.ZIG_AUTOFRAME === undefined) ? 1 : +global.ZIG_AUTOFRAME;
     const FRAME_MARGIN = (+global.ZIG_FRAMEMARGIN > 0) ? +global.ZIG_FRAMEMARGIN : 1.20;
     let measured = null, measureAcc = 0, autoRad = CAM0;
+    let radT = CAM0, aimT = null;   // CAMERA SMOOTH (0.34.0): the stepping targets are eased BEFORE the camera eases toward them
     /* + and - still work, but they now mean something better: a zoom RELATIVE to
        the frame the camera has chosen. The piece keeps composing itself and you
        keep the last word on how tight it sits. Replacing camRad with autoRad
@@ -811,12 +824,24 @@
       /* ZIG_FLY: the performer flies the camera — the organism HOLDS at the anchor
          (locked aim → stays on the page, no breath jump) and breath dollies you IN
          and orbits you AROUND it. camB = live breath only (idle = camera at rest). */
-      const camTgt = FLY && (ZC.Perf.live || ZC.Perf._sim > 0) ? ZC.Perf.breath : 0;
+      /* CAMERA SMOOTH (0.34.0, touch on, #camsmooth=0 turns it off for an A/B).
+         Bill on the iPhone: "herky jerky". Three things moved the camera under a
+         held finger and v5.5 froze only one: (1) the aim chased the Bee at a
+         CAPPED constant speed — and in nucleus mode the Bee is the finger, so the
+         camera panned after the hand with hard starts and stops (and moved the
+         finger's world point, which moved the Bee: a feedback loop); (2) a held
+         hand BREATHES, and breath dollies the camera up to 55% closer; (3) auto-
+         frame's targets jump 4× a second and were followed first-order, so every
+         measurement was a kink in velocity. Smooth: no Bee-chase, a hand's breath
+         never dollies, everything freezes while held, and auto-frame targets are
+         eased twice (continuous velocity). */
+      const camS = !!(zt && zt.camSmooth), camHeld = camS && zt.holdCam();
+      const camTgt = (camS && !ZC.Perf.live) ? 0 : (FLY && (ZC.Perf.live || ZC.Perf._sim > 0) ? ZC.Perf.breath : 0);
       /* SLOW ASYMMETRIC follow — the camera tracks the PHRASE, not each breath, so
          rapid articulation no longer yo-yos the dolly. Draws in fairly quick (0.7),
          eases back out slow (0.22) so inter-note rests don't pull you out. */
-      flyDolly += (camTgt - flyDolly) * Math.min(1, dt * (camTgt > flyDolly ? 0.7 : 0.22));
-      const avW = FLY ? 0.0 : 0.4;                 // FLY locks the aim to the anchor (no avatar chase → the mass can't yank the frame)
+      if (!camHeld) flyDolly += (camTgt - flyDolly) * Math.min(1, dt * (camTgt > flyDolly ? 0.7 : 0.22));
+      const avW = (FLY || camS) ? 0.0 : 0.4;                 // FLY locks the aim to the anchor (no avatar chase → the mass can't yank the frame)
       const ax = ANCHOR[0] * (1 - avW) + state.avatarA[1] * avW,
             ay = ANCHOR[1] * (1 - avW) + state.avatarA[2] * avW,
             az = ANCHOR[2] * (1 - avW) + state.avatarA[3] * avW;
@@ -826,8 +851,8 @@
       sy = Math.max(-capY, Math.min(capY, sy));
       const sL = Math.hypot(sx, sz);
       if (sL > capXZ) { sx *= capXZ / sL; sz *= capXZ / sL; }
-      aimP[0] += sx; aimP[1] += sy; aimP[2] += sz;
-      flyOrbit += flyDolly * dt * 0.6;                                // orbit rides the SMOOTHED envelope (walks you around, persists — no jitter)
+      if (!camHeld && !(camS && AUTOFRAME && measured)) { aimP[0] += sx; aimP[1] += sy; aimP[2] += sz; }   // smooth: auto-frame alone owns the aim once it has measured
+      if (!camHeld) flyOrbit += flyDolly * dt * 0.6;                                // orbit rides the SMOOTHED envelope (walks you around, persists — no jitter)
       const ang = t * (FLY ? 0.006 : 0.021) + camPhase + flyOrbit;    // FLY: near-still at rest, the phrase orbits you
       /* ---- AUTO-FRAME: measure occasionally, ease continuously ---- */
       if (AUTOFRAME && flock && flock.measure) {
@@ -844,10 +869,19 @@
              the camera dives after it, and the shards turn into props — you
              should WATCH the field come to you, not be flown into it. When the
              hand and the thrown body are both let go, it eases back as before. */
-          if (!(zt && zt.holdCam())) autoRad = ZC.Frame.ease(autoRad, Math.max(14, Math.min(400, want)), dt, 0.9);
+          if (camS) {
+            if (!camHeld) { radT = ZC.Frame.ease(radT, Math.max(14, Math.min(400, want)), dt, 0.6); autoRad = ZC.Frame.ease(autoRad, radT, dt, 0.9); }
+          } else if (!(zt && zt.holdCam())) autoRad = ZC.Frame.ease(autoRad, Math.max(14, Math.min(400, want)), dt, 0.9);
           /* AIM AT THE FLOCK, not at a drifting target. Being off-centre cost as
              much of the frame as being too close did. */
-          if (!(zt && zt.holdCam())) {
+          if (camS) {
+            if (!aimT) aimT = [aimP[0], aimP[1], aimP[2]];
+            if (!camHeld) {
+              const ka = Math.min(1, dt * 1.2), kb = Math.min(1, dt * 0.8);
+              aimT[0] += (measured.cx - aimT[0]) * ka; aimT[1] += (measured.cy - aimT[1]) * ka; aimT[2] += (measured.cz - aimT[2]) * ka;
+              aimP[0] += (aimT[0] - aimP[0]) * kb; aimP[1] += (aimT[1] - aimP[1]) * kb; aimP[2] += (aimT[2] - aimP[2]) * kb;
+            }
+          } else if (!(zt && zt.holdCam())) {
           aimP[0] += (measured.cx - aimP[0]) * Math.min(1, dt * 0.8);
           aimP[1] += (measured.cy - aimP[1]) * Math.min(1, dt * 0.8);
           aimP[2] += (measured.cz - aimP[2]) * Math.min(1, dt * 0.8);
@@ -1132,6 +1166,7 @@
       if (zt) zt.frame(dt);                                     // ZIGTOUCH — after the Bee has spoken, so the hand can only ADD to her
       view[68] = 0;                                             // render2.x avatar idx
       view[69] = dial.cockpit ? 0 : [0, 0.9, 3.0][dial.mark];  // beacon off in first person
+      if (SKY_NONE) view[69] = 0;                                // SKY none: god rays off (and with them her ember — one uniform)
       /* cockpit proxy — fly the path the melody commands, smoothly */
       {
         const pk = Math.min(1, dt * 1.6);
@@ -1720,20 +1755,7 @@
       else if (e.code === "KeyM") dial.Kmax = clamp(dial.Kmax - 0.2, 0, 6);
       if (e.code === "KeyY") dial.paceGain = clamp(dial.paceGain + 0.2, 0, 5);   // Y/H — your pull
       if (e.code === "KeyH") dial.paceGain = clamp(dial.paceGain - 0.2, 0, 5);
-      if (e.code === "KeyA") {                                  // A — open the audio input
-        /* per-world input pinning: window.ZIG_VOICE names this world's input
-           device (regex, e.g. "Motu M|M2|MOTU") · window.ZIG_SPLIT = 1 hears the
-           stereo cable as TWO instruments (pan stems hard L/R in the DAW) */
-        if (AMBIENCE_ON && ZC.Ambience.src !== "live") {       // the audio feeds the ORGANISM'S LIFE (replaces the synth stand-in)
-          H.line("audio", "opening the audio input for the field's LIFE…");
-          ZC.Ambience.arm(global.ZIG_VOICE).then((ok) => H.line("audio",
-            ok ? "LIFE LIVE — " + ZC.Timbre.device + " → glow · shine · pulse" : "audio failed (staying on synth): " + ZC.Timbre.err));
-        } else if (!AMBIENCE_ON && !ZC.Timbre.live) {          // ORGANISM: the horn drives the body
-          H.line("audio", "asking for the audio input…");
-          ZC.Timbre.arm(global.ZIG_VOICE, { split: !!global.ZIG_SPLIT }).then((ok) => H.line("audio",
-            ok ? "VOICE LIVE — " + ZC.Timbre.device + (ZC.Timbre.L ? " · SPLIT L/R" : "") : "voice failed: " + ZC.Timbre.err));
-        }
-      }
+      if (e.code === "KeyA") openAudio();                     // A — open the audio input
       if (e.code === "KeyN" && WNAMES.length > 1) {                      // N — next letter: the field re-dresses LIVE
         state.letter = (state.letter + 1) % WNAMES.length;
         revealPulse = Math.max(revealPulse, 1.7);                       // PREVIEW: assemble the picked letter WHOLE (past the 1.6 whole-threshold) for ~2s so the switch reads clearly
@@ -1830,7 +1852,10 @@
       if (global.document) global.document.addEventListener("visibilitychange", () => {
         if (global.document.hidden) { commit(); if (haptics) haptics.silence(); } });
       const glass = () => { const r = canvas.getBoundingClientRect(), m = Math.max(1, Math.min(r.width, r.height)); return { w: r.width / m, h: r.height / m }; };
-      const nuc = TOUCH === "nucleus" ? ZT.nucleus(touch, { strength: TOUCH_NUC, throw: TOUCH_THROW, bounds: glass }).out : null;
+      /* the gather's pace: w follows trust with riseTau; a phone host slows it
+         (window.ZIG_NUCRISE) so a hold GATHERS rather than collapses */
+      const nuc = TOUCH === "nucleus" ? ZT.nucleus(touch, { strength: TOUCH_NUC, throw: TOUCH_THROW, bounds: glass,
+        riseTau: global.ZIG_NUCRISE != null ? Math.max(0.05, +global.ZIG_NUCRISE) : 0.25 }).out : null;
       const bridge = TOUCH === "field" ? ZT.legacyBridge(touch, ZC.Perf, null) : null;
       /* the glass → the world: a ray through last frame's camera onto the plane
          through the anchor that faces the lens, so a finger lands where it looks */
@@ -1855,6 +1880,8 @@
       const CURK = 0.07, WINDMAX = 9;                    // world accel per world-unit/s of stroke · a ceiling so a flick is a gust, not a gale
       zt = {
         touch, haptics, nucleus: nuc, at: null, wind: state.wind,
+        camSmooth: !/[#&]camsmooth=0/i.test((global.location && global.location.hash) || ""),
+        eye: () => [view[16], view[17], view[18]],               // probe: the camera, read-only
         restR: flock.presence ? flock.presence.r : 14, reachMax: TOUCH_REACH,
         /* the camera holds while a finger is down, and while the nucleus is
            still held or still travelling on a wave */
@@ -1932,6 +1959,36 @@
     }   // v5.3 touch — deliberately NOT re-indented, so the diff proves not one line of it changed
 
     Sickle.stage = "alive"; Sickle.booted = true;
+    /* OPEN THE AUDIO INPUT — the A key's body, now a function so a FINGER can
+       call it too (0.34.0, MIC listen). Falls back to the device's own mic when
+       ZIG_VOICE's interface is absent, which is how a phone hears the room. */
+    function openAudio() {                                  // A — open the audio input
+        /* per-world input pinning: window.ZIG_VOICE names this world's input
+           device (regex, e.g. "Motu M|M2|MOTU") · window.ZIG_SPLIT = 1 hears the
+           stereo cable as TWO instruments (pan stems hard L/R in the DAW) */
+        if (AMBIENCE_ON && ZC.Ambience.src !== "live") {       // the audio feeds the ORGANISM'S LIFE (replaces the synth stand-in)
+          H.line("audio", "opening the audio input for the field's LIFE…");
+          ZC.Ambience.arm(global.ZIG_VOICE).then((ok) => H.line("audio",
+            ok ? "LIFE LIVE — " + ZC.Timbre.device + " → glow · shine · pulse" : "audio failed (staying on synth): " + ZC.Timbre.err));
+        } else if (!AMBIENCE_ON && !ZC.Timbre.live) {          // ORGANISM: the horn drives the body
+          H.line("audio", "asking for the audio input…");
+          ZC.Timbre.arm(global.ZIG_VOICE, { split: !!global.ZIG_SPLIT }).then((ok) => H.line("audio",
+            ok ? "VOICE LIVE — " + ZC.Timbre.device + (ZC.Timbre.L ? " · SPLIT L/R" : "") : "voice failed: " + ZC.Timbre.err));
+        }
+      }
+    /* MIC listen (0.34.0): window.ZIG_MIC = "listen". A phone may only start
+       sound from a tap, so the first touch on the glass opens the mic (the
+       phone asks permission once). iOS can hand back a SUSPENDED audio context
+       when the permission prompt eats the gesture — every later tap resumes it,
+       so "tap again" always works. Analysed live on the device; nothing is
+       recorded or sent. */
+    if (String(global.ZIG_MIC || "").toLowerCase() === "listen") {
+      let asked = false;
+      canvas.addEventListener("pointerdown", () => {
+        for (const A of [ZC.Timbre, ZC.Ambience]) if (A && A._ctx && A._ctx.state === "suspended") { try { A._ctx.resume(); } catch (_) {} }
+        if (!asked) { asked = true; H.line("audio", "MIC — asking to listen to the room…"); openAudio(); }
+      }, { capture: true });
+    }
     H.line("status", TOUCH
       ? ("alive — TOUCH " + TOUCH + " · tap it · rest a finger until it gathers" + (TOUCH === "nucleus" ? ", then sweep it away" : "") +
          (TOUCH === "nucleus" && !(BEE > 0 && PRESENCE) ? " · (the nucleus needs BEE on and MOOD cozy)" : "") +
