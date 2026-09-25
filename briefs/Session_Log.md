@@ -2876,3 +2876,16 @@ Unchanged when not used: desktop with no `#view=` and `#touch=off` is v5.4 exact
 
 
 **2026-09-24 - v5.6 sandbox fix** - the Claude file preview showed "SecurityError: Failed to execute 'replaceState'". A sandboxed frame (the preview, a website embed, some venue players) forbids rewriting the address; the app build opens as nucleus, arms the Bee and rewrites its address - that threw and silently skipped the rest of the settings block (VIEW, SKY, MIC, phone defaults). Both address rewrites in the host are now guarded; the page keeps its address and runs. Reproduced and proven in a sandboxed srcdoc frame: 1 error -> 0, and every setting now arrives. Normal pages (GitHub Pages, the iPhone) were never affected. app_ref gains check G (no unguarded replaceState).
+
+
+**2026-09-25 - v5.6.1 THE BEE HAS A BODY** - ZigWebGPU 0.47.0 -> 0.48.0 - sickleswarm 0.34.0 -> 0.35.0 - app rebuilt in place: `dist/Zigverse_v5_6_App.html` (same address, so the home-screen app picks it up) - **WGSL CHANGED: Metal gate REQUIRED**
+
+**Plain English (Bill):**
+- **The Bee occupies her body.** Bill: "the bee shard lets the edges of other shards bleed through it ... one object cannot go through another one." She is drawn up to 2.8x an ordinary shard, but the physics treated her as a point, and cozy's pull was strongest at her CENTRE - so the field was dragged INTO her. Now the kernel is told her drawn radius every frame (size x 1.22 x 1.45 x the beacon swell, plus half a shard); the pull fades to zero at her skin and a firm push returns anything inside. The field gathers AGAINST her, not into her. This is also the August "capture term" (the card-dealer fan). CPU proof: old law 89 of 160 shards inside her skin, nearest at her dead centre; new law none deeper than 80% of her radius, and the field still gathers. `#body=off` gives the old law for an A/B.
+- **COLOUR dropdown** - the Q key's wheel for a finger: 12 steps, live (no reload), remembered on the device (never in the address). "120 true" is the default every declared colour and gem is tuned at; other positions turn the gem stones too. Q and the dropdown stay in step. EWI notes still steer the wheel while playing.
+- **MIC: off / listen / listen+pulse.** listen = the room makes the body glow and shimmer with NO shock pulses (the "U" ring each sharp sound fired). listen+pulse = the old behaviour. The A key / MOTU path is unchanged.
+- Nucleus reach stays 60 (no A/B verdict yet).
+
+**Passed (Glyph's container):** reference gate **52/52** (+`body_ref`; `app_ref` +6 checks, MIC check updated) - byte-identity 5/5 IDENTICAL (the Bee-off shaders are unchanged; the change lives only inside PRESENCE) - boot gate 0 driver errors: touch off - nucleus - magnetic+agitate - cozy+body=off - nucleus+mic pulse+sky none+two gems - the app bundle (plain and mic listen) - `_touchboot` PASS incl. new: her radius reaches the kernel (6.63 units; 0 with body=off) - COLOUR changes live 119 -> 210 deg with no reload, kept on the device not the address, back after reload, and follows Q.
+**Not run:** Metal gate - REQUIRED this time (WGSL changed). The iPhone is Metal too: if the app runs on the phone, that is Metal passing in practice; the scripted gate is on the Air.
+**Not measured:** how the gather looks against her body - Bill's eye.

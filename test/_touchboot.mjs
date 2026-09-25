@@ -207,6 +207,35 @@ console.log("[v5.6 MIC — a tap lets it hear]");
   say(!before && a.live, `silent until touched, then listening (${a.live ? "device: " + (a.dev || "default mic") : "err: " + a.err})`);
 }
 
+console.log("[v5.6.1 BEE — she occupies her body]");
+{
+  await fresh(page, "#touch=nucleus"); await boot(page); await sleep(600);
+  const on = await page.evaluate(() => window.SickleField.flock.presence && window.SickleField.flock.presence.body);
+  await fresh(page, "#touch=nucleus&body=off"); await boot(page); await sleep(600);
+  const off = await page.evaluate(() => window.SickleField.flock.presence && window.SickleField.flock.presence.body);
+  say(on > 1.5 && off === 0, `the kernel is told her drawn radius (${(+on).toFixed(2)} world units) · #body=off → ${off} (the old law)`);
+}
+
+console.log("[v5.6.1 COLOUR — Q for a finger, live, remembered]");
+{
+  await fresh(page, "#touch=field"); await page.evaluate(() => { try { localStorage.removeItem("zigverse.hue.v1"); } catch (e) {} });
+  await fresh(page, "#touch=field"); await boot(page);
+  const h0 = await page.evaluate(() => window.SickleField.getHue());
+  let reloads = 0; const onNav = (f) => { if (f === page.mainFrame()) reloads++; }; page.on("framenavigated", onNav);
+  await page.selectOption("#huepick", { index: 7 }); await sleep(400);
+  page.off("framenavigated", onNav);
+  const h1 = await page.evaluate(() => ({ hue: window.SickleField.getHue(), sel: +document.getElementById("huepick").value, kept: localStorage.getItem("zigverse.hue.v1"), hash: location.hash }));
+  say(Math.abs(h1.hue - h1.sel) < 1e-6 && Math.abs(h1.hue - h0) > 0.01 && reloads === 0, `the dropdown turns the wheel LIVE: ${Math.round(h0 * 360)}° → ${Math.round(h1.hue * 360)}°, no reload`);
+  say(h1.kept !== null && !/hue=/.test(h1.hash), "…remembered on this device, not in the address");
+  await fresh(page, "#touch=field"); await boot(page);
+  const h2 = await page.evaluate(() => ({ hue: window.SickleField.getHue(), sel: +document.getElementById("huepick").value }));
+  say(Math.abs(h2.hue - h1.hue) < 1e-4 && Math.abs(h2.sel - h1.hue) < 1e-4, `…and it comes back after a reload (${Math.round(h2.hue * 360)}°)`);
+  await page.keyboard.press("KeyQ"); await sleep(200);
+  const h3 = await page.evaluate(() => ({ hue: window.SickleField.getHue(), sel: +document.getElementById("huepick").value }));
+  say(Math.abs(((h3.sel - h3.hue + 1.5) % 1) - 0.5) < 0.05, `Q moves the dropdown with it (${Math.round(h3.hue * 360)}°)`);
+  await page.evaluate(() => { try { localStorage.removeItem("zigverse.hue.v1"); } catch (e) {} });
+}
+
 console.log("[v5.6 APP — the home-screen build]");
 {
   const APPF = path.resolve(path.dirname(FILE), "dist", "Zigverse_v5_6_App.html");

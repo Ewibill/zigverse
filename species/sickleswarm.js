@@ -46,7 +46,7 @@
   const LETTER = global.ZIG_LETTER || "sicklePetal";
   const PETAL = Object.assign({}, ZM && ZM.presets[LETTER] ? ZM.presets[LETTER] : {});
 
-  const Sickle = global.SickleField = { version: "0.34.0", flock: null, gpu: null, stage: "loaded", booted: false };   // 0.28: MEDIUM · 0.29: FORCES · 0.30: ENVIRONMENT·CURRENT (ZIG_CURRENT drift/gyre/eddy — the world's flow the field rides, composes with medium+forces)   // 0.26: note-impulse + MIDI monitor + ribbon-off bugfix · 0.27: SMOKE/FOG (ZIG_SMOKE — breath lifts & billows luminous puffs, notes puff bursts, silence thins them)   // 0.25: melodic ribbon (shelved) · 0.26: NOTE-IMPULSE (ZIG_NOTEPULSE — each note is a nerve pulse traveling through the organism, flaring the tissue; energy of the notes INTO the body)   // 0.24.1: fly dolly smoothed · 0.25: MELODIC RIBBON (ZIG_RIBBON — pitch draws a glowing streamer through the field; the note-twin of breath, so the ribbon of notes finally has a body)
+  const Sickle = global.SickleField = { version: "0.35.0", flock: null, gpu: null, stage: "loaded", booted: false };   // 0.28: MEDIUM · 0.29: FORCES · 0.30: ENVIRONMENT·CURRENT (ZIG_CURRENT drift/gyre/eddy — the world's flow the field rides, composes with medium+forces)   // 0.26: note-impulse + MIDI monitor + ribbon-off bugfix · 0.27: SMOKE/FOG (ZIG_SMOKE — breath lifts & billows luminous puffs, notes puff bursts, silence thins them)   // 0.25: melodic ribbon (shelved) · 0.26: NOTE-IMPULSE (ZIG_NOTEPULSE — each note is a nerve pulse traveling through the organism, flaring the tissue; energy of the notes INTO the body)   // 0.24.1: fly dolly smoothed · 0.25: MELODIC RIBBON (ZIG_RIBBON — pitch draws a glowing streamer through the field; the note-twin of breath, so the ribbon of notes finally has a body)
   /* v0.2 — THE PULSE: the ZigPhase heartbeat in the spectral register.
      Every stroke carries a blink oscillator; breath = coupling. In spectral
      ink (P), the flash is a surge of pure rainbow — six thousand color-
@@ -209,6 +209,8 @@
     })();
     const PRESENCE = (BEE > 0 && BEEMODE) ? { mode: BEEMODE } : null;
     let beeAttn = 0, beeHue = 0;
+    const MIC_QUIET = String(global.ZIG_MIC || "").toLowerCase() === "listen";   // listen = no strikes · pulse = strikes as before
+    const BODY_ON = !/[#&]body=off/i.test((global.location && global.location.hash) || "");   // 0.35.0: the Bee occupies her drawn size
     /* ZIGTOUCH (0.32.0 · touch 0.1.2) — Option A: the finger reaches the GPU
        organism through ZigTouch instead of the v5.3 finger-as-note block.
           window.ZIG_TOUCH = "field" | "nucleus"   ·   #touch=nucleus
@@ -1167,6 +1169,14 @@
       view[68] = 0;                                             // render2.x avatar idx
       view[69] = dial.cockpit ? 0 : [0, 0.9, 3.0][dial.mark];  // beacon off in first person
       if (SKY_NONE) view[69] = 0;                                // SKY none: god rays off (and with them her ember — one uniform)
+      /* HER BODY (0.35.0 · engine 0.48): the kernel learns the size she is DRAWN
+         at, so the field gathers against her instead of through her. Her drawn
+         half-length = shard size × the largest per-agent variation (1.22) × BEE
+         (1.45) × the beacon swell the renderer applies (1 + 0.32·min(mark, 3)),
+         plus half an ordinary shard so a neighbour's EDGE stops at her skin,
+         not its centre. #body=off gives the old law for an A/B. */
+      if (flock.presence) flock.presence.body = BODY_ON
+        ? view[59] * 1.22 * (1.45 * (1 + 0.32 * Math.min(Math.max(view[69], 0), 3)) + 0.5) : 0;
       /* cockpit proxy — fly the path the melody commands, smoothly */
       {
         const pk = Math.min(1, dt * 1.6);
@@ -1275,7 +1285,11 @@
           /* the STRIKE threshold moves the other way: more gain means the horn
              crosses it sooner. Floored at 0.15 so a high gain cannot strike on
              room noise, and skipped entirely at gain 0 — silence must be silent. */
-          if (dial.audio > 0 && ZC.Timbre.flux > Math.max(0.15, 0.55 / dial.audio) && t - lastFluxT > 0.25) {
+          /* MIC listen (0.35.0): the ROOM glows and shimmers the body but does not
+             STRIKE it — on a phone every consonant and clap fired the U-shaped
+             shock ring. "pulse" keeps today's strikes; the EWI/MOTU path (the A
+             key, no MIC choice) is untouched. */
+          if (!MIC_QUIET && dial.audio > 0 && ZC.Timbre.flux > Math.max(0.15, 0.55 / dial.audio) && t - lastFluxT > 0.25) {
             lastFluxT = t;
             Sickle.strike(state.avatarA[1] || ANCHOR[0], state.avatarA[2] || ANCHOR[1],
                           state.avatarA[3] || ANCHOR[2], 0.45 + 0.5 * ZC.Timbre.flux);
@@ -1763,6 +1777,7 @@
       }
       if (e.code === "KeyQ" && SPECTRUM_ON) {                            // Q — ZIGSPECTRUM: rotate the base→tip color wheel (spin purples/greens to the tip and back)
         dial.hueRot = (dial.hueRot + 1 / 12) % 1;
+        if (typeof global.ZigOnHue === "function") { try { global.ZigOnHue(dial.hueRot); } catch (_) {} }   // the COLOUR dropdown follows Q
         H.line("status", "spectrum rotated → " + Math.round(dial.hueRot * 360) + "° (base ⟶ tip color order)");
       }
       if (e.code === "KeyF") flow.gain = clamp(flow.gain + 0.2, 0, 3);    // F/G — the wind dial
@@ -1958,6 +1973,9 @@
     canvas.addEventListener("pointercancel", lift);
     }   // v5.3 touch — deliberately NOT re-indented, so the diff proves not one line of it changed
 
+    /* COLOUR (0.35.0): the Q key's wheel, for a finger. Live — no reload. */
+    Sickle.setHue = (v) => { if (isFinite(+v)) dial.hueRot = ((+v % 1) + 1) % 1; };
+    Sickle.getHue = () => dial.hueRot;
     Sickle.stage = "alive"; Sickle.booted = true;
     /* OPEN THE AUDIO INPUT — the A key's body, now a function so a FINGER can
        call it too (0.34.0, MIC listen). Falls back to the device's own mic when
@@ -1982,7 +2000,7 @@
        when the permission prompt eats the gesture — every later tap resumes it,
        so "tap again" always works. Analysed live on the device; nothing is
        recorded or sent. */
-    if (String(global.ZIG_MIC || "").toLowerCase() === "listen") {
+    if (/^(listen|pulse)$/i.test(String(global.ZIG_MIC || ""))) {
       let asked = false;
       canvas.addEventListener("pointerdown", () => {
         for (const A of [ZC.Timbre, ZC.Ambience]) if (A && A._ctx && A._ctx.state === "suspended") { try { A._ctx.resume(); } catch (_) {} }

@@ -86,7 +86,8 @@
   <div class="med"><label>TOUCH</label> <select id="touchpick" title="How a finger on the glass reaches the organism. off = v5.3, a finger is a MIDI note (press = breath, quick tap = strike). field = ZigTouch: a tap STARTLES and the startle habituates (the tenth tap is met differently from the first), a still hand earns trust, a stroke becomes the world's current. nucleus = field, plus a trusted hold makes your finger the Bee's position so the field gathers to your hand, and a sweep let go while moving is a WAVE that throws her along the current with her followers. nucleus arms BEE curious + MOOD cozy if they are off. Dials in the hash: #nucleus=0..2 · #throw=0.2..2 · #haptics=off — reloads"></select></div>
   <div class="med"><label>VIEW</label> <select id="viewpick" title="How far the camera sits and how wide the lens is — the phone's version of the − = [ ] keys. close · normal (the old frame) · far (1.6× further) · wide (further AND a wider lens). Phones in portrait start at far. #zoom=0.35..2.6 and #fov=0.5..1.4 in the address override it — reloads"></select></div>
   <div class="med"><label>SKY</label> <select id="skypick" title="The OVERHEAD light. lit = today's sky (and, in a water medium, the surface window, sun and god rays). none = no overhead light: sun disc, sky glow and god rays go dark - the god rays share one number with the Bee's lantern ember, so her glow goes out too (she stays a shard). Phones start at none - reloads"></select></div>
-  <div class="med"><label>MIC</label> <select id="micpick" title="Let the organism HEAR the room. listen = your first tap on the glass opens the microphone (the phone asks once; if it stays quiet, tap again). Uses the device's own mic when the MOTU is absent. Sound is analysed live on the device - nothing is recorded or sent. #audio= sets the gain - reloads"></select></div>
+  <div class="med"><label>MIC</label> <select id="micpick" title="Let the organism HEAR the room. listen = glow and shimmer, no shock pulses; listen+pulse = sharp sounds also strike the body. Your first tap on the glass opens the microphone (the phone asks once; if it stays quiet, tap again). Uses the device's own mic when the MOTU is absent. Sound is analysed live on the device - nothing is recorded or sent. #audio= sets the gain - reloads"></select></div>
+  <div class="med"><label>COLOUR</label> <select id="huepick" title="The Q key's colour wheel, for a finger: turns which colours land at each shard's base and tip. Live - no reload. 120 (true) is the setting every declared colour is tuned at; other positions turn the gem stones too. Remembered on this device. EWI notes steer it while you play."></select></div>
   <div class="med"><label>CROWD</label> <select id="cntpick" title="how many shards exist. At 6000 on a 2560x1440 glass each gets roughly 10x10 pixels — a coloured dot, with no room to show an edge, a facing or a depth. Fewer means bigger and legible; more means the murmur has more to travel through."></select></div>
   <div class="med"><label>UNSEEN</label> <select id="unspick" title="a share of the crowd that is PRESENT but not DRAWN. They still flock, collide, carry contagion and count as neighbours — you just cannot see them. The shards you DO see are moved by neighbours you cannot, so the crowd keeps its numbers while the eye gets a thinner field."></select></div>
   <div class="med"><label>HEFT</label> <select id="heftpick" title="the shard's cross-section. foil = a single cambered sheet, which is what it has always been. Above that a back centre dips below the edges, closing it into a LENS — thick in the middle, sharp at the rim — so the blade reads as matter. cupped curves the back the same way as the front instead: a concave shell. Baked into the mesh, so this one RELOADS."></select></div>
@@ -128,6 +129,11 @@
   // bands, so Q shifts the overall mix. Shift+7 / Shift+8 tune it live.
   window.ZIG_HUESPAN  = 0.35;
   window.ZIG_HUEROT   = 0.33;
+  /* COLOUR (v5.6.1) — the Q wheel as a dropdown, REMEMBERED ON THIS DEVICE
+     (localStorage), never in the address. 0.33 stays the default: it is the
+     position every declared colour (the gems included) was corrected at. */
+  window.ZIG_HUEKEY = "zigverse.hue.v1";
+  try { var zh = parseFloat(localStorage.getItem(window.ZIG_HUEKEY)); if (isFinite(zh) && zh >= 0 && zh < 1) window.ZIG_HUEROT = zh; } catch (e) {}
   // SHAPES FILE — rest with WHOLE letters (not the drift), so every shape reads clearly
   // and the N switch is instantly visible. Press 5 if you ever want the gauzy fragments.
   window.ZIG_REVEAL = 1.7;
@@ -284,8 +290,8 @@
     return ["lit","none"].includes(v) ? v : (ZPHONE ? "none" : "lit"); })();
   window.ZIG_SKYLIGHT = window.ZIG_SKYNAME === "none" ? "none" : null;
   window.ZIG_MICNAME = (function () { var v = (location.hash.match(/[#&]mic=([a-z]+)/i) || [])[1];
-    return ["off","listen"].includes(v) ? v : "off"; })();
-  window.ZIG_MIC = window.ZIG_MICNAME === "listen" ? "listen" : null;
+    return ["off","listen","pulse"].includes(v) ? v : "off"; })();
+  window.ZIG_MIC = window.ZIG_MICNAME === "off" ? null : window.ZIG_MICNAME;   // listen = glow, no strikes · pulse = strikes too
   if (ZPHONE) {
     window.ZIG_NUCLEUS = 0.6;          // a softer pull (#nucleus= overrides)
     window.ZIG_NUCRISE = 1.0;          // and a slower gather: w follows trust with τ 1.0 s, not 0.25
@@ -437,7 +443,26 @@
     fill(tosel, ["off", "field", "nucleus"], window.ZIG_TOUCHNAME);
     fill(vwsel, ["close", "normal", "far", "wide"], window.ZIG_VIEWNAME);
     fill(skysel, ["lit", "none"], window.ZIG_SKYNAME);
-    fill(micsel, ["off", "listen"], window.ZIG_MICNAME);
+    fill(micsel, ["off", "listen", "pulse"], window.ZIG_MICNAME);
+    if (micsel) for (const o of micsel.options) if (o.value === "pulse") o.textContent = "listen+pulse";
+    /* COLOUR — 12 positions, the Q key's steps. Live: no reload, remembered here. */
+    const husel = document.getElementById("huepick");
+    if (husel) {
+      const cur = ((+window.ZIG_HUEROT % 1) + 1) % 1;
+      const opts = []; for (let k = 0; k < 12; k++) opts.push(k === 4 ? 0.33 : k / 12);   // 120 is the tuned 0.33 exactly, not 4/12
+      if (!opts.some((v) => Math.abs(v - cur) < 0.004)) opts.push(cur);
+      opts.sort((a, b) => a - b);
+      for (const v of opts) { const o = document.createElement("option"); o.value = String(v);
+        const deg = Math.round(v * 360); o.textContent = Math.abs(v - 0.33) < 0.006 ? deg + "\u00b0 true" : deg + "\u00b0";
+        if (Math.abs(v - cur) < 0.004) o.selected = true; husel.appendChild(o); }
+      const keep = (v) => { try { localStorage.setItem(window.ZIG_HUEKEY, String(v)); } catch (e) {} };
+      husel.addEventListener("change", () => { const v = +husel.value;
+        if (window.SickleField && SickleField.setHue) SickleField.setHue(v); keep(v); });
+      /* Q moves the wheel too — the dropdown follows it and remembers it */
+      window.ZigOnHue = (v) => { keep(v); let best = null, bd = 9;
+        for (const o of husel.options) { const d = Math.abs(((+o.value - v + 1.5) % 1) - 0.5); if (d < bd) { bd = d; best = o; } }
+        if (best) best.selected = true; };
+    }
     fill(cnsel, ["600", "1500", "3000", "6000", "12000"], window.ZIG_CROWDNAME);
     fill(unsel, ["all", "third", "half", "most"], window.ZIG_UNSEENNAME);
     fill(hfsel, ["foil", "cupped", "leaf", "blade", "stone"], window.ZIG_HEFTNAME);

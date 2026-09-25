@@ -57,7 +57,7 @@ chk("slower gather on a phone (riseTau 1.0 vs 0.25)", HT.includes("window.ZIG_NU
 console.log("\nE — MIC listen");
 chk("the A key and a finger open the SAME audio path", SP.includes('if (e.code === "KeyA") openAudio();') && SP.includes("function openAudio() {"));
 chk("first tap asks once; later taps resume a suspended context", SP.includes("if (!asked) { asked = true;") && SP.includes('A._ctx.state === "suspended"'));
-chk("MIC absent → no listener at all", SP.includes('if (String(global.ZIG_MIC || "").toLowerCase() === "listen") {'));
+chk("MIC absent → no listener at all (v5.6.1: listen OR pulse arms it)", SP.includes('if (/^(listen|pulse)$/i.test(String(global.ZIG_MIC || ""))) {'));
 chk("a phone starts the gain at 1.5 unless #audio= says otherwise", HT.includes("window.ZIG_AUDIOGAIN = 1.5;"));
 chk("MIC and SKY ride the tail AND the rail", HT.includes('"&sky=" + (skysel ? skysel.value : "lit") + "&mic="') && /vwsel, skysel, micsel, nfsel/.test(HT));
 
@@ -67,6 +67,16 @@ chk("the icon is inlined (the app keeps its face off-line)", BU.includes('"data:
 chk("app tags added only when missing", BU.includes("if (!new RegExp('name=\"' + n + '\"').test(html))"));
 chk("ZIG_APP opens the host as the instrument (nucleus) when the address says nothing",
     HT.includes('(window.ZIG_APP ? "nucleus" : "off")'));
+
+console.log("\nH — v5.6.1: MIC listen is quiet, COLOUR is a dropdown");
+chk("listen = glow and shimmer, NO strikes (the U pulse); pulse = strikes as before",
+    SP.includes('const MIC_QUIET = String(global.ZIG_MIC || "").toLowerCase() === "listen";') &&
+    SP.includes("if (!MIC_QUIET && dial.audio > 0 && ZC.Timbre.flux >"));
+chk("MIC offers off · listen · listen+pulse", HT.includes('fill(micsel, ["off", "listen", "pulse"]') && HT.includes('o.textContent = "listen+pulse"'));
+chk("COLOUR: 12 steps of Q, 120 is the tuned 0.33 exactly", HT.includes("opts.push(k === 4 ? 0.33 : k / 12)"));
+chk("COLOUR is LIVE (setHue, no reload) and NOT on the reload rail", SP.includes("Sickle.setHue = (v) =>") && !/nfsel, cwsel\]\)[^\n]*husel|husel, nfsel/.test(HT) && HT.includes("SickleField.setHue(v)"));
+chk("COLOUR is remembered on the device, never in the address", HT.includes("localStorage.setItem(window.ZIG_HUEKEY") && !HT.includes('"&hue="'));
+chk("Q and the dropdown stay in step", SP.includes("global.ZigOnHue(dial.hueRot)") && HT.includes("window.ZigOnHue = (v) =>"));
 
 console.log("\nG — survives a sandboxed frame (the Claude preview, embeds, venue players)");
 chk("no bare history.replaceState left in the host (every one guarded)",
