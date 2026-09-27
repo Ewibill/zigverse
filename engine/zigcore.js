@@ -542,6 +542,23 @@
      ======================================================================= */
   ZigCore.Timbre = {
     live: false, device: "", err: "",
+    /* HEARING (0.16 · 2026-09-27) — how hard the organism listens. Bill cast the
+       app to a TV and the phone mic barely moved it: `body` is RMS x 3.2 on a
+       FIXED scale, tuned for the MOTU at gig level, so a phone across a room
+       reads a twentieth of that. Two controls, both INPUT-side (the ears),
+       separate from the AUDIO GAIN dial (how far the sound reaches INTO the body):
+         trim   - a fixed multiplier on what comes in (SENSITIVITY low..max)
+         auto   - AUTO-LEVEL: a slow follower learns the room's level and lifts
+                  it toward `target`. Release is ~8 s, so a phrase's dynamics
+                  survive; only the room's overall level is corrected.
+       `iface` is TRUE when the input matched the interface hint (the MOTU).
+       Auto-level is for everything ELSE: an EWI through the MOTU is a performer
+       whose dynamics ARE the performance, and must never be flattened.
+       Gain is applied to body (before its ceiling) AND to the analyser's dB
+       window, so brightness and the spectral channels hear the lift too - flux
+       is relative and already scale-invariant. trim 1 + auto off = the 0.15
+       numbers exactly. */
+    iface: false, trim: 1, auto: false, target: 0.55, maxGain: 12, gain: 1, _lvl: 0, _dbShift: 0,
     body: 0, brightness: 0, flux: 0, noisiness: 0, low: 0, high: 0,
     _ctx: null, _an: null, _freq: null, _fNorm: null, _time: null, _prev: null, _hasPrev: false,
 
@@ -550,7 +567,8 @@
     _analyze(freq, time, sampleRate, prev) {
       let sum2 = 0;
       for (let i = 0; i < time.length; i++) sum2 += time[i] * time[i];
-      const body = Math.min(1, Math.sqrt(sum2 / time.length) * 3.2);
+      const bodyRaw = Math.sqrt(sum2 / time.length) * 3.2;   // 0.16: unclamped, so a trim can lift a quiet mic before the ceiling
+      const body = Math.min(1, bodyRaw);
       /* brightness centroid weights only bins ABOVE the room floor (0.45).
          Calibrated against Jimmy's live-gig recording (2026-07-21): without
          the floor, a real room — crowd, band, reverb — fills every bin and
@@ -595,7 +613,7 @@
       const noisiness = nb > 0 ? Math.min(1, Math.max(0, Math.exp(lg / nb) / (ln / nb))) : 0;
       const low  = eTot > 1e-4 ? eLow / eTot : 0;
       const high = eTot > 1e-4 ? eHigh / eTot : 0;
-      return { body, brightness, flux, noisiness, low, high };
+      return { body, brightness, flux, noisiness, low, high, bodyRaw };
     },
 
     /* SPLIT VOICES (v0.5.1): a stereo cable is TWO instruments. When armed
@@ -654,10 +672,25 @@
           sp.connect(this.L._an, 0); sp.connect(this.R._an, 1);
         } else { this.L = null; this.R = null; }
         this.device = (stream.getAudioTracks()[0] || {}).label || "audio input";
+        this.iface = want.test(this.device);            // 0.16: the interface (MOTU) - never auto-levelled
         if (this._ctx.state === "suspended") this._ctx.resume();
         this.live = true; this.err = "";
         return true;
       } catch (e) { this.err = String((e && e.message) || e); this.live = false; return false; }
+    },
+
+    /* PURE — the HEARING law. st carries trim/auto/target/maxGain and the
+       follower _lvl; x is this frame's unclamped body. Returns the gain.
+       Follower: fast attack (0.25 s) so a sudden loud room is caught at once,
+       slow release (8 s) so a rest between phrases does not pump the gain up.
+       A noise floor (0.004) stops silence being amplified into life. */
+    hear(st, x, dt) {
+      const trim = (st.trim > 0) ? st.trim : 1;
+      if (!st.auto) return trim;
+      const a = x > st._lvl ? 1 - Math.exp(-dt / 0.25) : 1 - Math.exp(-dt / 8);
+      st._lvl += (x - st._lvl) * a;
+      const g = (st.target * trim) / Math.max(st._lvl, 0.004);
+      return Math.max(1, Math.min(st.maxGain, g));
     },
 
     _tick(v, dt) {
@@ -667,6 +700,16 @@
       const raw = this._analyze(v._fNorm, v._time, this._ctx.sampleRate, v._hasPrev ? v._prev : null);
       v._prev.set(v._fNorm); v._hasPrev = true;
       const dtc = dt || 1 / 60;
+      if (v === this) {                                  // 0.16 HEARING: the mono voice sets the gain; split voices share it
+        this.gain = ZigCore.Timbre.hear(this, raw.bodyRaw, dtc);
+        const sh = 20 * Math.log10(Math.max(this.gain, 1e-3));   // lift the analyser's dB window by the same gain
+        if (Math.abs(sh - this._dbShift) > 0.5 && v._an) {
+          this._dbShift = sh;
+          try { v._an.minDecibels = -200; v._an.maxDecibels = -30 - sh; v._an.minDecibels = -100 - sh; } catch (_) {}
+          if (this.L) for (const w of [this.L, this.R]) try { w._an.minDecibels = -200; w._an.maxDecibels = -30 - sh; w._an.minDecibels = -100 - sh; } catch (_) {}
+        }
+      }
+      raw.body = Math.min(1, raw.bodyRaw * this.gain);
       v.body += (raw.body - v.body) * Math.min(1, dtc * (raw.body > v.body ? 22 : 6));   // crisp rise, smooth fall
       v.brightness += (raw.brightness - v.brightness) * Math.min(1, dtc * 9);
       v.flux = Math.max(raw.flux, v.flux * Math.exp(-dtc / 0.35));                       // spikes, then drains
@@ -3326,6 +3369,52 @@
     }
   };
 
-  ZigCore.VERSION = "0.15.0";   // 0.15: GROUND 0.1.0 — the SECOND Canon law. "A world has a ground of being." Declared, NOT yet consulted by the engine. Four grounds (void=identity, dusk, mist, paper); one word sets sky, haze, Radiance room and the afterimage's compositing together. Exists because the afterimage assumes a dark world IN ITS ARITHMETIC: max() compositing erases a dark body on a bright ground (0.2500 reaches the glass at 0.8359). Three refusals; the 8/17 sinking organism now trips two of them at build time · 0.14: THE ORDERING CONTRACT (Canon.Order — composition order is DECLARED, not inherited from build history. Two rails, "shard.face" and "frame.light", whose stations are ordered because the physics is; a law files a CLAIM at a station instead of splicing itself, and the rail emits every claim once, in order. Kills the append inversion structurally — there is no idiom left to get backwards — and refuses four faults at build time: unknown station, AMBIGUOUS (two claims, one station, no `after`), CONTESTED (two REPLACE skins on one face), DEAD (a write a later REPLACE discards). Byte-identical: the rail emits exactly the shader the hand splice did) · 0.13: THE CANON RUNTIME (Canon.register/resolve/activate/stamp — laws ship OFF and a host names them via window.ZIG_LAWS or #law=preset; absent = byte-identical) + RADIANCE 0.1.0, the first law: the room is a light source with no falloff, and the response is a hue-preserving luminance remap (black-point · gain · shadow gamma · soft knee). Identity at defaults · 0.11: BOUNDARY AXIS · 0.11.1: GYRE AXIS · 0.12: ELLIPSOID boundary (lens = a squashed sphere; per-axis radii → the wide breathing disc); byte-identical for sphere/cylinder
+  /* ==========================================================================
+     ZIGCORE.MASS (0.17 · 2026-09-27) — matter that WEIGHS something.
+     Bill: "even in the cupped leaf, blade and stone, the shards feel hollow ...
+     more like objects than foil shapes." HEFT gave them thickness; the eye reads
+     weight from MOTION first. Every shard turned the instant its velocity did,
+     answered a strike completely, and hung in the air with nothing pulling it
+     down - which is how paper behaves, whatever its thickness.
+     Newton, nothing added:
+       a = F / m     every force the world applies is divided by the mass, so a
+                     heavy shard turns in a wider arc (its heading IS its
+                     velocity), answers a strike less, and - because drag is a
+                     force too - coasts longer once it is moving.
+       weight        in silence a heavy shard settles BELOW the roost by `sink`;
+                     breath lifts it back (target = roost + breath*lift -
+                     sink*(1-breath)). Breath is literally what holds it up, so
+                     the performer stays the source of life.
+     The WGSL splice in ZigWebGPU (opts.mass) mirrors integrate() and targetY()
+     exactly; test/mass_ref.mjs proves the behaviour here. Absent = today. */
+  ZigCore.Mass = {
+    presets: {
+      feather: { m: 0.7, sink: 0,  w: 0 },     // lighter than today: quicker to turn, quicker to stop, no weight
+      wood:    { m: 1.8, sink: 6,  w: 2.5 },
+      stone:   { m: 3.0, sink: 14, w: 4.0 }
+    },
+    resolve(name) { return (name && this.presets[name]) ? Object.assign({ name }, this.presets[name]) : null; },
+    /* one step of v under accel a, with linear drag coefficient c (per second) */
+    integrate(v, a, dt, m, c) {
+      const k = dt / m, d = 1 - dt * (c || 0) / m;
+      return [(v[0] + a[0] * k) * d, (v[1] + a[1] * k) * d, (v[2] + a[2] * k) * d];
+    },
+    targetY(anchorY, breath, lift, sink) { return anchorY + breath * lift - (sink || 0) * (1 - breath); },
+    /* WEIGHT (0.17.1 - eyeZ measured the target alone moving stone 0.5 units):
+       one step of the vertical velocity under weight w. Silence pulls down; a
+       soft bed catches it `sink` below the roost; breath lifts it back to the
+       roost and never past. Applied like gravity - NOT divided by the mass. */
+    fall(vy, y, anchorY, breath, w, sink, dt) {
+      const down = w * (1 - breath);
+      const nearHome = Math.min(1, Math.max(0, (y - (anchorY - 4)) / 4));   // 0 far below the roost -> 1 at it
+      const up = breath * (w * 1.6 * Math.min(1, Math.max(0, (anchorY - y) / 4)) - 1.2 * Math.max(vy, 0) * nearHome);   // lift from below; the RISE is braked as it reaches home, nothing above is pushed down
+      vy += (up - down) * dt;
+      const bed = anchorY - (sink || 0);
+      if (y < bed) vy += (bed - y) * 2.0 * dt;
+      return vy;
+    }
+  };
+
+  ZigCore.VERSION = "0.17.2";   // 0.17.2: Mass.fall's breath is the performer's LIVE breath (the engine feeds it from a separate lane; the idle auto-breath held stone up on eyeZ) · 0.17.1: MASS WEIGHT is a force of its own (Mass.fall - silence settles onto a bed sink below the roost, breath lifts it home; eyeZ measured the target-only law moving stone 0.5 units) · 0.17: MASS (a = F/m on every force incl. drag, and weight: silence settles a heavy shard below the roost, breath lifts it; pure law ZigCore.Mass, mirrored by ZigWebGPU opts.mass) · 0.16: TIMBRE HEARING (trim = SENSITIVITY, auto = auto-level for a non-interface mic, iface = the MOTU is recognised and never levelled; pure law Timbre.hear; trim 1 + auto off = 0.15 exactly) · 0.15: GROUND 0.1.0 — the SECOND Canon law. "A world has a ground of being." Declared, NOT yet consulted by the engine. Four grounds (void=identity, dusk, mist, paper); one word sets sky, haze, Radiance room and the afterimage's compositing together. Exists because the afterimage assumes a dark world IN ITS ARITHMETIC: max() compositing erases a dark body on a bright ground (0.2500 reaches the glass at 0.8359). Three refusals; the 8/17 sinking organism now trips two of them at build time · 0.14: THE ORDERING CONTRACT (Canon.Order — composition order is DECLARED, not inherited from build history. Two rails, "shard.face" and "frame.light", whose stations are ordered because the physics is; a law files a CLAIM at a station instead of splicing itself, and the rail emits every claim once, in order. Kills the append inversion structurally — there is no idiom left to get backwards — and refuses four faults at build time: unknown station, AMBIGUOUS (two claims, one station, no `after`), CONTESTED (two REPLACE skins on one face), DEAD (a write a later REPLACE discards). Byte-identical: the rail emits exactly the shader the hand splice did) · 0.13: THE CANON RUNTIME (Canon.register/resolve/activate/stamp — laws ship OFF and a host names them via window.ZIG_LAWS or #law=preset; absent = byte-identical) + RADIANCE 0.1.0, the first law: the room is a light source with no falloff, and the response is a hue-preserving luminance remap (black-point · gain · shadow gamma · soft knee). Identity at defaults · 0.11: BOUNDARY AXIS · 0.11.1: GYRE AXIS · 0.12: ELLIPSOID boundary (lens = a squashed sphere; per-axis radii → the wide breathing disc); byte-identical for sphere/cylinder
 
 })(typeof window !== "undefined" ? window : globalThis);

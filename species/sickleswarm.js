@@ -46,7 +46,7 @@
   const LETTER = global.ZIG_LETTER || "sicklePetal";
   const PETAL = Object.assign({}, ZM && ZM.presets[LETTER] ? ZM.presets[LETTER] : {});
 
-  const Sickle = global.SickleField = { version: "0.35.0", flock: null, gpu: null, stage: "loaded", booted: false };   // 0.28: MEDIUM · 0.29: FORCES · 0.30: ENVIRONMENT·CURRENT (ZIG_CURRENT drift/gyre/eddy — the world's flow the field rides, composes with medium+forces)   // 0.26: note-impulse + MIDI monitor + ribbon-off bugfix · 0.27: SMOKE/FOG (ZIG_SMOKE — breath lifts & billows luminous puffs, notes puff bursts, silence thins them)   // 0.25: melodic ribbon (shelved) · 0.26: NOTE-IMPULSE (ZIG_NOTEPULSE — each note is a nerve pulse traveling through the organism, flaring the tissue; energy of the notes INTO the body)   // 0.24.1: fly dolly smoothed · 0.25: MELODIC RIBBON (ZIG_RIBBON — pitch draws a glowing streamer through the field; the note-twin of breath, so the ribbon of notes finally has a body)
+  const Sickle = global.SickleField = { version: "0.36.0", flock: null, gpu: null, stage: "loaded", booted: false };   // 0.28: MEDIUM · 0.29: FORCES · 0.30: ENVIRONMENT·CURRENT (ZIG_CURRENT drift/gyre/eddy — the world's flow the field rides, composes with medium+forces)   // 0.26: note-impulse + MIDI monitor + ribbon-off bugfix · 0.27: SMOKE/FOG (ZIG_SMOKE — breath lifts & billows luminous puffs, notes puff bursts, silence thins them)   // 0.25: melodic ribbon (shelved) · 0.26: NOTE-IMPULSE (ZIG_NOTEPULSE — each note is a nerve pulse traveling through the organism, flaring the tissue; energy of the notes INTO the body)   // 0.24.1: fly dolly smoothed · 0.25: MELODIC RIBBON (ZIG_RIBBON — pitch draws a glowing streamer through the field; the note-twin of breath, so the ribbon of notes finally has a body)
   /* v0.2 — THE PULSE: the ZigPhase heartbeat in the spectral register.
      Every stroke carries a blink oscillator; breath = coupling. In spectral
      ink (P), the flash is a surge of pure rainbow — six thousand color-
@@ -209,7 +209,15 @@
     })();
     const PRESENCE = (BEE > 0 && BEEMODE) ? { mode: BEEMODE } : null;
     let beeAttn = 0, beeHue = 0;
-    const MIC_QUIET = String(global.ZIG_MIC || "").toLowerCase() === "listen";   // listen = no strikes · pulse = strikes as before
+    const MIC_QUIET = String(global.ZIG_MIC || "").toLowerCase() === "listen";   // listen = no strikes · pulse = strikes as before (0.36: the phone/room mic only - never the MOTU)
+    /* SENSITIVITY (0.36.0) — how hard the organism LISTENS (ZigCore 0.16 Timbre
+       hearing). The MOTU keeps a fixed trim (its dynamics are the performance);
+       any other mic is AUTO-LEVELLED toward a target, so a phone across a room
+       hears as fully as the horn in the interface. Live, remembered on the device.
+       normal + the MOTU = the 0.35 numbers exactly. */
+    const SENS_FIX  = { low: 0.5, normal: 1, high: 2, max: 4 };     // MOTU: fixed input trim
+    const SENS_AUTO = { low: 0.6, normal: 1, high: 1.4, max: 1.8 };  // any other mic: x the auto-level target (0.55)
+    let sens = (global.ZIG_SENS && SENS_FIX[global.ZIG_SENS] !== undefined) ? global.ZIG_SENS : "normal";
     const BODY_ON = !/[#&]body=off/i.test((global.location && global.location.hash) || "");   // 0.35.0: the Bee occupies her drawn size
     /* ZIGTOUCH (0.32.0 · touch 0.1.2) — Option A: the finger reaches the GPU
        organism through ZigTouch instead of the v5.3 finger-as-note block.
@@ -465,7 +473,20 @@
     const mesh = WNAMES.length > 1
       ? WNAMES.map((n) => ZM.make(ZM.presets[n], { refine: global.ZIG_MINT || 1, thickness: THICK, hollow: HOLLOW }))
       : ZM.make(PETAL, { refine: global.ZIG_MINT || 1, thickness: THICK, hollow: HOLLOW });
+    /* MASS + SOLID (0.36.0 · engine 0.50) — weight you can see.
+       MASS (window.ZIG_MASS: feather | wood | stone): a = F/m on every force, so
+       heavy shards turn in wider arcs, answer a strike less and coast longer; in
+       silence they settle below the roost and breath lifts them (ZigCore.Mass).
+       SOLID (window.ZIG_SOLID = 1): a firm light/shadow line, a bevelled rim, and
+       neighbours that shade each other from the moon. Both absent = 0.35 exactly. */
+    const MASS_OPT = (ZC.Mass && global.ZIG_MASS) ? ZC.Mass.resolve(String(global.ZIG_MASS).toLowerCase()) : null;
+    const SOLID_OPT = (+global.ZIG_SOLID > 0)
+      ? { sun: DUSK ? [0.60, 0.16, -0.36] : [0.35, 0.62, -0.30], r: 1.25 * (+global.ZIG_SIZE || 1.8) } : null;
+    const GODRAYS_OFF = String(global.ZIG_SKYLIGHT || "").toLowerCase() === "none";   // 0.36.0: SKY none removes the shafts in the SHADER (engine 0.49), so her ember survives
     const flock = ZG.createFlock(gpu, {
+      godRays: GODRAYS_OFF ? false : undefined,
+      mass: MASS_OPT || undefined,
+      solid: SOLID_OPT || undefined,
       ground: GROUND || undefined,   // GROUND: a sceneless build still has a floor of light
       contact: CONTACT_R > 0 ? { r: CONTACT_R, k: 45, damp: 4, max: 12 } : null,
       onset: ONSET_S,
@@ -523,8 +544,11 @@
        Embodiment: the deep owns nothing it wasn't handed by a wave.        */
     let scene = null, flockB = null;
     if (global.ZIG_UNDERROW) {
-      scene = ZG.createScene(gpu, { sky: true, ground: GROUND || undefined });
+      scene = ZG.createScene(gpu, { sky: true, ground: GROUND || undefined, godRays: GODRAYS_OFF ? false : undefined });
       flockB = ZG.createFlock(gpu, {
+        godRays: GODRAYS_OFF ? false : undefined,
+        mass: MASS_OPT || undefined,
+        solid: SOLID_OPT || undefined,
         ground: GROUND || undefined,
         contact: CONTACT_R > 0 ? { r: CONTACT_R, k: 45, damp: 4, max: 12 } : null,
         onset: ONSET_S,
@@ -653,6 +677,7 @@
        birdLight = bone hollow · sunCol = moonlight. */
     const view = new Float32Array(112);  // +render6 (view[108..111] note flash, v0.43) · +render4 (view[76] chiaroscuro) · +render5 (view[80] rim) · +noteBands[6] (view[84..107] melodic strata)
     const setV4 = (o, a, b, c, d) => { view[o] = a; view[o + 1] = b; view[o + 2] = c; view[o + 3] = d; };
+    Sickle.view = view;   // 0.36.0: read-only window for probes (e.g. the Bee's ember, render2.y = view[69])
     if (DUSK) {
       /* CALIFORNIA, LATE AFTERNOON: the sun rides LOW, the sky holds warm
          gray, the horizon burns quiet amber. Gray world, orange light. */
@@ -691,9 +716,9 @@
        the sun disc (sunDir.w — read only by the sky passes), the lit sky
        gradient and, in a water medium, Snell's window. The god rays are scaled
        by render2.y, which the SAME uniform uses as the Bee's lantern ember —
-       so "none" also dims her ember (below, per frame). She stays a shard;
-       only her glow goes out. Splitting the two needs a shader change (a
-       Metal gate), deliberately not done. Absent = today, byte-identical. */
+       so "none" used to dim her ember too. 0.36.0: the shafts are removed in
+       the shader instead (engine 0.49 godRays:false), so she keeps her glow.
+       Absent = today, byte-identical. */
     const SKY_NONE = String(global.ZIG_SKYLIGHT || "").toLowerCase() === "none";
     if (SKY_NONE) {
       view[35] = 0;                                              // sun disc off
@@ -954,6 +979,7 @@
 
       state.dt = sdt; state.time = st;
       state.breath = ZC.Perf.breath; state.bend = ZC.Perf.bend; state.attack = ZC.Perf.attack;
+      state.liveBreath = (ZC.Perf.live || ZC.Perf._sim > 0) ? ZC.Perf.breath : 0;   // MASS: only the PERFORMER's breath holds the weight up - the idle auto-breath does not
       state.energy = ZC.Drive.energy;
       /* ZIGSEEK — PERFORMED (2026-07-28): the lure is no longer on a clock, it
          is on YOU. Breath drives the hunt (the lure races and the pull sharpens
@@ -1168,7 +1194,8 @@
       if (zt) zt.frame(dt);                                     // ZIGTOUCH — after the Bee has spoken, so the hand can only ADD to her
       view[68] = 0;                                             // render2.x avatar idx
       view[69] = dial.cockpit ? 0 : [0, 0.9, 3.0][dial.mark];  // beacon off in first person
-      if (SKY_NONE) view[69] = 0;                                // SKY none: god rays off (and with them her ember — one uniform)
+      /* SKY none no longer zeroes render2.y: the god rays are gone from the shader
+         (engine 0.49 godRays:false), so this number is her ember alone and she stays lit. */
       /* HER BODY (0.35.0 · engine 0.48): the kernel learns the size she is DRAWN
          at, so the field gathers against her instead of through her. Her drawn
          half-length = shard size × the largest per-agent variation (1.22) × BEE
@@ -1274,6 +1301,10 @@
          ENVIRONMENT (the loop / the world), NOT the body — the two streams stay
          separate, so the sound never smears or strikes the creature. When Ambience
          owns the audio it also owns Timbre.update (called once inside it). */
+      if (ZC.Timbre.live) {                                    // SENSITIVITY: the ears, set before the frame is heard
+        ZC.Timbre.auto = !ZC.Timbre.iface;
+        ZC.Timbre.trim = ZC.Timbre.auto ? SENS_AUTO[sens] : SENS_FIX[sens];
+      }
       if (!AMBIENCE_ON) {
         ZC.Timbre.update(dt);
         if (ZC.Timbre.live) {
@@ -1287,9 +1318,10 @@
              room noise, and skipped entirely at gain 0 — silence must be silent. */
           /* MIC listen (0.35.0): the ROOM glows and shimmers the body but does not
              STRIKE it — on a phone every consonant and clap fired the U-shaped
-             shock ring. "pulse" keeps today's strikes; the EWI/MOTU path (the A
-             key, no MIC choice) is untouched. */
-          if (!MIC_QUIET && dial.audio > 0 && ZC.Timbre.flux > Math.max(0.15, 0.55 / dial.audio) && t - lastFluxT > 0.25) {
+             shock ring. "pulse" keeps today's strikes. 0.36.0: the quiet applies
+             to the ROOM mic only - when the input is the MOTU (Timbre.iface) the
+             horn still strikes, whatever MIC says. (0.35 silenced the MOTU too.) */
+          if (!(MIC_QUIET && !ZC.Timbre.iface) && dial.audio > 0 && ZC.Timbre.flux > Math.max(0.15, 0.55 / dial.audio) && t - lastFluxT > 0.25) {
             lastFluxT = t;
             Sickle.strike(state.avatarA[1] || ANCHOR[0], state.avatarA[2] || ANCHOR[1],
                           state.avatarA[3] || ANCHOR[2], 0.45 + 0.5 * ZC.Timbre.flux);
@@ -1586,7 +1618,8 @@
               " · R body " + bar(ZC.Timbre.R.body) + " bite " + bar(ZC.Timbre.R.flux)
             : "VOICE " + ZC.Timbre.device.slice(0, 22) +
               " · body " + bar(ZC.Timbre.body) + " · shine " + bar(ZC.Timbre.brightness) + " · bite " + bar(ZC.Timbre.flux)
-              + " · GAIN " + (dial.audio === 0 ? "off" : dial.audio.toFixed(2) + "\u00d7"));
+              + " · GAIN " + (dial.audio === 0 ? "off" : dial.audio.toFixed(2) + "\u00d7")
+              + " · HEAR " + sens + (ZC.Timbre.auto ? " auto \u00d7" : " \u00d7") + ZC.Timbre.gain.toFixed(1));
         }
         H.line("engine", (dial.cockpit ? "COCKPIT · " : "") + (dial.genesis ? "GENESIS · " : "") + (dial.spectral ? "SPECTRAL INK · " : "moonlit · ") +
           "time " + dial.time.toFixed(2) + "\u00d7 \u00b7 " + "ink " + dial.ink.toFixed(2) + " · moon " + dial.moon.toFixed(2) +
@@ -1974,6 +2007,8 @@
     }   // v5.3 touch — deliberately NOT re-indented, so the diff proves not one line of it changed
 
     /* COLOUR (0.35.0): the Q key's wheel, for a finger. Live — no reload. */
+    Sickle.setSens = (v) => { if (SENS_FIX[v] !== undefined) sens = v; };   // SENSITIVITY: live, no reload
+    Sickle.getSens = () => sens;
     Sickle.setHue = (v) => { if (isFinite(+v)) dial.hueRot = ((+v % 1) + 1) % 1; };
     Sickle.getHue = () => dial.hueRot;
     Sickle.stage = "alive"; Sickle.booted = true;

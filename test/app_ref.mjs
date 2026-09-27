@@ -45,8 +45,10 @@ chk("touch off → the v5.5 camera paths are all still there",
 console.log("\nC — SKY none");
 chk("sun disc off (sunDir.w — read only by the sky passes)", SP.includes("view[35] = 0;"));
 chk("sky gradient → the ground's dark", SP.includes("for (const o of [36, 40, 44]) { view[o] = view[48];"));
-chk("god rays off, AFTER the lantern write every frame (they share render2.y)",
-    SP.indexOf("if (SKY_NONE) view[69] = 0;") > SP.indexOf("view[69] = dial.cockpit ? 0 : [0, 0.9, 3.0][dial.mark];"));
+/* v5.7: the god rays are removed in the SHADER (engine 0.49 godRays:false), so
+   SKY none no longer zeroes render2.y and the Bee keeps her ember. */
+chk("god rays off IN THE SHADER when SKY is none (her ember survives)",
+    !SP.includes("if (SKY_NONE) view[69] = 0;") && SP.includes("godRays: GODRAYS_OFF ? false : undefined"));
 chk("SKY absent → nothing changes", SP.includes('const SKY_NONE = String(global.ZIG_SKYLIGHT || "").toLowerCase() === "none";'));
 chk("phones start at none; desktop at lit", HT.includes('(ZPHONE ? "none" : "lit")'));
 
@@ -71,7 +73,7 @@ chk("ZIG_APP opens the host as the instrument (nucleus) when the address says no
 console.log("\nH — v5.6.1: MIC listen is quiet, COLOUR is a dropdown");
 chk("listen = glow and shimmer, NO strikes (the U pulse); pulse = strikes as before",
     SP.includes('const MIC_QUIET = String(global.ZIG_MIC || "").toLowerCase() === "listen";') &&
-    SP.includes("if (!MIC_QUIET && dial.audio > 0 && ZC.Timbre.flux >"));
+    SP.includes("if (!(MIC_QUIET && !ZC.Timbre.iface) && dial.audio > 0 && ZC.Timbre.flux >"));   // v5.7: the quiet is the ROOM mic's only - the MOTU still strikes
 chk("MIC offers off · listen · listen+pulse", HT.includes('fill(micsel, ["off", "listen", "pulse"]') && HT.includes('o.textContent = "listen+pulse"'));
 chk("COLOUR: 12 steps of Q, 120 is the tuned 0.33 exactly", HT.includes("opts.push(k === 4 ? 0.33 : k / 12)"));
 chk("COLOUR is LIVE (setHue, no reload) and NOT on the reload rail", SP.includes("Sickle.setHue = (v) =>") && !/nfsel, cwsel\]\)[^\n]*husel|husel, nfsel/.test(HT) && HT.includes("SickleField.setHue(v)"));

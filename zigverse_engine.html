@@ -87,10 +87,13 @@
   <div class="med"><label>VIEW</label> <select id="viewpick" title="How far the camera sits and how wide the lens is — the phone's version of the − = [ ] keys. close · normal (the old frame) · far (1.6× further) · wide (further AND a wider lens). Phones in portrait start at far. #zoom=0.35..2.6 and #fov=0.5..1.4 in the address override it — reloads"></select></div>
   <div class="med"><label>SKY</label> <select id="skypick" title="The OVERHEAD light. lit = today's sky (and, in a water medium, the surface window, sun and god rays). none = no overhead light: sun disc, sky glow and god rays go dark - the god rays share one number with the Bee's lantern ember, so her glow goes out too (she stays a shard). Phones start at none - reloads"></select></div>
   <div class="med"><label>MIC</label> <select id="micpick" title="Let the organism HEAR the room. listen = glow and shimmer, no shock pulses; listen+pulse = sharp sounds also strike the body. Your first tap on the glass opens the microphone (the phone asks once; if it stays quiet, tap again). Uses the device's own mic when the MOTU is absent. Sound is analysed live on the device - nothing is recorded or sent. #audio= sets the gain - reloads"></select></div>
+  <div class="med"><label>SENSITIVITY</label> <select id="senspick" title="How hard the organism LISTENS. With the MOTU it is a fixed lift (normal = as it has always been). With any other mic - a phone, a laptop, a TV cast - the room is AUTO-LEVELLED: it learns how loud the room is over a few seconds and lifts it, so a quiet phone hears as fully as the horn. Higher = a fuller response. Live - no reload. Remembered on this device. The AUDIO GAIN keys (Alt+[ Alt+]) still set how far the sound reaches into the body."></select></div>
   <div class="med"><label>COLOUR</label> <select id="huepick" title="The Q key's colour wheel, for a finger: turns which colours land at each shard's base and tip. Live - no reload. 120 (true) is the setting every declared colour is tuned at; other positions turn the gem stones too. Remembered on this device. EWI notes steer it while you play."></select></div>
   <div class="med"><label>CROWD</label> <select id="cntpick" title="how many shards exist. At 6000 on a 2560x1440 glass each gets roughly 10x10 pixels — a coloured dot, with no room to show an edge, a facing or a depth. Fewer means bigger and legible; more means the murmur has more to travel through."></select></div>
   <div class="med"><label>UNSEEN</label> <select id="unspick" title="a share of the crowd that is PRESENT but not DRAWN. They still flock, collide, carry contagion and count as neighbours — you just cannot see them. The shards you DO see are moved by neighbours you cannot, so the crowd keeps its numbers while the eye gets a thinner field."></select></div>
   <div class="med"><label>HEFT</label> <select id="heftpick" title="the shard's cross-section. foil = a single cambered sheet, which is what it has always been. Above that a back centre dips below the edges, closing it into a LENS — thick in the middle, sharp at the rim — so the blade reads as matter. cupped curves the back the same way as the front instead: a concave shell. Baked into the mesh, so this one RELOADS."></select></div>
+  <div class="med"><label>MASS</label> <select id="masspick" title="How much each shard WEIGHS - Newton, a = F/m. off = as it has always been. feather = lighter than today: quick to turn, quick to stop. wood / stone = heavier: turns in wider arcs, answers a strike less, coasts longer, and in silence SETTLES lower - your breath lifts it back up. Reloads."></select></div>
+  <div class="med"><label>SOLID</label> <select id="solidpick" title="How light sits on each shard. on = a firm line between lit and shadow (the dark side goes dark), a bevelled rim that shows the edge has thickness, and shards that SHADE each other from the moon where they crowd. off = as it has always been. Reloads."></select></div>
   <div class="med"><label>SUMMON</label> <select id="sumpick" title="With EWI ON (the / key), the field re-forms into a letter chosen by pitch register. It re-chose on EVERY onset, so a phrase spanning an octave dragged 6000 agents through several whole forms. This is how long a summoned form must live before another can replace it."></select></div>
   <div class="med"><label>CROWDING</label> <select id="cwpick" title="How hard shards embedded in each other are allowed to shove. The overlap force is unbounded and adds up over every neighbour, so a shard buried in twenty others gets kicked ten to fifty times harder than anything else in the world — which is why embedded groups are the most agitated part of the field."></select></div>
   <div class="med"><label>ONSET</label> <select id="onpick" title="how fast agitation may RISE. It has always risen in a single frame — instant attack, slow release — which is why individual shards pop instead of the whole organism moving. Softening the attack makes the eye read the mass."></select></div>
@@ -133,6 +136,10 @@
      (localStorage), never in the address. 0.33 stays the default: it is the
      position every declared colour (the gems included) was corrected at. */
   window.ZIG_HUEKEY = "zigverse.hue.v1";
+  /* SENSITIVITY (v5.7) — the ears. Remembered on this device, like COLOUR. */
+  window.ZIG_SENSKEY = "zigverse.sens.v1";
+  window.ZIG_SENS = "normal";
+  try { var zs = localStorage.getItem(window.ZIG_SENSKEY); if (["low","normal","high","max"].indexOf(zs) >= 0) window.ZIG_SENS = zs; } catch (e) {}
   try { var zh = parseFloat(localStorage.getItem(window.ZIG_HUEKEY)); if (isFinite(zh) && zh >= 0 && zh < 1) window.ZIG_HUEROT = zh; } catch (e) {}
   // SHAPES FILE — rest with WHOLE letters (not the drift), so every shape reads clearly
   // and the N switch is instantly visible. Press 5 if you ever want the gauzy fragments.
@@ -311,6 +318,13 @@
     return ["foil","cupped","leaf","blade","stone"].includes(v) ? v : "cupped"; })();
   window.ZIG_THICKNESS = ({ foil: 0, cupped: 0.5, leaf: 0.16, blade: 0.30, stone: 0.55 })[window.ZIG_HEFTNAME];
   window.ZIG_HOLLOW = (window.ZIG_HEFTNAME === "cupped") ? 1 : 0;
+  /* MASS + SOLID (v5.7) — weight you can see. "off" = every build before. */
+  window.ZIG_MASSNAME = (function () { var v = (location.hash.match(/[#&]mass=([a-z]+)/i) || [])[1];
+    return ["off","feather","wood","stone"].includes(v) ? v : "off"; })();
+  window.ZIG_MASS = window.ZIG_MASSNAME === "off" ? null : window.ZIG_MASSNAME;
+  window.ZIG_SOLIDNAME = (function () { var v = (location.hash.match(/[#&]solid=([a-z]+)/i) || [])[1];
+    return ["off","on"].includes(v) ? v : "off"; })();
+  window.ZIG_SOLID = window.ZIG_SOLIDNAME === "on" ? 1 : 0;
   window.ZIG_SUMMON = (function () { var m = { note: 0, phrase: 0.9, breath: 2.0, section: 5.0 };
     var v = (location.hash.match(/summon=([a-z]+)/i) || [])[1]; return (v in m) ? m[v] : 0; })();
   window.ZIG_SUMMONNAME = (function () { var v = (location.hash.match(/summon=([a-z]+)/i) || [])[1];
@@ -396,7 +410,7 @@
     /* ENVIRONMENT pickers — a WORLD macro (a coherent place) over the three elemental
        dials MEDIUM × FORCES × CURRENT, plus SURFACE. Each recompiles the shader → reload,
        carrying the state in the URL hash. WORLD takes precedence when it names a place. */
-    const wsel = document.getElementById("worldpick"), msel = document.getElementById("medpick"), fsel = document.getElementById("forcepick"), csel = document.getElementById("curpick"), bnsel = document.getElementById("boundpick"), bdsel = document.getElementById("bondpick"), spsel = document.getElementById("spreadpick"), stsel = document.getElementById("stillpick"), ctsel = document.getElementById("ctpick"), onsel = document.getElementById("onpick"), cwsel = document.getElementById("cwpick"), susel = document.getElementById("sumpick"), hfsel = document.getElementById("heftpick"), cnsel = document.getElementById("cntpick"), besel = document.getElementById("beepick"), nfsel = document.getElementById("nfpick"), unsel = document.getElementById("unspick"), ssel = document.getElementById("matpick"), bsel = document.getElementById("breathpick"), vsel = document.getElementById("stagepick");
+    const wsel = document.getElementById("worldpick"), msel = document.getElementById("medpick"), fsel = document.getElementById("forcepick"), csel = document.getElementById("curpick"), bnsel = document.getElementById("boundpick"), bdsel = document.getElementById("bondpick"), spsel = document.getElementById("spreadpick"), stsel = document.getElementById("stillpick"), ctsel = document.getElementById("ctpick"), onsel = document.getElementById("onpick"), cwsel = document.getElementById("cwpick"), susel = document.getElementById("sumpick"), hfsel = document.getElementById("heftpick"), masel = document.getElementById("masspick"), sosel = document.getElementById("solidpick"), cnsel = document.getElementById("cntpick"), besel = document.getElementById("beepick"), nfsel = document.getElementById("nfpick"), unsel = document.getElementById("unspick"), ssel = document.getElementById("matpick"), bsel = document.getElementById("breathpick"), vsel = document.getElementById("stagepick");
     if (window.ZIG_BARE) document.body.classList.add("bare");
     (function () { const t = document.getElementById("bare-t");
       if (t) t.addEventListener("click", (e) => { document.body.classList.toggle("bare"); e.stopPropagation(); }); })();
@@ -413,7 +427,7 @@
     const touchDials = () => ["nucleus", "throw", "haptics", "audio", "reach", "zoom", "fov"].map((k) => {
       const m = (location.hash || "").match(new RegExp("[#&]" + k + "=([a-z0-9.]+)", "i")); return m ? "&" + k + "=" + m[1] : ""; }).join("");
     const skinTail = () => "&gem=" + (gsel ? gsel.value : "none") + "&gem2=" + (g2sel ? g2sel.value : "none") + "&fab=" + (fbsel ? fbsel.value : "none") + "&gface=" + (gfsel ? gfsel.value : "both");   // GEM · GEM FACE · FABRIC persist across every reload
-    const bondTail = () => "&bond=" + (bdsel ? bdsel.value : "none") + "&spread=" + (spsel ? spsel.value : "field") + "&still=" + (stsel ? stsel.value : "restless") + "&contact=" + (ctsel ? ctsel.value : "off") + "&onset=" + (onsel ? onsel.value : "snap") + "&crowding=" + (cwsel ? cwsel.value : "loose") + "&summon=" + (susel ? susel.value : "note") + "&heft=" + (hfsel ? hfsel.value : "cupped") + "&crowd=" + (cnsel ? cnsel.value : "6000") + "&unseen=" + (unsel ? unsel.value : "all") + "&bee=" + (besel ? besel.value : "off") + "&flash=" + (nfsel ? nfsel.value : "off");   // BOND rides along in either mode
+    const bondTail = () => "&bond=" + (bdsel ? bdsel.value : "none") + "&spread=" + (spsel ? spsel.value : "field") + "&still=" + (stsel ? stsel.value : "restless") + "&contact=" + (ctsel ? ctsel.value : "off") + "&onset=" + (onsel ? onsel.value : "snap") + "&crowding=" + (cwsel ? cwsel.value : "loose") + "&summon=" + (susel ? susel.value : "note") + "&heft=" + (hfsel ? hfsel.value : "cupped") + "&mass=" + (masel ? masel.value : "off") + "&solid=" + (sosel ? sosel.value : "off") + "&crowd=" + (cnsel ? cnsel.value : "6000") + "&unseen=" + (unsel ? unsel.value : "all") + "&bee=" + (besel ? besel.value : "off") + "&flash=" + (nfsel ? nfsel.value : "off");   // BOND rides along in either mode
     const btail = () => "&beemode=" + (bmsel ? bmsel.value : "off") + "&touch=" + (tosel ? tosel.value : "off") + "&view=" + (vwsel ? vwsel.value : "normal") + "&sky=" + (skysel ? skysel.value : "lit") + "&mic=" + (micsel ? micsel.value : "off") + touchDials() + bondTail() + "&breath=" + (bsel ? bsel.value : "easy") + "&stage=" + (vsel ? vsel.value : "soft") + "&radiance=" + (lsel ? lsel.value : "dark") + skinTail();   // presentation + skins ride along in either mode
     const dialsHash = () => "world=custom&med=" + msel.value + "&force=" + fsel.value + "&cur=" + csel.value + "&bound=" + (bnsel ? bnsel.value : "none") + "&mat=" + ssel.value + btail();
     /* a named world reloads BARE unless a sub-dial deviates from the world's NATIVE value — then
@@ -445,6 +459,14 @@
     fill(skysel, ["lit", "none"], window.ZIG_SKYNAME);
     fill(micsel, ["off", "listen", "pulse"], window.ZIG_MICNAME);
     if (micsel) for (const o of micsel.options) if (o.value === "pulse") o.textContent = "listen+pulse";
+    /* SENSITIVITY — live, remembered here. */
+    const sesel = document.getElementById("senspick");
+    if (sesel) {
+      fill(sesel, ["low", "normal", "high", "max"], window.ZIG_SENS);
+      sesel.addEventListener("change", () => {
+        if (window.SickleField && SickleField.setSens) SickleField.setSens(sesel.value);
+        try { localStorage.setItem(window.ZIG_SENSKEY, sesel.value); } catch (e) {} });
+    }
     /* COLOUR — 12 positions, the Q key's steps. Live: no reload, remembered here. */
     const husel = document.getElementById("huepick");
     if (husel) {
@@ -466,6 +488,9 @@
     fill(cnsel, ["600", "1500", "3000", "6000", "12000"], window.ZIG_CROWDNAME);
     fill(unsel, ["all", "third", "half", "most"], window.ZIG_UNSEENNAME);
     fill(hfsel, ["foil", "cupped", "leaf", "blade", "stone"], window.ZIG_HEFTNAME);
+    fill(masel, ["off", "feather", "wood", "stone"], window.ZIG_MASSNAME);
+    fill(sosel, ["off", "on"], window.ZIG_SOLIDNAME);
+    for (const s of [masel, sosel]) if (s) s.addEventListener("change", () => { location.hash = curHash(); location.reload(); });   // compiled into the kernels -> reload
     fill(susel, ["note", "phrase", "breath", "section"], window.ZIG_SUMMONNAME);
     fill(cwsel, ["loose", "firm", "packed", "solid"], window.ZIG_CROWDNAME2);
     fill(onsel, ["snap", "quick", "swell", "tide"], window.ZIG_ONSETNAME);
