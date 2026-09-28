@@ -3415,6 +3415,48 @@
     }
   };
 
-  ZigCore.VERSION = "0.17.2";   // 0.17.2: Mass.fall's breath is the performer's LIVE breath (the engine feeds it from a separate lane; the idle auto-breath held stone up on eyeZ) · 0.17.1: MASS WEIGHT is a force of its own (Mass.fall - silence settles onto a bed sink below the roost, breath lifts it home; eyeZ measured the target-only law moving stone 0.5 units) · 0.17: MASS (a = F/m on every force incl. drag, and weight: silence settles a heavy shard below the roost, breath lifts it; pure law ZigCore.Mass, mirrored by ZigWebGPU opts.mass) · 0.16: TIMBRE HEARING (trim = SENSITIVITY, auto = auto-level for a non-interface mic, iface = the MOTU is recognised and never levelled; pure law Timbre.hear; trim 1 + auto off = 0.15 exactly) · 0.15: GROUND 0.1.0 — the SECOND Canon law. "A world has a ground of being." Declared, NOT yet consulted by the engine. Four grounds (void=identity, dusk, mist, paper); one word sets sky, haze, Radiance room and the afterimage's compositing together. Exists because the afterimage assumes a dark world IN ITS ARITHMETIC: max() compositing erases a dark body on a bright ground (0.2500 reaches the glass at 0.8359). Three refusals; the 8/17 sinking organism now trips two of them at build time · 0.14: THE ORDERING CONTRACT (Canon.Order — composition order is DECLARED, not inherited from build history. Two rails, "shard.face" and "frame.light", whose stations are ordered because the physics is; a law files a CLAIM at a station instead of splicing itself, and the rail emits every claim once, in order. Kills the append inversion structurally — there is no idiom left to get backwards — and refuses four faults at build time: unknown station, AMBIGUOUS (two claims, one station, no `after`), CONTESTED (two REPLACE skins on one face), DEAD (a write a later REPLACE discards). Byte-identical: the rail emits exactly the shader the hand splice did) · 0.13: THE CANON RUNTIME (Canon.register/resolve/activate/stamp — laws ship OFF and a host names them via window.ZIG_LAWS or #law=preset; absent = byte-identical) + RADIANCE 0.1.0, the first law: the room is a light source with no falloff, and the response is a hue-preserving luminance remap (black-point · gain · shadow gamma · soft knee). Identity at defaults · 0.11: BOUNDARY AXIS · 0.11.1: GYRE AXIS · 0.12: ELLIPSOID boundary (lens = a squashed sphere; per-axis radii → the wide breathing disc); byte-identical for sphere/cylinder
+  /* ==========================================================================
+     ZIGCORE.NATURE (0.18 · 2026-09-28) — the laws the kernel was still breaking.
+     MASS showed that inertia (a time constant) was the biggest missing piece of
+     "alive". These are the next ones, each established physics or biology:
+       VARIATION  no two individuals are identical: each carries a fixed factor
+                  (mean 1, +-var/2) that scales how hard forces move it
+       DELAY      an animal acts on what it sensed a moment ago: steering is
+                  low-passed per individual (tau x 0.6..1.4) - waves ROLL through
+       HEADING    a body is not its velocity: the heading weathervanes toward the
+                  motion at a rate that grows with speed, so slow bodies drift
+                  and turn loosely, fast ones track
+       GLIDE      a blade slides along its length and resists going broadside:
+                  sideways velocity (relative to the heading) is damped hard,
+                  forward barely, and part of the lost sideways speed is turned
+                  into forward speed (lift) - never more than was lost
+       (the speed FLOOR goes too: species gate it on the performer's live breath)
+     ZigWebGPU opts.nature mirrors each function exactly; test/nature_ref.mjs. */
+  ZigCore.Nature = {
+    presets: { natural: { vary: 0.3, tau: 0.12, align: 4.0, cPar: 0.05, cPerp: 2.5, glide: 0.35 } },
+    resolve(name) { return (name && this.presets[name]) ? Object.assign({ name }, this.presets[name]) : null; },
+    hash(i) { const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453; return x - Math.floor(x); },   // same as the WGSL (f32 there)
+    factor(i, vary) { return 1 / (1 + vary * (this.hash(i) - 0.5)); },                                 // per-individual response
+    tauOf(i, tau) { return tau * (0.6 + 0.8 * this.hash(i + 7)); },
+    lag(prev, a, dt, tau) { const k = Math.min(1, dt / Math.max(1e-4, tau)); return [prev[0] + (a[0] - prev[0]) * k, prev[1] + (a[1] - prev[1]) * k, prev[2] + (a[2] - prev[2]) * k]; },
+    align(h, v, dt, rate) {
+      const sp = Math.hypot(v[0], v[1], v[2]); if (sp < 1e-4) return h;
+      const k = Math.min(1, dt * rate * Math.min(2, Math.max(0.25, sp / 3)));
+      const n = [h[0] + (v[0] / sp - h[0]) * k, h[1] + (v[1] / sp - h[1]) * k, h[2] + (v[2] / sp - h[2]) * k];
+      const l = Math.hypot(n[0], n[1], n[2]) || 1; return [n[0] / l, n[1] / l, n[2] / l];
+    },
+    glide(v, h, dt, cPar, cPerp, g) {
+      const d = v[0] * h[0] + v[1] * h[1] + v[2] * h[2];
+      const par = [h[0] * d, h[1] * d, h[2] * d], perp = [v[0] - par[0], v[1] - par[1], v[2] - par[2]];
+      const kp = Math.min(1, dt * cPerp), lost = Math.hypot(perp[0], perp[1], perp[2]) * kp, sg = d >= 0 ? 1 : -1;
+      const a = 1 - dt * cPar;
+      const o = [par[0] * a + perp[0] * (1 - kp) + h[0] * sg * lost * g, par[1] * a + perp[1] * (1 - kp) + h[1] * sg * lost * g, par[2] * a + perp[2] * (1 - kp) + h[2] * sg * lost * g];
+      const s0 = Math.hypot(v[0], v[1], v[2]), s1 = Math.hypot(o[0], o[1], o[2]);
+      if (s1 > s0 && s1 > 0) { o[0] *= s0 / s1; o[1] *= s0 / s1; o[2] *= s0 / s1; }   // lift redirects, never creates
+      return o;
+    }
+  };
+
+  ZigCore.VERSION = "0.18.0";   // 0.18: NATURE (variation, reaction delay, heading apart from velocity, gliding blades; pure ZigCore.Nature mirrored by ZigWebGPU opts.nature) · 0.17.2: 0.17.2: Mass.fall's breath is the performer's LIVE breath (the engine feeds it from a separate lane; the idle auto-breath held stone up on eyeZ) · 0.17.1: MASS WEIGHT is a force of its own (Mass.fall - silence settles onto a bed sink below the roost, breath lifts it home; eyeZ measured the target-only law moving stone 0.5 units) · 0.17: MASS (a = F/m on every force incl. drag, and weight: silence settles a heavy shard below the roost, breath lifts it; pure law ZigCore.Mass, mirrored by ZigWebGPU opts.mass) · 0.16: TIMBRE HEARING (trim = SENSITIVITY, auto = auto-level for a non-interface mic, iface = the MOTU is recognised and never levelled; pure law Timbre.hear; trim 1 + auto off = 0.15 exactly) · 0.15: GROUND 0.1.0 — the SECOND Canon law. "A world has a ground of being." Declared, NOT yet consulted by the engine. Four grounds (void=identity, dusk, mist, paper); one word sets sky, haze, Radiance room and the afterimage's compositing together. Exists because the afterimage assumes a dark world IN ITS ARITHMETIC: max() compositing erases a dark body on a bright ground (0.2500 reaches the glass at 0.8359). Three refusals; the 8/17 sinking organism now trips two of them at build time · 0.14: THE ORDERING CONTRACT (Canon.Order — composition order is DECLARED, not inherited from build history. Two rails, "shard.face" and "frame.light", whose stations are ordered because the physics is; a law files a CLAIM at a station instead of splicing itself, and the rail emits every claim once, in order. Kills the append inversion structurally — there is no idiom left to get backwards — and refuses four faults at build time: unknown station, AMBIGUOUS (two claims, one station, no `after`), CONTESTED (two REPLACE skins on one face), DEAD (a write a later REPLACE discards). Byte-identical: the rail emits exactly the shader the hand splice did) · 0.13: THE CANON RUNTIME (Canon.register/resolve/activate/stamp — laws ship OFF and a host names them via window.ZIG_LAWS or #law=preset; absent = byte-identical) + RADIANCE 0.1.0, the first law: the room is a light source with no falloff, and the response is a hue-preserving luminance remap (black-point · gain · shadow gamma · soft knee). Identity at defaults · 0.11: BOUNDARY AXIS · 0.11.1: GYRE AXIS · 0.12: ELLIPSOID boundary (lens = a squashed sphere; per-axis radii → the wide breathing disc); byte-identical for sphere/cylinder
 
 })(typeof window !== "undefined" ? window : globalThis);

@@ -97,6 +97,7 @@
   <div class="med"><label>HEFT</label> <select id="heftpick" title="the shard's cross-section. foil = a single cambered sheet, which is what it has always been. Above that a back centre dips below the edges, closing it into a LENS — thick in the middle, sharp at the rim — so the blade reads as matter. cupped curves the back the same way as the front instead: a concave shell. Baked into the mesh, so this one RELOADS."></select></div>
   <div class="med"><label>MASS</label> <select id="masspick" title="How much each shard WEIGHS - Newton, a = F/m. off = as it has always been. feather = lighter than today: quick to turn, quick to stop. wood / stone = heavier: turns in wider arcs, answers a strike less, coasts longer, and in silence SETTLES lower - your breath lifts it back up. Reloads."></select></div>
   <div class="med"><label>SOLID</label> <select id="solidpick" title="How light sits on each shard. on = a firm line between lit and shadow (the dark side goes dark), a bevelled rim that shows the edge has thickness, and shards that SHADE each other from the moon where they crowd. off = as it has always been. Reloads."></select></div>
+  <div class="med"><label>NATURE</label> <select id="naturepick" title="classic = the physics as it has always been. natural = the laws the kernel was still breaking: the water's currents actually push the shards; no two shards are identical; each reacts a moment late, so waves roll through; each body can point a little away from where it is moving; blades glide along their length and resist going sideways; and in true silence nothing is forced to keep moving. Pairs with MASS. Reloads."></select></div>
   <div class="med"><label>SUMMON</label> <select id="sumpick" title="With EWI ON (the / key), the field re-forms into a letter chosen by pitch register. It re-chose on EVERY onset, so a phrase spanning an octave dragged 6000 agents through several whole forms. This is how long a summoned form must live before another can replace it."></select></div>
   <div class="med"><label>CROWDING</label> <select id="cwpick" title="How hard shards embedded in each other are allowed to shove. The overlap force is unbounded and adds up over every neighbour, so a shard buried in twenty others gets kicked ten to fifty times harder than anything else in the world — which is why embedded groups are the most agitated part of the field."></select></div>
   <div class="med"><label>ONSET</label> <select id="onpick" title="how fast agitation may RISE. It has always risen in a single frame — instant attack, slow release — which is why individual shards pop instead of the whole organism moving. Softening the attack makes the eye read the mass."></select></div>
@@ -328,6 +329,9 @@
   window.ZIG_SOLIDNAME = (function () { var v = (location.hash.match(/[#&]solid=([a-z]+)/i) || [])[1];
     return ["off","on"].includes(v) ? v : "off"; })();
   window.ZIG_SOLID = window.ZIG_SOLIDNAME === "on" ? 1 : 0;
+  window.ZIG_NATURENAME = (function () { var v = (location.hash.match(/[#&]nature=([a-z]+)/i) || [])[1];
+    return ["classic","natural"].includes(v) ? v : "classic"; })();
+  window.ZIG_NATURE = window.ZIG_NATURENAME === "natural" ? "natural" : null;
   window.ZIG_SUMMON = (function () { var m = { note: 0, phrase: 0.9, breath: 2.0, section: 5.0 };
     var v = (location.hash.match(/summon=([a-z]+)/i) || [])[1]; return (v in m) ? m[v] : 0; })();
   window.ZIG_SUMMONNAME = (function () { var v = (location.hash.match(/summon=([a-z]+)/i) || [])[1];
@@ -3807,7 +3811,49 @@
     }
   };
 
-  ZigCore.VERSION = "0.17.2";   // 0.17.2: Mass.fall's breath is the performer's LIVE breath (the engine feeds it from a separate lane; the idle auto-breath held stone up on eyeZ) · 0.17.1: MASS WEIGHT is a force of its own (Mass.fall - silence settles onto a bed sink below the roost, breath lifts it home; eyeZ measured the target-only law moving stone 0.5 units) · 0.17: MASS (a = F/m on every force incl. drag, and weight: silence settles a heavy shard below the roost, breath lifts it; pure law ZigCore.Mass, mirrored by ZigWebGPU opts.mass) · 0.16: TIMBRE HEARING (trim = SENSITIVITY, auto = auto-level for a non-interface mic, iface = the MOTU is recognised and never levelled; pure law Timbre.hear; trim 1 + auto off = 0.15 exactly) · 0.15: GROUND 0.1.0 — the SECOND Canon law. "A world has a ground of being." Declared, NOT yet consulted by the engine. Four grounds (void=identity, dusk, mist, paper); one word sets sky, haze, Radiance room and the afterimage's compositing together. Exists because the afterimage assumes a dark world IN ITS ARITHMETIC: max() compositing erases a dark body on a bright ground (0.2500 reaches the glass at 0.8359). Three refusals; the 8/17 sinking organism now trips two of them at build time · 0.14: THE ORDERING CONTRACT (Canon.Order — composition order is DECLARED, not inherited from build history. Two rails, "shard.face" and "frame.light", whose stations are ordered because the physics is; a law files a CLAIM at a station instead of splicing itself, and the rail emits every claim once, in order. Kills the append inversion structurally — there is no idiom left to get backwards — and refuses four faults at build time: unknown station, AMBIGUOUS (two claims, one station, no `after`), CONTESTED (two REPLACE skins on one face), DEAD (a write a later REPLACE discards). Byte-identical: the rail emits exactly the shader the hand splice did) · 0.13: THE CANON RUNTIME (Canon.register/resolve/activate/stamp — laws ship OFF and a host names them via window.ZIG_LAWS or #law=preset; absent = byte-identical) + RADIANCE 0.1.0, the first law: the room is a light source with no falloff, and the response is a hue-preserving luminance remap (black-point · gain · shadow gamma · soft knee). Identity at defaults · 0.11: BOUNDARY AXIS · 0.11.1: GYRE AXIS · 0.12: ELLIPSOID boundary (lens = a squashed sphere; per-axis radii → the wide breathing disc); byte-identical for sphere/cylinder
+  /* ==========================================================================
+     ZIGCORE.NATURE (0.18 · 2026-09-28) — the laws the kernel was still breaking.
+     MASS showed that inertia (a time constant) was the biggest missing piece of
+     "alive". These are the next ones, each established physics or biology:
+       VARIATION  no two individuals are identical: each carries a fixed factor
+                  (mean 1, +-var/2) that scales how hard forces move it
+       DELAY      an animal acts on what it sensed a moment ago: steering is
+                  low-passed per individual (tau x 0.6..1.4) - waves ROLL through
+       HEADING    a body is not its velocity: the heading weathervanes toward the
+                  motion at a rate that grows with speed, so slow bodies drift
+                  and turn loosely, fast ones track
+       GLIDE      a blade slides along its length and resists going broadside:
+                  sideways velocity (relative to the heading) is damped hard,
+                  forward barely, and part of the lost sideways speed is turned
+                  into forward speed (lift) - never more than was lost
+       (the speed FLOOR goes too: species gate it on the performer's live breath)
+     ZigWebGPU opts.nature mirrors each function exactly; test/nature_ref.mjs. */
+  ZigCore.Nature = {
+    presets: { natural: { vary: 0.3, tau: 0.12, align: 4.0, cPar: 0.05, cPerp: 2.5, glide: 0.35 } },
+    resolve(name) { return (name && this.presets[name]) ? Object.assign({ name }, this.presets[name]) : null; },
+    hash(i) { const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453; return x - Math.floor(x); },   // same as the WGSL (f32 there)
+    factor(i, vary) { return 1 / (1 + vary * (this.hash(i) - 0.5)); },                                 // per-individual response
+    tauOf(i, tau) { return tau * (0.6 + 0.8 * this.hash(i + 7)); },
+    lag(prev, a, dt, tau) { const k = Math.min(1, dt / Math.max(1e-4, tau)); return [prev[0] + (a[0] - prev[0]) * k, prev[1] + (a[1] - prev[1]) * k, prev[2] + (a[2] - prev[2]) * k]; },
+    align(h, v, dt, rate) {
+      const sp = Math.hypot(v[0], v[1], v[2]); if (sp < 1e-4) return h;
+      const k = Math.min(1, dt * rate * Math.min(2, Math.max(0.25, sp / 3)));
+      const n = [h[0] + (v[0] / sp - h[0]) * k, h[1] + (v[1] / sp - h[1]) * k, h[2] + (v[2] / sp - h[2]) * k];
+      const l = Math.hypot(n[0], n[1], n[2]) || 1; return [n[0] / l, n[1] / l, n[2] / l];
+    },
+    glide(v, h, dt, cPar, cPerp, g) {
+      const d = v[0] * h[0] + v[1] * h[1] + v[2] * h[2];
+      const par = [h[0] * d, h[1] * d, h[2] * d], perp = [v[0] - par[0], v[1] - par[1], v[2] - par[2]];
+      const kp = Math.min(1, dt * cPerp), lost = Math.hypot(perp[0], perp[1], perp[2]) * kp, sg = d >= 0 ? 1 : -1;
+      const a = 1 - dt * cPar;
+      const o = [par[0] * a + perp[0] * (1 - kp) + h[0] * sg * lost * g, par[1] * a + perp[1] * (1 - kp) + h[1] * sg * lost * g, par[2] * a + perp[2] * (1 - kp) + h[2] * sg * lost * g];
+      const s0 = Math.hypot(v[0], v[1], v[2]), s1 = Math.hypot(o[0], o[1], o[2]);
+      if (s1 > s0 && s1 > 0) { o[0] *= s0 / s1; o[1] *= s0 / s1; o[2] *= s0 / s1; }   // lift redirects, never creates
+      return o;
+    }
+  };
+
+  ZigCore.VERSION = "0.18.0";   // 0.18: NATURE (variation, reaction delay, heading apart from velocity, gliding blades; pure ZigCore.Nature mirrored by ZigWebGPU opts.nature) · 0.17.2: 0.17.2: Mass.fall's breath is the performer's LIVE breath (the engine feeds it from a separate lane; the idle auto-breath held stone up on eyeZ) · 0.17.1: MASS WEIGHT is a force of its own (Mass.fall - silence settles onto a bed sink below the roost, breath lifts it home; eyeZ measured the target-only law moving stone 0.5 units) · 0.17: MASS (a = F/m on every force incl. drag, and weight: silence settles a heavy shard below the roost, breath lifts it; pure law ZigCore.Mass, mirrored by ZigWebGPU opts.mass) · 0.16: TIMBRE HEARING (trim = SENSITIVITY, auto = auto-level for a non-interface mic, iface = the MOTU is recognised and never levelled; pure law Timbre.hear; trim 1 + auto off = 0.15 exactly) · 0.15: GROUND 0.1.0 — the SECOND Canon law. "A world has a ground of being." Declared, NOT yet consulted by the engine. Four grounds (void=identity, dusk, mist, paper); one word sets sky, haze, Radiance room and the afterimage's compositing together. Exists because the afterimage assumes a dark world IN ITS ARITHMETIC: max() compositing erases a dark body on a bright ground (0.2500 reaches the glass at 0.8359). Three refusals; the 8/17 sinking organism now trips two of them at build time · 0.14: THE ORDERING CONTRACT (Canon.Order — composition order is DECLARED, not inherited from build history. Two rails, "shard.face" and "frame.light", whose stations are ordered because the physics is; a law files a CLAIM at a station instead of splicing itself, and the rail emits every claim once, in order. Kills the append inversion structurally — there is no idiom left to get backwards — and refuses four faults at build time: unknown station, AMBIGUOUS (two claims, one station, no `after`), CONTESTED (two REPLACE skins on one face), DEAD (a write a later REPLACE discards). Byte-identical: the rail emits exactly the shader the hand splice did) · 0.13: THE CANON RUNTIME (Canon.register/resolve/activate/stamp — laws ship OFF and a host names them via window.ZIG_LAWS or #law=preset; absent = byte-identical) + RADIANCE 0.1.0, the first law: the room is a light source with no falloff, and the response is a hue-preserving luminance remap (black-point · gain · shadow gamma · soft knee). Identity at defaults · 0.11: BOUNDARY AXIS · 0.11.1: GYRE AXIS · 0.12: ELLIPSOID boundary (lens = a squashed sphere; per-axis radii → the wide breathing disc); byte-identical for sphere/cylinder
 
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -5118,7 +5164,7 @@
 (function (global) {
   "use strict";
   const ZigWebGPU = global.ZigWebGPU || (global.ZigWebGPU = {});
-  ZigWebGPU.VERSION = "0.50.2";   // 0.50.2: MASS reads the performer's LIVE breath (U.morph.w, a declared-free lane) - on eyeZ the IDLE auto-breath in U.breath was holding the stone up, so silence never let it settle · 0.50.1: MASS WEIGHT is its own force (eyeZ measured the roost-target law moving stone only 0.5 units in 12 s): silence pulls down onto a soft bed `sink` below the roost, breath lifts from below and brakes the rise near home, nothing above the roost is pushed; mirrors ZigCore.Mass.fall · 0.50.0: MASS + SOLID (opts.solid {sun, r} — firm terminator, bevelled rim, and neighbours that shade each other from the moon; occlusion rides in velocity.w above the bank so no binding is added; byte-identical when absent) · MASS (opts.mass {m, sink} — a = F/m on every force including drag, and weight: silence settles the field below the roost, breath lifts it; three guarded anchors, numbers baked, no binding touched; byte-identical when absent) · 0.49.0: GOD RAYS OFF (opts.godRays === false splices the shafts' render2.y read to 0.0 in the sky and flock shaders, so render2.y is the Bee's ember alone and SKY none no longer puts her out; byte-identical when absent) · 0.48.0: THE BEE OCCUPIES HER BODY (PRESENCE presence.w = her drawn radius: the pull fades to zero at her surface and a firm push returns anything inside — the field gathers AGAINST her, not into her; the August capture term. Emitted only inside PRESENCE, and w = 0 is the 0.47 law exactly) · 0.47.0: DUAL GEM (opts.gem2 — a SECOND stone lining the cupped INTERIOR while opts.gem keeps the shell, so one shard carries two different optical behaviours: the stones differ in dispersion, facet and spark as well as colour, so diamond outside + emerald inside is hard spectral fire on the shell and a soft included glow within. gemBlock was ALREADY parameterised by stone and by face condition, so this is a second invocation at the same splice point — no new bindings, no new varyings, nothing that can change an auto-derived layout, which is the 0.46.0 fault it cannot repeat. Both stones share Q (V.render3.x) held apart by a CONSTANT hue offset (opts.gem2Hue), so the pair sweeps together and the interval holds at every position. v0.34's interior buff becomes opts.gemBuff, defaulted to its old 0.5 — an interior stone CHOSEN deserves to be seen. THE TRAP CLOSED: gemHueRot/gemSky are declared on GEM || GEM2, because gem2 alone would otherwise reference undeclared functions — nvidia tolerates that, Metal refuses it, which is 0.44.1 exactly. gemFace is moot once a second stone is named, so the shell takes ff and the panel greys the control. Byte-identical when gem2 is absent) · 0.46.0: GROUND IS WIRED — a declared ground now sets the sky triple, the three scene clear values (NOT the trail's two, where black means zero), the afterimage's compositing/decay/gate, and the Radiance room, from one word. Signed compositing is SPLICED, so `void` and `dusk` emit the base afterimage byte for byte. THE FAULT THAT COST 8/18: the base blitFs never used the uniform, so `layout:"auto"` gave it a 2-entry layout; the signed blitFs uses A.lift, the layout became 3, and every bind group was rejected — 1,240 driver errors per run at 165fps with a black screen. A shader splice that changes WHICH BINDINGS A STAGE USES changes its auto-derived layout · 0.45.1: RADIANCE RIDES THE RAIL — the law no longer splices itself; it files a claim at station "tone" on ZigCore.Canon.Order's `frame.light` rail and the rail emits at one insertion point in declared station order. When AMBIENCE lands at "medium" it is emitted BEFORE the tone remap without a character of the radiance block changing, which is the Ambience-vs-Radiance collision settled in the contract instead of re-litigated per build. Byte-identical to 0.45.0 across the whole option matrix · 0.45.0: RADIANCE (opts.radiance — the FIRST Canon law: the room is a light source with no falloff, so perceived = displayed + veil and the shadow RATIOS that carry the modelling collapse in a lit space. A hue-preserving luminance remap (black-point · gain · shadow gamma · soft knee) spliced at the end of BOTH fragment paths; the live dial V.render6.w cross-fades it against itself. Not one character emitted when opts.radiance is absent) · 0.44.2: two more Metal failures the LANTERN module carried — its truncated View struct stopped at render4 while the note-flash block read render5, and its corner table was a mutable local array that overflowed Metal's small vertex stack. nvidia tolerated both · 0.44.1:   // 0.44.1: the LANTERN module referenced BEE_SIZE, a constant declared only in the BIRD module — nvidia tolerated the dangling reference, Metal refused it and the whole render pipeline failed to build (black canvas, healthy HUD, 60fps). Each WGSL block is a separate module and must declare what it uses · 0.44:   // 0.44: SEPCAP (opts.sepCap — the overlap force is unbounded and SUMS over neighbours, so a shard buried in twenty others was kicked 10-50x harder than anything else in the world; per-pair and total ceilings put it back in the same regime; byte-identical when absent) · 0.43.4:   // 0.43.4: the BEE varying is declared for EVERY consumer (BEE or NOTEFLASH) — the flash reads inp.bee, so turning the bee OFF while flash was ON left the fragment stage referencing an undeclared varying; bee-on worked and bee-off went black · 0.43.3:   // 0.43.3: the BEE varying inserts ABOVE the near line, never between it and the closing brace — MATERIAL anchors on "near ... };" as ONE string, so anything placed BETWEEN them destroys that anchor whichever slot it claims; verified order-independent both ways · 0.43.2:   // 0.43.2: the BEE varying is SPLICED at @location(11) instead of written into BirdOut — MATERIAL appends its own @location(10) snw by anchoring on the struct's last line + closing brace, so editing that text both collided on slot 10 and broke the anchor (black canvas) · 0.43.1:   // 0.43.1: the NOTE FLASH is THE BEE ALONE (a bee varying on BirdOut gates it) — lighting every shard's cup made the whole field answer the note and lost her in it; one lit interior among a thousand dark ones is the point · 0.43: NOTE FLASH (opts.noteFlash — the two faces answer a note DIFFERENTLY: the cupped INTERIOR takes the pitch-class hue while the OUTSIDE takes one fixed colour, so a turning field alternates a constant skin with an interior that differs for every pitch; render6 declared LAST in the View struct so nothing already hand-indexed shifts; byte-identical when absent) · 0.42: THE BEE FLASHES THE NOTE (render5.z/w)/12 mapping MELODIC STRATA already uses, so a C is the same colour as a band or as her flash; her lantern is also 2.7x larger because her flash is an EVENT not one firefly among thousands; byte-identical at render5.w = 0) · 0.41: THE BEE (agent #0 drawn at 1.45x and swelling with charisma — the SAME letterform as every shard, only larger and self-lit, so the field turning toward her reads as recognition rather than alarm; never hidden by UNSEEN) · 0.40: UNSEEN (opts.unseen — a fraction of the flock fully PRESENT to the physics and not DRAWN. The crowd and the eye want opposite things: contagion and murmur need numbers, legibility needs room. Render-side splice only, so hidden agents still flock, collide, carry contagion and count as neighbours — the shards you see are moved by neighbours you cannot; byte-identical at 0) · 0.39: ONSET (opts.onset — agitation may only RISE over a time constant instead of snapping to full in one frame; the max() gave contagion an instant attack and a slow release, i.e. a popcorn envelope, and agit drives vmax so a single-frame spike made individual shards DART. Brackets the contagion line rather than replacing it, since VOICE claims that text. Performer strikes stay instant; byte-identical at 0) · 0.38: CONTACT (opts.contact {r,k,damp} — matter that OCCUPIES SPACE, reusing the flock's own spatial grid; separation is a preference and can be overpowered, this cannot; SCATTER rewritten as GATHER so each thread keeps its own half of every pair; parity-checked against ZigCore.Contact.self by tools/parity_contact.html; byte-identical when absent) · 0.37: STRUCTURE (opts.structure — matter that is JOINED: spring + damping + momentum-conserving bend, SCATTER rewritten as GATHER so a compute thread only writes its own slot; chains only; parity-checked against ZigCore.Structure.accel by tools/parity_structure.html; byte-identical when absent) ·   // 0.34: INTERIOR BUFF (back-face relief ×0.35 + specular broadened/dimmed + gem glints ×0.5 on !ff — the mesh facet seams stop catching as hard straight lines on the back; front keeps full crisp relief; byte-identical on the front face) · 0.33: GEM FACE (opts.gemFace — "inside" = the SEASHELL: matte material on the outside, gem nacre in the cupped interior; "outside"/"both" too; guards the gem's c=gc by front_facing; byte-identical at "both") · 0.32: MELODIC STRATA (View.noteBands[6] · view[84..107] — each EWI note blooms a band of light at its pitch-height in its pitch-class colour, fading over time; the melody written onto the body's vertical axis; driven by ZC.NoteField; zero when silent) · 0.31: SILHOUETTE RIM (live V.render5.x/y — a fresnel edge re-draws every letter's outline against the void, legible under any material on either face; face-corrected so the concave back outlines too; zero at render5.x=0; the reusable legibility capability all species inherit) · 0.30: GEM MATERIALS (opts.gem — refraction + dispersion fire + fresnel sky-reflection + facet flash + sparkle, sampling the analytic sky; byte-identical off) · 0.29: FABRIC UNDERSIDE (opts.backFabric — 20 textiles: weave pattern + sheen model + colour lining the concave back; byte-identical off) · 0.28: VELVET UNDERSIDE (opts.backVelvet — a different fabric skin on the back face: deep matte + grazing sheen; byte-identical off) · 0.27: MEMORY UNDERSIDE (opts.memoryBack — the back face glows with a lagging ghost of the recent phrase; the 2nd performance surface; render4.y/z; byte-identical off) · 0.26: CHIAROSCURO (opts.chiaro — back off ambient/fill so only the light-facing side shows, unlit → black; byte-identical at 0) · 0.25: WEB — connective filaments between neighbouring agents (grid-driven K-NN compute + instanced thread render; breath strings the web; byte-identical when opts.web absent) · 0.24: GRAIN THROUGH COLOUR — the skin's grain corrugates the spectrum too, so surface texture survives at full ink (byte-identical without material/spectrum) · 0.22: BOUNDARY · 0.23: COMPOSE — spectrum TINTS the material body (visible on pale skins; ink I/K = solid↔rainbow amount over the pigment) · 0.19: MEDIUM · 0.20: FORCES · 0.21: CURRENT (opts.boundary {shape,r,k,lo?,hi?} — the world's SHAPE: a soft cylinder/sphere that holds matter inside a volume; restoring accel before integrate, composes with all; byte-identical when absent) // 0.35: BOUNDARY AXIS — cylinder law holds along any free axis (capsule = horizontal cigar); byte-identical for axis "y" · 0.35.1: GYRE AXIS — current circulates around any axis (roll a horizontal cigar broadside); byte-identical for gyre axis "y" · 0.36: ELLIPSOID boundary (lens — squashed sphere, per-axis radii; the wide breathing disc); byte-identical for sphere/cylinder
+  ZigWebGPU.VERSION = "0.51.0";   // 0.51.0: NATURE (opts.nature — the medium\'s currents push BEFORE the integrate (they only tilted the bank), individual variation, reaction delay, heading apart from velocity, gliding blades; body state in an extended velocity buffer, no new binding; byte-identical when absent) · 0.50.2: MASS reads the performer's LIVE breath (U.morph.w, a declared-free lane) - on eyeZ the IDLE auto-breath in U.breath was holding the stone up, so silence never let it settle · 0.50.1: MASS WEIGHT is its own force (eyeZ measured the roost-target law moving stone only 0.5 units in 12 s): silence pulls down onto a soft bed `sink` below the roost, breath lifts from below and brakes the rise near home, nothing above the roost is pushed; mirrors ZigCore.Mass.fall · 0.50.0: MASS + SOLID (opts.solid {sun, r} — firm terminator, bevelled rim, and neighbours that shade each other from the moon; occlusion rides in velocity.w above the bank so no binding is added; byte-identical when absent) · MASS (opts.mass {m, sink} — a = F/m on every force including drag, and weight: silence settles the field below the roost, breath lifts it; three guarded anchors, numbers baked, no binding touched; byte-identical when absent) · 0.49.0: GOD RAYS OFF (opts.godRays === false splices the shafts' render2.y read to 0.0 in the sky and flock shaders, so render2.y is the Bee's ember alone and SKY none no longer puts her out; byte-identical when absent) · 0.48.0: THE BEE OCCUPIES HER BODY (PRESENCE presence.w = her drawn radius: the pull fades to zero at her surface and a firm push returns anything inside — the field gathers AGAINST her, not into her; the August capture term. Emitted only inside PRESENCE, and w = 0 is the 0.47 law exactly) · 0.47.0: DUAL GEM (opts.gem2 — a SECOND stone lining the cupped INTERIOR while opts.gem keeps the shell, so one shard carries two different optical behaviours: the stones differ in dispersion, facet and spark as well as colour, so diamond outside + emerald inside is hard spectral fire on the shell and a soft included glow within. gemBlock was ALREADY parameterised by stone and by face condition, so this is a second invocation at the same splice point — no new bindings, no new varyings, nothing that can change an auto-derived layout, which is the 0.46.0 fault it cannot repeat. Both stones share Q (V.render3.x) held apart by a CONSTANT hue offset (opts.gem2Hue), so the pair sweeps together and the interval holds at every position. v0.34's interior buff becomes opts.gemBuff, defaulted to its old 0.5 — an interior stone CHOSEN deserves to be seen. THE TRAP CLOSED: gemHueRot/gemSky are declared on GEM || GEM2, because gem2 alone would otherwise reference undeclared functions — nvidia tolerates that, Metal refuses it, which is 0.44.1 exactly. gemFace is moot once a second stone is named, so the shell takes ff and the panel greys the control. Byte-identical when gem2 is absent) · 0.46.0: GROUND IS WIRED — a declared ground now sets the sky triple, the three scene clear values (NOT the trail's two, where black means zero), the afterimage's compositing/decay/gate, and the Radiance room, from one word. Signed compositing is SPLICED, so `void` and `dusk` emit the base afterimage byte for byte. THE FAULT THAT COST 8/18: the base blitFs never used the uniform, so `layout:"auto"` gave it a 2-entry layout; the signed blitFs uses A.lift, the layout became 3, and every bind group was rejected — 1,240 driver errors per run at 165fps with a black screen. A shader splice that changes WHICH BINDINGS A STAGE USES changes its auto-derived layout · 0.45.1: RADIANCE RIDES THE RAIL — the law no longer splices itself; it files a claim at station "tone" on ZigCore.Canon.Order's `frame.light` rail and the rail emits at one insertion point in declared station order. When AMBIENCE lands at "medium" it is emitted BEFORE the tone remap without a character of the radiance block changing, which is the Ambience-vs-Radiance collision settled in the contract instead of re-litigated per build. Byte-identical to 0.45.0 across the whole option matrix · 0.45.0: RADIANCE (opts.radiance — the FIRST Canon law: the room is a light source with no falloff, so perceived = displayed + veil and the shadow RATIOS that carry the modelling collapse in a lit space. A hue-preserving luminance remap (black-point · gain · shadow gamma · soft knee) spliced at the end of BOTH fragment paths; the live dial V.render6.w cross-fades it against itself. Not one character emitted when opts.radiance is absent) · 0.44.2: two more Metal failures the LANTERN module carried — its truncated View struct stopped at render4 while the note-flash block read render5, and its corner table was a mutable local array that overflowed Metal's small vertex stack. nvidia tolerated both · 0.44.1:   // 0.44.1: the LANTERN module referenced BEE_SIZE, a constant declared only in the BIRD module — nvidia tolerated the dangling reference, Metal refused it and the whole render pipeline failed to build (black canvas, healthy HUD, 60fps). Each WGSL block is a separate module and must declare what it uses · 0.44:   // 0.44: SEPCAP (opts.sepCap — the overlap force is unbounded and SUMS over neighbours, so a shard buried in twenty others was kicked 10-50x harder than anything else in the world; per-pair and total ceilings put it back in the same regime; byte-identical when absent) · 0.43.4:   // 0.43.4: the BEE varying is declared for EVERY consumer (BEE or NOTEFLASH) — the flash reads inp.bee, so turning the bee OFF while flash was ON left the fragment stage referencing an undeclared varying; bee-on worked and bee-off went black · 0.43.3:   // 0.43.3: the BEE varying inserts ABOVE the near line, never between it and the closing brace — MATERIAL anchors on "near ... };" as ONE string, so anything placed BETWEEN them destroys that anchor whichever slot it claims; verified order-independent both ways · 0.43.2:   // 0.43.2: the BEE varying is SPLICED at @location(11) instead of written into BirdOut — MATERIAL appends its own @location(10) snw by anchoring on the struct's last line + closing brace, so editing that text both collided on slot 10 and broke the anchor (black canvas) · 0.43.1:   // 0.43.1: the NOTE FLASH is THE BEE ALONE (a bee varying on BirdOut gates it) — lighting every shard's cup made the whole field answer the note and lost her in it; one lit interior among a thousand dark ones is the point · 0.43: NOTE FLASH (opts.noteFlash — the two faces answer a note DIFFERENTLY: the cupped INTERIOR takes the pitch-class hue while the OUTSIDE takes one fixed colour, so a turning field alternates a constant skin with an interior that differs for every pitch; render6 declared LAST in the View struct so nothing already hand-indexed shifts; byte-identical when absent) · 0.42: THE BEE FLASHES THE NOTE (render5.z/w)/12 mapping MELODIC STRATA already uses, so a C is the same colour as a band or as her flash; her lantern is also 2.7x larger because her flash is an EVENT not one firefly among thousands; byte-identical at render5.w = 0) · 0.41: THE BEE (agent #0 drawn at 1.45x and swelling with charisma — the SAME letterform as every shard, only larger and self-lit, so the field turning toward her reads as recognition rather than alarm; never hidden by UNSEEN) · 0.40: UNSEEN (opts.unseen — a fraction of the flock fully PRESENT to the physics and not DRAWN. The crowd and the eye want opposite things: contagion and murmur need numbers, legibility needs room. Render-side splice only, so hidden agents still flock, collide, carry contagion and count as neighbours — the shards you see are moved by neighbours you cannot; byte-identical at 0) · 0.39: ONSET (opts.onset — agitation may only RISE over a time constant instead of snapping to full in one frame; the max() gave contagion an instant attack and a slow release, i.e. a popcorn envelope, and agit drives vmax so a single-frame spike made individual shards DART. Brackets the contagion line rather than replacing it, since VOICE claims that text. Performer strikes stay instant; byte-identical at 0) · 0.38: CONTACT (opts.contact {r,k,damp} — matter that OCCUPIES SPACE, reusing the flock's own spatial grid; separation is a preference and can be overpowered, this cannot; SCATTER rewritten as GATHER so each thread keeps its own half of every pair; parity-checked against ZigCore.Contact.self by tools/parity_contact.html; byte-identical when absent) · 0.37: STRUCTURE (opts.structure — matter that is JOINED: spring + damping + momentum-conserving bend, SCATTER rewritten as GATHER so a compute thread only writes its own slot; chains only; parity-checked against ZigCore.Structure.accel by tools/parity_structure.html; byte-identical when absent) ·   // 0.34: INTERIOR BUFF (back-face relief ×0.35 + specular broadened/dimmed + gem glints ×0.5 on !ff — the mesh facet seams stop catching as hard straight lines on the back; front keeps full crisp relief; byte-identical on the front face) · 0.33: GEM FACE (opts.gemFace — "inside" = the SEASHELL: matte material on the outside, gem nacre in the cupped interior; "outside"/"both" too; guards the gem's c=gc by front_facing; byte-identical at "both") · 0.32: MELODIC STRATA (View.noteBands[6] · view[84..107] — each EWI note blooms a band of light at its pitch-height in its pitch-class colour, fading over time; the melody written onto the body's vertical axis; driven by ZC.NoteField; zero when silent) · 0.31: SILHOUETTE RIM (live V.render5.x/y — a fresnel edge re-draws every letter's outline against the void, legible under any material on either face; face-corrected so the concave back outlines too; zero at render5.x=0; the reusable legibility capability all species inherit) · 0.30: GEM MATERIALS (opts.gem — refraction + dispersion fire + fresnel sky-reflection + facet flash + sparkle, sampling the analytic sky; byte-identical off) · 0.29: FABRIC UNDERSIDE (opts.backFabric — 20 textiles: weave pattern + sheen model + colour lining the concave back; byte-identical off) · 0.28: VELVET UNDERSIDE (opts.backVelvet — a different fabric skin on the back face: deep matte + grazing sheen; byte-identical off) · 0.27: MEMORY UNDERSIDE (opts.memoryBack — the back face glows with a lagging ghost of the recent phrase; the 2nd performance surface; render4.y/z; byte-identical off) · 0.26: CHIAROSCURO (opts.chiaro — back off ambient/fill so only the light-facing side shows, unlit → black; byte-identical at 0) · 0.25: WEB — connective filaments between neighbouring agents (grid-driven K-NN compute + instanced thread render; breath strings the web; byte-identical when opts.web absent) · 0.24: GRAIN THROUGH COLOUR — the skin's grain corrugates the spectrum too, so surface texture survives at full ink (byte-identical without material/spectrum) · 0.22: BOUNDARY · 0.23: COMPOSE — spectrum TINTS the material body (visible on pale skins; ink I/K = solid↔rainbow amount over the pigment) · 0.19: MEDIUM · 0.20: FORCES · 0.21: CURRENT (opts.boundary {shape,r,k,lo?,hi?} — the world's SHAPE: a soft cylinder/sphere that holds matter inside a volume; restoring accel before integrate, composes with all; byte-identical when absent) // 0.35: BOUNDARY AXIS — cylinder law holds along any free axis (capsule = horizontal cigar); byte-identical for axis "y" · 0.35.1: GYRE AXIS — current circulates around any axis (roll a horizontal cigar broadside); byte-identical for gyre axis "y" · 0.36: ELLIPSOID boundary (lens — squashed sphere, per-axis radii; the wide breathing disc); byte-identical for sphere/cylinder
 
   /* ---- probe — the gate. Green or it doesn't ship. ---------------------- */
   ZigWebGPU.probe = async function () {
@@ -5961,6 +6007,7 @@ fn waterColor(dir: vec3f) -> vec3f {
     const FORCES = opts.forces || null;  // ENVIRONMENT · FORCES: gravity / buoyancy — {g (down<0 / up>0), floor|ceil, damp}. Does the matter SINK & settle, FLOAT & gather, or hang SUSPENDED? Adds vertical accel before the integrate (composes with MEDIUM drag). Byte-identical when absent. (Phase 2, pillar 2.)
     const CURRENT = opts.current || null; // ENVIRONMENT · CURRENT: the world's flow the matter RIDES — {d (drift vector), gyre (rotation around the anchor's vertical axis)}. drift = a tethered stream/lean · gyre = a whirlpool · both = a swirling eddy. Adds accel before integrate (composes with MEDIUM + FORCES). Byte-identical when absent. (Phase 2, pillar 3.)
     const STAGE = opts.stage || null;    // EXPERIENCE · STAGE (the vitrine): a floor with a soft pool of light beneath the organism — {x,y,z (pool center on the floor), r (plane half-size), pool (light radius), color[3], gain}. The specimen rests in a lit space in a dark room; the viewer becomes a voyeur looking IN. Byte-identical when absent.
+    const NATURE = opts.nature || null;  // NATURE (0.51.0): {vary, tau, align, cPar, cPerp, glide} — individual variation, reaction delay, heading apart from velocity, gliding blades, and the medium's currents pushing BEFORE the integrate. Body state rides in an extended velocity buffer (no new binding). Mirrors ZigCore.Nature. Byte-identical when absent.
     const SOLID = opts.solid || null;    // SOLID (0.50.0): {sun:[x,y,z], r} — a firm light/shadow line, a bevelled rim, and neighbours that SHADE each other from the moon. Byte-identical when absent.
     const MASS = opts.mass || null;      // MASS (0.50.0): {m, sink} — a = F/m on every force incl. drag, and a weight that settles the field below the roost in silence while breath lifts it. Mirrors ZigCore.Mass. Byte-identical when absent.
     const BOUNDARY = opts.boundary || null; // ENVIRONMENT · BOUNDARY: the world's SHAPE — {shape "cylinder"|"sphere", r, k, lo?, hi?}. A soft surface that HOLDS matter inside a volume (bowl · chimney · vessel): where forces pull and currents push, a boundary contains. Restoring accel before integrate (composes with all); a world can't drift out of frame. Byte-identical when absent. (Phase 2, pillar 4.)
@@ -6863,8 +6910,9 @@ struct DOut { @builtin(position) cp: vec4f, @location(0) uv: vec2f, @location(1)
     const bufOpts = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
     const posA = device.createBuffer({ size: MAX * f4, usage: bufOpts });
     const posB = device.createBuffer({ size: MAX * f4, usage: bufOpts });
-    const velA = device.createBuffer({ size: MAX * f4, usage: bufOpts });
-    const velB = device.createBuffer({ size: MAX * f4, usage: bufOpts });
+    const VELN = NATURE ? 3 : 1;   // NATURE: [velocity | heading | lagged steering] — three regions of MAX, so no new binding is needed
+    const velA = device.createBuffer({ size: MAX * f4 * VELN, usage: bufOpts });
+    const velB = device.createBuffer({ size: MAX * f4 * VELN, usage: bufOpts });
     /* ZIGLIFE per-agent state (ping-ponged like pos/vel): life = (arousal,
        fatigue, age, spare). Only allocated when opts.rest — arousal starts
        awake (1); silence lets the field sleep. */
@@ -8229,6 +8277,64 @@ ${body}
         .replace(reDrag, (all, head, c) => head + "(" + c + ") * " + mInv + ");   // MASS: drag is a force too" + wBlock)
         .replace(aY, "  let targetY = anchor.y + U.breath * U.anchor.w - " + sink + " * (1.0 - U.morph.w);   // MASS: weight settles it in silence, LIVE breath lifts it");
     }
+    if (NATURE) {
+      /* ---- NATURE (0.51.0) — the laws the kernel was still breaking ----------
+         One splice, four laws, and one relocation, all in the step kernel:
+           CURRENTS FIRST  the FLOW law's push was added AFTER the integrate, so
+                           the medium only ever tilted the bank; it moves to
+                           before the integrate, where a force can move a body
+           VARIATION       each individual's forces are scaled by a fixed factor
+           DELAY           steering is low-passed per individual (tau 0.6..1.4x)
+           HEADING/GLIDE   after the integrate: the heading weathervanes toward
+                           the motion; sideways velocity (relative to the
+                           heading) is damped hard, part of it becomes lift
+         Body state lives in velIn/velOut at [MAX + i] (heading) and [2*MAX + i]
+         (lagged steering): the buffer is simply three regions long. Every other
+         reader indexes [0, count) and never sees it. Mirrors ZigCore.Nature. */
+      const f = (x) => (+x).toFixed(4);
+      const NB = MAX + "u", NB2 = (2 * MAX) + "u";
+      const fl = "/* FLOW LAW: the medium carries currents — every wing leans toward the wind */\n  accel += (flowAt(p) - v) * FL.par.w;\n  ";
+      const hadFlow = STEP_SRC.indexOf(fl) >= 0;
+      if (hadFlow) STEP_SRC = STEP_SRC.replace(fl, "");
+      const a1 = "  var bank = velIn[i].w", a3 = "  velOut[i] = vec4f(v, bank";
+      const spCount = STEP_SRC.split("  let sp = length(v);").length - 1;
+      if (STEP_SRC.indexOf(K_PREINT) < 0 || STEP_SRC.indexOf(a1) < 0 || STEP_SRC.indexOf(a3) < 0 || spCount !== 1)
+        throw new Error("NATURE splice anchor missing in step kernel");
+      const pre = (hadFlow ? "  /* NATURE: the medium's currents push the body (they only tilted the bank before) */\n  accel += (flowAt(p) - v) * FL.par.w;\n" : "") +
+`  /* ---- NATURE: variation + reaction delay ---- */
+  let natH = fract(sin(f32(i) * 12.9898 + 78.233) * 43758.5453);
+  let natH7 = fract(sin(f32(i + 7u) * 12.9898 + 78.233) * 43758.5453);
+  accel = accel / (1.0 + ${f(NATURE.vary)} * (natH - 0.5));              // no two individuals alike
+  let natTau = ${f(NATURE.tau)} * (0.6 + 0.8 * natH7);
+  var accLag = velIn[${NB2} + i].xyz;
+  accLag = accLag + (accel - accLag) * min(1.0, U.dt / max(natTau, 0.0001));
+  accel = accLag;                                                        // it acts on what it sensed a moment ago
+`;
+      const post =
+`  /* ---- NATURE: heading apart from velocity, and a blade that glides ---- */
+  var natHd = velIn[${NB} + i].xyz;
+  let natSp = length(v);
+  if (dot(natHd, natHd) < 0.25) { natHd = v / max(natSp, 0.0001); }
+  if (natSp > 0.0001) {
+    let natK = min(1.0, U.dt * ${f(NATURE.align)} * clamp(natSp / 3.0, 0.25, 2.0));
+    natHd = normalize(natHd + (v / natSp - natHd) * natK);                // weathervanes toward the motion
+  }
+  {
+    let d = dot(v, natHd);
+    let vPar = natHd * d; let vPerp = v - vPar;
+    let kp = min(1.0, U.dt * ${f(NATURE.cPerp)});
+    let lost = length(vPerp) * kp;
+    var nv = vPar * (1.0 - U.dt * ${f(NATURE.cPar)}) + vPerp * (1.0 - kp) + natHd * select(-1.0, 1.0, d >= 0.0) * lost * ${f(NATURE.glide)};
+    let s1 = length(nv);
+    if (s1 > natSp && s1 > 0.0) { nv = nv * (natSp / s1); }              // lift redirects, never creates
+    v = nv;
+  }
+`;
+      STEP_SRC = STEP_SRC
+        .replace(K_PREINT, pre + K_PREINT)
+        .replace("  let sp = length(v);", post + "  let sp = length(v);")
+        .replace(a3, "  velOut[" + NB + " + i] = vec4f(natHd, 0.0);   // NATURE: the body's heading\n  velOut[" + NB2 + " + i] = vec4f(accLag, 0.0);   // NATURE: what it is still reacting to\n" + a3);
+    }
     if (SOLID) {
       /* ---- SOLID: matter that casts shade (0.50.0) — compute half -------------
          Each shard asks which of its K nearest neighbours sit BETWEEN it and the
@@ -8282,6 +8388,14 @@ ${body}
         if (AGING)   f += " * (0.25 + 0.75 * smoothstep(0.0, 0.12, lifeR[ii].z) * (1.0 - smoothstep(0.72, 1.0, lifeR[ii].z)))";   // born dim → prime vivid → old fades
         RENDER_SRC = RENDER_SRC.replace(tA, "o.tone = (0.85 + 0.30 * h2) * (" + f + ");");
       }
+    }
+    if (NATURE) {
+      /* NATURE — render half: the body is drawn along its HEADING, not its
+         velocity, so it can slip, drift and turn loosely. Speed (fl) still
+         comes from the velocity, so the fluid smear is unchanged. */
+      const r0 = "  var fwd = Vl.xyz;\n  let fl = length(fwd);\n  if (fl < 0.001) { fwd = vec3f(1.0, 0.0, 0.0); } else { fwd = fwd / fl; }";
+      if (RENDER_SRC.indexOf(r0) < 0) throw new Error("NATURE render anchor missing");
+      RENDER_SRC = RENDER_SRC.replace(r0, "  var fwd = Vl.xyz;\n  let fl = length(fwd);\n  if (fl < 0.001) { fwd = vec3f(1.0, 0.0, 0.0); } else { fwd = fwd / fl; }\n  { let hd = vel[" + MAX + "u + ii].xyz; if (dot(hd, hd) > 0.25) { fwd = normalize(hd); } }   // NATURE: drawn along the heading");
     }
     if (SOLID) {
       /* ---- SOLID — render half ----
@@ -9057,6 +9171,7 @@ struct StOut { @builtin(position) cp: vec4f, @location(0) wp: vec2f };
         }
         device.queue.writeBuffer(posA, 0, P); device.queue.writeBuffer(posB, 0, P);
         device.queue.writeBuffer(velA, 0, Vv); device.queue.writeBuffer(velB, 0, Vv);
+        if (NATURE) { const z = new Float32Array(MAX * 8); device.queue.writeBuffer(velA, MAX * f4, z); device.queue.writeBuffer(velB, MAX * f4, z); }   // NATURE: fresh bodies, no stale headings
       },
       /* ZigPhase: deterministic phase + natural-frequency seeding.
          baseOmega rad/s (≈0.7 Hz → 4.4) · spread = ±fraction of base. */
@@ -9292,11 +9407,12 @@ struct StOut { @builtin(position) cp: vec4f, @location(0) wp: vec2f };
          (xyz velocity, w = bank; with SOLID, bank + 4 x shade step) or "pos"
          (xyz, w = agitation). Async, never on the hot path; the probes that prove
          MASS and SOLID on real hardware read the numbers through this. */
-      peek(cb, which, count) {
+      peek(cb, which, count, region) {   // region (NATURE): 0 velocity · 1 heading · 2 lagged steering
         const n = Math.min(count || this.count || MAX, this.count || MAX, MAX), bytes = n * 16;
+        const off = (which === "vel" && region && NATURE) ? Math.min(2, region | 0) * MAX * 16 : 0;
         const buf = device.createBuffer({ size: bytes, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
         const enc = device.createCommandEncoder();
-        enc.copyBufferToBuffer(which === "vel" ? velB : posB, 0, buf, 0, bytes);
+        enc.copyBufferToBuffer(which === "vel" ? velB : posB, off, buf, 0, bytes);
         device.queue.submit([enc.finish()]);
         buf.mapAsync(GPUMapMode.READ).then(() => { const out = new Float32Array(buf.getMappedRange()).slice(); buf.unmap(); buf.destroy(); cb(out); })
           .catch((e) => { try { buf.destroy(); } catch (_) {} cb(null, e); });
@@ -9752,7 +9868,7 @@ struct KOut {
   const LETTER = global.ZIG_LETTER || "sicklePetal";
   const PETAL = Object.assign({}, ZM && ZM.presets[LETTER] ? ZM.presets[LETTER] : {});
 
-  const Sickle = global.SickleField = { version: "0.36.0", flock: null, gpu: null, stage: "loaded", booted: false };   // 0.28: MEDIUM · 0.29: FORCES · 0.30: ENVIRONMENT·CURRENT (ZIG_CURRENT drift/gyre/eddy — the world's flow the field rides, composes with medium+forces)   // 0.26: note-impulse + MIDI monitor + ribbon-off bugfix · 0.27: SMOKE/FOG (ZIG_SMOKE — breath lifts & billows luminous puffs, notes puff bursts, silence thins them)   // 0.25: melodic ribbon (shelved) · 0.26: NOTE-IMPULSE (ZIG_NOTEPULSE — each note is a nerve pulse traveling through the organism, flaring the tissue; energy of the notes INTO the body)   // 0.24.1: fly dolly smoothed · 0.25: MELODIC RIBBON (ZIG_RIBBON — pitch draws a glowing streamer through the field; the note-twin of breath, so the ribbon of notes finally has a body)
+  const Sickle = global.SickleField = { version: "0.37.0", flock: null, gpu: null, stage: "loaded", booted: false };   // 0.28: MEDIUM · 0.29: FORCES · 0.30: ENVIRONMENT·CURRENT (ZIG_CURRENT drift/gyre/eddy — the world's flow the field rides, composes with medium+forces)   // 0.26: note-impulse + MIDI monitor + ribbon-off bugfix · 0.27: SMOKE/FOG (ZIG_SMOKE — breath lifts & billows luminous puffs, notes puff bursts, silence thins them)   // 0.25: melodic ribbon (shelved) · 0.26: NOTE-IMPULSE (ZIG_NOTEPULSE — each note is a nerve pulse traveling through the organism, flaring the tissue; energy of the notes INTO the body)   // 0.24.1: fly dolly smoothed · 0.25: MELODIC RIBBON (ZIG_RIBBON — pitch draws a glowing streamer through the field; the note-twin of breath, so the ribbon of notes finally has a body)
   /* v0.2 — THE PULSE: the ZigPhase heartbeat in the spectral register.
      Every stroke carries a blink oscillator; breath = coupling. In spectral
      ink (P), the flash is a surge of pure rainbow — six thousand color-
@@ -10185,6 +10301,11 @@ struct KOut {
        silence they settle below the roost and breath lifts them (ZigCore.Mass).
        SOLID (window.ZIG_SOLID = 1): a firm light/shadow line, a bevelled rim, and
        neighbours that shade each other from the moon. Both absent = 0.35 exactly. */
+    /* NATURE (0.37.0 · engine 0.51 · ZigCore.Nature): window.ZIG_NATURE =
+       "natural" — currents that push, individuals that differ, a reaction delay,
+       a heading apart from the velocity, gliding blades, and no speed floor in
+       silence (STILLNESS acts as glass). Absent = classic, byte-identical. */
+    const NATURE_OPT = (ZC.Nature && global.ZIG_NATURE) ? ZC.Nature.resolve(String(global.ZIG_NATURE).toLowerCase()) : null;
     const MASS_OPT = (ZC.Mass && global.ZIG_MASS) ? ZC.Mass.resolve(String(global.ZIG_MASS).toLowerCase()) : null;
     const SOLID_OPT = (+global.ZIG_SOLID > 0)
       ? { sun: DUSK ? [0.60, 0.16, -0.36] : [0.35, 0.62, -0.30], r: 1.25 * (+global.ZIG_SIZE || 1.8) } : null;
@@ -10192,6 +10313,7 @@ struct KOut {
     const flock = ZG.createFlock(gpu, {
       godRays: GODRAYS_OFF ? false : undefined,
       mass: MASS_OPT || undefined,
+      nature: NATURE_OPT || undefined,
       solid: SOLID_OPT || undefined,
       ground: GROUND || undefined,   // GROUND: a sceneless build still has a floor of light
       contact: CONTACT_R > 0 ? { r: CONTACT_R, k: 45, damp: 4, max: 12 } : null,
@@ -10254,6 +10376,7 @@ struct KOut {
       flockB = ZG.createFlock(gpu, {
         godRays: GODRAYS_OFF ? false : undefined,
         mass: MASS_OPT || undefined,
+        nature: NATURE_OPT || undefined,
         solid: SOLID_OPT || undefined,
         ground: GROUND || undefined,
         contact: CONTACT_R > 0 ? { r: CONTACT_R, k: 45, damp: 4, max: 12 } : null,
@@ -10759,9 +10882,14 @@ struct KOut {
 
          STILLNESS fades both toward zero AS BREATH FALLS. Full breath is untouched,
          so nothing is lost at volume; silence is finally silent. 0 = historical. */
-      if (STILLNESS > 0) {
-        const alive = Math.min(1, ZC.Perf.breath * 2.2 + state.agitAmbient * 2.0);
-        const gate = 1 - STILLNESS * (1 - alive);
+      /* 0.37.0: it listens to the PERFORMER's breath (state.liveBreath), never
+         the idle auto-breath - the same fault MASS had: on the default breath
+         curve the idle breath reads ~0.8, so "silence" never reached the floor.
+         NATURE (0.37) implies glass: nothing in nature has a minimum speed. */
+      const STILL_EFF = NATURE_OPT ? 1 : STILLNESS;
+      if (STILL_EFF > 0) {
+        const alive = Math.min(1, state.liveBreath * 2.2 + state.agitAmbient * 2.0);
+        const gate = 1 - STILL_EFF * (1 - alive);
         state.knobsA[2] = VMIN_BASE * gate;               // the speed FLOOR yields to silence
         state.knobsB[3] *= gate;                          // …and so does the churn
       }
@@ -11274,6 +11402,7 @@ struct KOut {
         H.line("status", flock.count + (flockB ? "+" + flockB.count + " resonator" : "") + " × " +
           (WNAMES.length ? WNAMES[state.letter].toUpperCase() + (state.mix > 0.05 && WNAMES.length > 1 ? "⟶" + WNAMES[state.letterB].toUpperCase() : "") : LETTER.toUpperCase()) +
           (WNAMES.length > 1 ? " (N)" : "") + " · " + fps.toFixed(0) + " fps · " +
+          (solo ? "SOLO" : "ALIVE") + " · " +   // 0.37.0: the mode is always visible (U toggles)
           (ZC.Perf.live ? "LIVE" : (ZC.Perf._sim > 0 ? "SIM" : "idle")) +
           " · breath " + "▮".repeat(Math.round(ZC.Perf.breath * 10)).padEnd(10, "▯") +
           " · K " + state.K.toFixed(2) + (state.K > 2.4 ? "  ← LOCKED" : (state.K > 1.2 ? "  ← gathering" : "")) +
@@ -11777,7 +11906,7 @@ struct KOut {
     /* ENVIRONMENT pickers — a WORLD macro (a coherent place) over the three elemental
        dials MEDIUM × FORCES × CURRENT, plus SURFACE. Each recompiles the shader → reload,
        carrying the state in the URL hash. WORLD takes precedence when it names a place. */
-    const wsel = document.getElementById("worldpick"), msel = document.getElementById("medpick"), fsel = document.getElementById("forcepick"), csel = document.getElementById("curpick"), bnsel = document.getElementById("boundpick"), bdsel = document.getElementById("bondpick"), spsel = document.getElementById("spreadpick"), stsel = document.getElementById("stillpick"), ctsel = document.getElementById("ctpick"), onsel = document.getElementById("onpick"), cwsel = document.getElementById("cwpick"), susel = document.getElementById("sumpick"), hfsel = document.getElementById("heftpick"), masel = document.getElementById("masspick"), sosel = document.getElementById("solidpick"), cnsel = document.getElementById("cntpick"), besel = document.getElementById("beepick"), nfsel = document.getElementById("nfpick"), unsel = document.getElementById("unspick"), ssel = document.getElementById("matpick"), bsel = document.getElementById("breathpick"), vsel = document.getElementById("stagepick");
+    const wsel = document.getElementById("worldpick"), msel = document.getElementById("medpick"), fsel = document.getElementById("forcepick"), csel = document.getElementById("curpick"), bnsel = document.getElementById("boundpick"), bdsel = document.getElementById("bondpick"), spsel = document.getElementById("spreadpick"), stsel = document.getElementById("stillpick"), ctsel = document.getElementById("ctpick"), onsel = document.getElementById("onpick"), cwsel = document.getElementById("cwpick"), susel = document.getElementById("sumpick"), hfsel = document.getElementById("heftpick"), masel = document.getElementById("masspick"), sosel = document.getElementById("solidpick"), nasel = document.getElementById("naturepick"), cnsel = document.getElementById("cntpick"), besel = document.getElementById("beepick"), nfsel = document.getElementById("nfpick"), unsel = document.getElementById("unspick"), ssel = document.getElementById("matpick"), bsel = document.getElementById("breathpick"), vsel = document.getElementById("stagepick");
     if (window.ZIG_BARE) document.body.classList.add("bare");
     (function () { const t = document.getElementById("bare-t");
       if (t) t.addEventListener("click", (e) => { document.body.classList.toggle("bare"); e.stopPropagation(); }); })();
@@ -11794,7 +11923,7 @@ struct KOut {
     const touchDials = () => ["nucleus", "throw", "haptics", "audio", "reach", "zoom", "fov"].map((k) => {
       const m = (location.hash || "").match(new RegExp("[#&]" + k + "=([a-z0-9.]+)", "i")); return m ? "&" + k + "=" + m[1] : ""; }).join("");
     const skinTail = () => "&gem=" + (gsel ? gsel.value : "none") + "&gem2=" + (g2sel ? g2sel.value : "none") + "&fab=" + (fbsel ? fbsel.value : "none") + "&gface=" + (gfsel ? gfsel.value : "both");   // GEM · GEM FACE · FABRIC persist across every reload
-    const bondTail = () => "&bond=" + (bdsel ? bdsel.value : "none") + "&spread=" + (spsel ? spsel.value : "field") + "&still=" + (stsel ? stsel.value : "restless") + "&contact=" + (ctsel ? ctsel.value : "off") + "&onset=" + (onsel ? onsel.value : "snap") + "&crowding=" + (cwsel ? cwsel.value : "loose") + "&summon=" + (susel ? susel.value : "note") + "&heft=" + (hfsel ? hfsel.value : "cupped") + "&mass=" + (masel ? masel.value : "off") + "&solid=" + (sosel ? sosel.value : "off") + "&crowd=" + (cnsel ? cnsel.value : "6000") + "&unseen=" + (unsel ? unsel.value : "all") + "&bee=" + (besel ? besel.value : "off") + "&flash=" + (nfsel ? nfsel.value : "off");   // BOND rides along in either mode
+    const bondTail = () => "&bond=" + (bdsel ? bdsel.value : "none") + "&spread=" + (spsel ? spsel.value : "field") + "&still=" + (stsel ? stsel.value : "restless") + "&contact=" + (ctsel ? ctsel.value : "off") + "&onset=" + (onsel ? onsel.value : "snap") + "&crowding=" + (cwsel ? cwsel.value : "loose") + "&summon=" + (susel ? susel.value : "note") + "&heft=" + (hfsel ? hfsel.value : "cupped") + "&mass=" + (masel ? masel.value : "off") + "&solid=" + (sosel ? sosel.value : "off") + "&nature=" + (nasel ? nasel.value : "classic") + "&crowd=" + (cnsel ? cnsel.value : "6000") + "&unseen=" + (unsel ? unsel.value : "all") + "&bee=" + (besel ? besel.value : "off") + "&flash=" + (nfsel ? nfsel.value : "off");   // BOND rides along in either mode
     const btail = () => "&beemode=" + (bmsel ? bmsel.value : "off") + "&touch=" + (tosel ? tosel.value : "off") + "&view=" + (vwsel ? vwsel.value : "normal") + "&sky=" + (skysel ? skysel.value : "lit") + "&mic=" + (micsel ? micsel.value : "off") + touchDials() + bondTail() + "&breath=" + (bsel ? bsel.value : "easy") + "&stage=" + (vsel ? vsel.value : "soft") + "&radiance=" + (lsel ? lsel.value : "dark") + skinTail();   // presentation + skins ride along in either mode
     const dialsHash = () => "world=custom&med=" + msel.value + "&force=" + fsel.value + "&cur=" + csel.value + "&bound=" + (bnsel ? bnsel.value : "none") + "&mat=" + ssel.value + btail();
     /* a named world reloads BARE unless a sub-dial deviates from the world's NATIVE value — then
@@ -11857,7 +11986,8 @@ struct KOut {
     fill(hfsel, ["foil", "cupped", "leaf", "blade", "stone"], window.ZIG_HEFTNAME);
     fill(masel, ["off", "feather", "wood", "stone"], window.ZIG_MASSNAME);
     fill(sosel, ["off", "on"], window.ZIG_SOLIDNAME);
-    for (const s of [masel, sosel]) if (s) s.addEventListener("change", () => { location.hash = curHash(); location.reload(); });   // compiled into the kernels -> reload
+    fill(nasel, ["classic", "natural"], window.ZIG_NATURENAME);
+    for (const s of [masel, sosel, nasel]) if (s) s.addEventListener("change", () => { location.hash = curHash(); location.reload(); });   // compiled into the kernels -> reload
     fill(susel, ["note", "phrase", "breath", "section"], window.ZIG_SUMMONNAME);
     fill(cwsel, ["loose", "firm", "packed", "solid"], window.ZIG_CROWDNAME2);
     fill(onsel, ["snap", "quick", "swell", "tide"], window.ZIG_ONSETNAME);

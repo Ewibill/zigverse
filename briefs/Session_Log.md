@@ -2920,3 +2920,20 @@ Unchanged when not used: desktop with no `#view=` and `#touch=off` is v5.4 exact
 **Plain English (Bill):** the second eyeZ run (weight as its own force, core 0.17.1) still did not settle: stone 62.2 -> 63.4 in "silence", and holding B LOWERED it. Measured in the page: with nobody playing, Perf.breath reads 0.70-0.82 - the IDLE AUTO-BREATH that keeps the organism alive with no performer. Weight was reading that, so "silence" was never silent: the lift held the stone up. MASS now reads the performer's LIVE breath only (0 when idle; EWI, B key or a held finger), carried to the kernel in Sim.morph.w - a lane BIOME also uses, so MASS + BIOME is refused at build (the engine host never declares a biome). The idle breath still animates everything else exactly as before.
 **Passed (Glyph's container):** reference gate 54/54 (mass_ref 34 checks, incl. "weight never reads the idle breath") - byte-identity 5/5 IDENTICAL to v5.6.1 - boot gate 0 driver errors (stone+solid, wood+sky none+nucleus+cozy Bee, default, the app bundle).
 **Not measured here:** `_massboot` readback - rerun on eyeZ.
+
+
+**2026-09-28 - v5.8 NATURE** - ZigCore 0.17.2 -> 0.18.0 - ZigWebGPU 0.50.2 -> 0.51.0 - sickleswarm 0.36.0 -> 0.37.0 - app rebuilt in place - **WGSL CHANGED: Metal gate REQUIRED**
+
+**Plain English (Bill):** Bill on MASS: "added presence ... the shards stay more aligned creating a beautiful wave effect. That artificial shake has diminished significantly." Inertia was the biggest missing piece of alive, so v5.8 fixes the other laws the kernel was still breaking, all behind ONE switch, NATURE: classic / natural (classic = byte-identical to v5.7).
+- **Currents that push.** The FLOW law (the water's currents, the "wind" dial) added its force AFTER the velocity was updated, so it only ever tilted the bank. Natural moves it before the integrate, where a force can move a body.
+- **No two alike.** Each shard carries a fixed factor (0.87..1.18) on how hard forces move it.
+- **Reaction delay.** Each shard acts on what it sensed 72-168 ms ago (its own), so waves ROLL through the field instead of snapping.
+- **Heading apart from velocity.** A body weathervanes toward its motion - fast bodies track in 0.1 s, slow ones drift loosely over ~0.9 s. After a sideways kick it slips, pointing away from its motion for ~140 ms. Drawn along the heading.
+- **Blades that glide.** Sideways (relative to the heading) is damped hard, along the blade barely; part of the lost sideways speed becomes forward (lift) - redirected, never created.
+- **No speed floor in silence.** STILLNESS now listens to the performer's LIVE breath (the idle auto-breath defeated it, the same fault MASS had), and natural acts as glass.
+- **HUD:** SOLO / ALIVE is always shown on the status line.
+- Body state lives in the velocity buffer (three regions of MAX: velocity, heading, lagged steering) - no new binding, so no phone storage-buffer risk. `flock.peek(cb, "vel", n, region)` reads heading (1) / steering (2).
+
+**Passed (Glyph's container):** reference gate 55/55 (+`nature_ref` 25 checks) - byte-identity 5/5 IDENTICAL to v5.6.1 - boot gate 0 driver errors: natural - natural+stone+solid - natural+wood+sky none+nucleus+cozy Bee+velvet+emerald - default - the app bundle - `_touchboot` PASS (35 controls) - `_massboot` PASS.
+**Not measured here:** `_massboot` GPU readback incl. new NATURE lines (field holds together vs classic; bodies slip) - eyeZ. **Not run:** Metal gate - REQUIRED.
+**Held (pinned by Bill 2026-09-28):** auto-frame measuring the dense core (the "shrinks to the middle" issue with MASS + VIEW wide).

@@ -76,6 +76,25 @@ else {
 await fresh("#solid=on&mass=stone&mat=velvet&gem=aqua&gem2=emerald&touch=off"); await wait(3000);
 say(true, "SOLID + MASS + material + dual gem boots together");
 
+console.log("[NATURE — the physics holds together, and bodies slip]");
+{
+  const rad = () => page.evaluate(() => new Promise((res) => { const f = SickleField.flock; setTimeout(() => res(null), 3000);
+    const go = () => { try { if (!f.measure((m) => res(m.r), 3)) setTimeout(go, 30); } catch (_) { res(null); } }; go(); })).catch(() => null);
+  const peekR = (region) => page.evaluate((rg) => new Promise((res) => { setTimeout(() => res(null), 3000);
+    try { SickleField.flock.peek((a) => res(a ? Array.from(a) : null), "vel", 3000, rg); } catch (_) { res(null); } }), region).catch(() => null);
+  await fresh("#nature=classic&mass=wood&touch=off"); await wait(10000); const rC = await rad();
+  await fresh("#nature=natural&mass=wood&touch=off"); await wait(10000); const rN = await rad();
+  const vN = await peekR(0), hN = await peekR(1);
+  if (rC == null || rN == null || !vN || !hN) console.log(NM);
+  else {
+    measured++;
+    say(vN.every(isFinite) && hN.every(isFinite), "every natural body is finite (velocity and heading)");
+    say(rN < rC * 2.2 && rN > rC * 0.3, `the field holds together: radius classic ${rC.toFixed(1)} vs natural ${rN.toFixed(1)}`);
+    let slip = 0, n = 0; for (let i = 0; i < vN.length; i += 4) { const sp = Math.hypot(vN[i], vN[i + 1], vN[i + 2]), hl = Math.hypot(hN[i], hN[i + 1], hN[i + 2]);
+      if (sp > 0.05 && hl > 0.5) { n++; if ((vN[i] * hN[i] + vN[i + 1] * hN[i + 1] + vN[i + 2] * hN[i + 2]) / (sp * hl) < 0.985) slip++; } }
+    say(n > 100 && slip > n * 0.02 && slip < n * 0.9, `bodies are not their velocity: ${slip} of ${n} point >10 deg away from their motion`);
+  }
+}
 console.log("[BEE — SKY none keeps her ember]");
 await fresh("#sky=none&touch=nucleus&bee=magnetic&beemode=cozy"); await wait(3000);
 const ember = await page.evaluate(() => SickleField.view[69]);

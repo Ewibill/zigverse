@@ -46,7 +46,7 @@
   const LETTER = global.ZIG_LETTER || "sicklePetal";
   const PETAL = Object.assign({}, ZM && ZM.presets[LETTER] ? ZM.presets[LETTER] : {});
 
-  const Sickle = global.SickleField = { version: "0.36.0", flock: null, gpu: null, stage: "loaded", booted: false };   // 0.28: MEDIUM · 0.29: FORCES · 0.30: ENVIRONMENT·CURRENT (ZIG_CURRENT drift/gyre/eddy — the world's flow the field rides, composes with medium+forces)   // 0.26: note-impulse + MIDI monitor + ribbon-off bugfix · 0.27: SMOKE/FOG (ZIG_SMOKE — breath lifts & billows luminous puffs, notes puff bursts, silence thins them)   // 0.25: melodic ribbon (shelved) · 0.26: NOTE-IMPULSE (ZIG_NOTEPULSE — each note is a nerve pulse traveling through the organism, flaring the tissue; energy of the notes INTO the body)   // 0.24.1: fly dolly smoothed · 0.25: MELODIC RIBBON (ZIG_RIBBON — pitch draws a glowing streamer through the field; the note-twin of breath, so the ribbon of notes finally has a body)
+  const Sickle = global.SickleField = { version: "0.37.0", flock: null, gpu: null, stage: "loaded", booted: false };   // 0.28: MEDIUM · 0.29: FORCES · 0.30: ENVIRONMENT·CURRENT (ZIG_CURRENT drift/gyre/eddy — the world's flow the field rides, composes with medium+forces)   // 0.26: note-impulse + MIDI monitor + ribbon-off bugfix · 0.27: SMOKE/FOG (ZIG_SMOKE — breath lifts & billows luminous puffs, notes puff bursts, silence thins them)   // 0.25: melodic ribbon (shelved) · 0.26: NOTE-IMPULSE (ZIG_NOTEPULSE — each note is a nerve pulse traveling through the organism, flaring the tissue; energy of the notes INTO the body)   // 0.24.1: fly dolly smoothed · 0.25: MELODIC RIBBON (ZIG_RIBBON — pitch draws a glowing streamer through the field; the note-twin of breath, so the ribbon of notes finally has a body)
   /* v0.2 — THE PULSE: the ZigPhase heartbeat in the spectral register.
      Every stroke carries a blink oscillator; breath = coupling. In spectral
      ink (P), the flash is a surge of pure rainbow — six thousand color-
@@ -479,6 +479,11 @@
        silence they settle below the roost and breath lifts them (ZigCore.Mass).
        SOLID (window.ZIG_SOLID = 1): a firm light/shadow line, a bevelled rim, and
        neighbours that shade each other from the moon. Both absent = 0.35 exactly. */
+    /* NATURE (0.37.0 · engine 0.51 · ZigCore.Nature): window.ZIG_NATURE =
+       "natural" — currents that push, individuals that differ, a reaction delay,
+       a heading apart from the velocity, gliding blades, and no speed floor in
+       silence (STILLNESS acts as glass). Absent = classic, byte-identical. */
+    const NATURE_OPT = (ZC.Nature && global.ZIG_NATURE) ? ZC.Nature.resolve(String(global.ZIG_NATURE).toLowerCase()) : null;
     const MASS_OPT = (ZC.Mass && global.ZIG_MASS) ? ZC.Mass.resolve(String(global.ZIG_MASS).toLowerCase()) : null;
     const SOLID_OPT = (+global.ZIG_SOLID > 0)
       ? { sun: DUSK ? [0.60, 0.16, -0.36] : [0.35, 0.62, -0.30], r: 1.25 * (+global.ZIG_SIZE || 1.8) } : null;
@@ -486,6 +491,7 @@
     const flock = ZG.createFlock(gpu, {
       godRays: GODRAYS_OFF ? false : undefined,
       mass: MASS_OPT || undefined,
+      nature: NATURE_OPT || undefined,
       solid: SOLID_OPT || undefined,
       ground: GROUND || undefined,   // GROUND: a sceneless build still has a floor of light
       contact: CONTACT_R > 0 ? { r: CONTACT_R, k: 45, damp: 4, max: 12 } : null,
@@ -548,6 +554,7 @@
       flockB = ZG.createFlock(gpu, {
         godRays: GODRAYS_OFF ? false : undefined,
         mass: MASS_OPT || undefined,
+        nature: NATURE_OPT || undefined,
         solid: SOLID_OPT || undefined,
         ground: GROUND || undefined,
         contact: CONTACT_R > 0 ? { r: CONTACT_R, k: 45, damp: 4, max: 12 } : null,
@@ -1053,9 +1060,14 @@
 
          STILLNESS fades both toward zero AS BREATH FALLS. Full breath is untouched,
          so nothing is lost at volume; silence is finally silent. 0 = historical. */
-      if (STILLNESS > 0) {
-        const alive = Math.min(1, ZC.Perf.breath * 2.2 + state.agitAmbient * 2.0);
-        const gate = 1 - STILLNESS * (1 - alive);
+      /* 0.37.0: it listens to the PERFORMER's breath (state.liveBreath), never
+         the idle auto-breath - the same fault MASS had: on the default breath
+         curve the idle breath reads ~0.8, so "silence" never reached the floor.
+         NATURE (0.37) implies glass: nothing in nature has a minimum speed. */
+      const STILL_EFF = NATURE_OPT ? 1 : STILLNESS;
+      if (STILL_EFF > 0) {
+        const alive = Math.min(1, state.liveBreath * 2.2 + state.agitAmbient * 2.0);
+        const gate = 1 - STILL_EFF * (1 - alive);
         state.knobsA[2] = VMIN_BASE * gate;               // the speed FLOOR yields to silence
         state.knobsB[3] *= gate;                          // …and so does the churn
       }
@@ -1568,6 +1580,7 @@
         H.line("status", flock.count + (flockB ? "+" + flockB.count + " resonator" : "") + " × " +
           (WNAMES.length ? WNAMES[state.letter].toUpperCase() + (state.mix > 0.05 && WNAMES.length > 1 ? "⟶" + WNAMES[state.letterB].toUpperCase() : "") : LETTER.toUpperCase()) +
           (WNAMES.length > 1 ? " (N)" : "") + " · " + fps.toFixed(0) + " fps · " +
+          (solo ? "SOLO" : "ALIVE") + " · " +   // 0.37.0: the mode is always visible (U toggles)
           (ZC.Perf.live ? "LIVE" : (ZC.Perf._sim > 0 ? "SIM" : "idle")) +
           " · breath " + "▮".repeat(Math.round(ZC.Perf.breath * 10)).padEnd(10, "▯") +
           " · K " + state.K.toFixed(2) + (state.K > 2.4 ? "  ← LOCKED" : (state.K > 1.2 ? "  ← gathering" : "")) +
