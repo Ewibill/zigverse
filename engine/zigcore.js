@@ -3457,6 +3457,54 @@
     }
   };
 
-  ZigCore.VERSION = "0.18.0";   // 0.18: NATURE (variation, reaction delay, heading apart from velocity, gliding blades; pure ZigCore.Nature mirrored by ZigWebGPU opts.nature) · 0.17.2: 0.17.2: Mass.fall's breath is the performer's LIVE breath (the engine feeds it from a separate lane; the idle auto-breath held stone up on eyeZ) · 0.17.1: MASS WEIGHT is a force of its own (Mass.fall - silence settles onto a bed sink below the roost, breath lifts it home; eyeZ measured the target-only law moving stone 0.5 units) · 0.17: MASS (a = F/m on every force incl. drag, and weight: silence settles a heavy shard below the roost, breath lifts it; pure law ZigCore.Mass, mirrored by ZigWebGPU opts.mass) · 0.16: TIMBRE HEARING (trim = SENSITIVITY, auto = auto-level for a non-interface mic, iface = the MOTU is recognised and never levelled; pure law Timbre.hear; trim 1 + auto off = 0.15 exactly) · 0.15: GROUND 0.1.0 — the SECOND Canon law. "A world has a ground of being." Declared, NOT yet consulted by the engine. Four grounds (void=identity, dusk, mist, paper); one word sets sky, haze, Radiance room and the afterimage's compositing together. Exists because the afterimage assumes a dark world IN ITS ARITHMETIC: max() compositing erases a dark body on a bright ground (0.2500 reaches the glass at 0.8359). Three refusals; the 8/17 sinking organism now trips two of them at build time · 0.14: THE ORDERING CONTRACT (Canon.Order — composition order is DECLARED, not inherited from build history. Two rails, "shard.face" and "frame.light", whose stations are ordered because the physics is; a law files a CLAIM at a station instead of splicing itself, and the rail emits every claim once, in order. Kills the append inversion structurally — there is no idiom left to get backwards — and refuses four faults at build time: unknown station, AMBIGUOUS (two claims, one station, no `after`), CONTESTED (two REPLACE skins on one face), DEAD (a write a later REPLACE discards). Byte-identical: the rail emits exactly the shader the hand splice did) · 0.13: THE CANON RUNTIME (Canon.register/resolve/activate/stamp — laws ship OFF and a host names them via window.ZIG_LAWS or #law=preset; absent = byte-identical) + RADIANCE 0.1.0, the first law: the room is a light source with no falloff, and the response is a hue-preserving luminance remap (black-point · gain · shadow gamma · soft knee). Identity at defaults · 0.11: BOUNDARY AXIS · 0.11.1: GYRE AXIS · 0.12: ELLIPSOID boundary (lens = a squashed sphere; per-axis radii → the wide breathing disc); byte-identical for sphere/cylinder
+  /* ==========================================================================
+     ZIGCORE.SWELL (0.19 · 2026-09-28) — the ocean's grammar, not its look.
+     Bill: "adopt any intelligence about waves ... keeping the shard qualities
+     ... not imitate anything, just steal from nature to make viewers feel
+     familiarity and mystery at the same time." So: no water surface, no foam,
+     no blue. Only the four things the eye knows a sea by (linear wave theory,
+     deep water, Gerstner's exact solution):
+       ORBITS      each shard moves in a small closed circle while the SHAPE
+                   travels through the field - the shards go nowhere
+       DEPTH       orbits shrink with depth (e^-k*d): the top of the field rides,
+                   the deep only stirs
+       DISPERSION  omega = sqrt(g*k): long waves outrun short ones, so the field
+                   sorts its own swell - organisation nobody choreographed
+       SETS        trains of nearly equal length beat against each other, so the
+                   waves arrive in groups: calm, a set, calm
+       BREAKING    where the trains pile up past a steepness, the crest throws a
+                   few shards up as spray
+     Breath is the WIND: it builds the sea's energy slowly (seconds), silence
+     lets it lie down. Kinematic and render-side: the physics body of every
+     shard is untouched; the swell moves where it is DRAWN. ZigWebGPU
+     opts.swell mirrors displace() exactly; test/swell_ref.mjs proves it. */
+  ZigCore.Swell = {
+    G: 6.0,                                                  // the scene's gravity: sets how long waves outrun short ones
+    presets: {
+      swell: [ { L: 60, A: 3.0, dir: 0.00, ph: 0.0 }, { L: 38, A: 1.8, dir: 0.35, ph: 1.7 }, { L: 24, A: 1.0, dir: -0.45, ph: 4.1 } ],
+      sets:  [ { L: 60, A: 2.2, dir: 0.00, ph: 0.0 }, { L: 55, A: 2.2, dir: 0.06, ph: 2.2 }, { L: 50, A: 1.6, dir: -0.05, ph: 4.6 },
+               { L: 26, A: 0.8, dir: 0.50, ph: 1.1 }, { L: 17, A: 0.5, dir: -0.60, ph: 3.3 } ]
+    },
+    resolve(name, surfY) {
+      const tr = name && this.presets[name]; if (!tr) return null;
+      return { name, surf: surfY, spray: 0.62, trains: tr.map((w) => { const k = 2 * Math.PI / w.L; return { k, w: Math.sqrt(this.G * k), A: w.A, dx: Math.cos(w.dir), dz: Math.sin(w.dir), ph: w.ph }; }) };
+    },
+    /* displacement of a shard at p, time t, energy E (0..1) -> [dx, dy, dz, J]
+       J = crest steepness (Gerstner pinch); spray lifts the crest past `spray`. */
+    displace(S, p, t, E, hash) {
+      let dx = 0, dy = 0, dz = 0, J = 0;
+      const depth = Math.max(0, S.surf - p[1]);
+      for (const w of S.trains) {
+        const att = Math.max(0.25, Math.exp(-w.k * depth));
+        const A = w.A * E * att, th = w.k * (w.dx * p[0] + w.dz * p[2]) - w.w * t + w.ph;
+        dx += w.dx * A * Math.cos(th); dz += w.dz * A * Math.cos(th); dy += A * Math.sin(th);
+        J += w.k * A * Math.sin(th);
+      }
+      if (J > S.spray && hash > 0.55) dy += (J - S.spray) * 14 * (hash - 0.55);   // the crest throws a few shards up
+      return [dx, dy, dz, J];
+    }
+  };
+
+  ZigCore.VERSION = "0.19.0";   // 0.19: SWELL (the ocean\'s grammar in the shards: orbits, depth, dispersion, sets, breaking; breath is the wind; mirrored by ZigWebGPU opts.swell) · 0.18.0: 0.18: NATURE (variation, reaction delay, heading apart from velocity, gliding blades; pure ZigCore.Nature mirrored by ZigWebGPU opts.nature) · 0.17.2: 0.17.2: Mass.fall's breath is the performer's LIVE breath (the engine feeds it from a separate lane; the idle auto-breath held stone up on eyeZ) · 0.17.1: MASS WEIGHT is a force of its own (Mass.fall - silence settles onto a bed sink below the roost, breath lifts it home; eyeZ measured the target-only law moving stone 0.5 units) · 0.17: MASS (a = F/m on every force incl. drag, and weight: silence settles a heavy shard below the roost, breath lifts it; pure law ZigCore.Mass, mirrored by ZigWebGPU opts.mass) · 0.16: TIMBRE HEARING (trim = SENSITIVITY, auto = auto-level for a non-interface mic, iface = the MOTU is recognised and never levelled; pure law Timbre.hear; trim 1 + auto off = 0.15 exactly) · 0.15: GROUND 0.1.0 — the SECOND Canon law. "A world has a ground of being." Declared, NOT yet consulted by the engine. Four grounds (void=identity, dusk, mist, paper); one word sets sky, haze, Radiance room and the afterimage's compositing together. Exists because the afterimage assumes a dark world IN ITS ARITHMETIC: max() compositing erases a dark body on a bright ground (0.2500 reaches the glass at 0.8359). Three refusals; the 8/17 sinking organism now trips two of them at build time · 0.14: THE ORDERING CONTRACT (Canon.Order — composition order is DECLARED, not inherited from build history. Two rails, "shard.face" and "frame.light", whose stations are ordered because the physics is; a law files a CLAIM at a station instead of splicing itself, and the rail emits every claim once, in order. Kills the append inversion structurally — there is no idiom left to get backwards — and refuses four faults at build time: unknown station, AMBIGUOUS (two claims, one station, no `after`), CONTESTED (two REPLACE skins on one face), DEAD (a write a later REPLACE discards). Byte-identical: the rail emits exactly the shader the hand splice did) · 0.13: THE CANON RUNTIME (Canon.register/resolve/activate/stamp — laws ship OFF and a host names them via window.ZIG_LAWS or #law=preset; absent = byte-identical) + RADIANCE 0.1.0, the first law: the room is a light source with no falloff, and the response is a hue-preserving luminance remap (black-point · gain · shadow gamma · soft knee). Identity at defaults · 0.11: BOUNDARY AXIS · 0.11.1: GYRE AXIS · 0.12: ELLIPSOID boundary (lens = a squashed sphere; per-axis radii → the wide breathing disc); byte-identical for sphere/cylinder
 
 })(typeof window !== "undefined" ? window : globalThis);

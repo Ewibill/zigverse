@@ -46,7 +46,7 @@
   const LETTER = global.ZIG_LETTER || "sicklePetal";
   const PETAL = Object.assign({}, ZM && ZM.presets[LETTER] ? ZM.presets[LETTER] : {});
 
-  const Sickle = global.SickleField = { version: "0.37.0", flock: null, gpu: null, stage: "loaded", booted: false };   // 0.28: MEDIUM · 0.29: FORCES · 0.30: ENVIRONMENT·CURRENT (ZIG_CURRENT drift/gyre/eddy — the world's flow the field rides, composes with medium+forces)   // 0.26: note-impulse + MIDI monitor + ribbon-off bugfix · 0.27: SMOKE/FOG (ZIG_SMOKE — breath lifts & billows luminous puffs, notes puff bursts, silence thins them)   // 0.25: melodic ribbon (shelved) · 0.26: NOTE-IMPULSE (ZIG_NOTEPULSE — each note is a nerve pulse traveling through the organism, flaring the tissue; energy of the notes INTO the body)   // 0.24.1: fly dolly smoothed · 0.25: MELODIC RIBBON (ZIG_RIBBON — pitch draws a glowing streamer through the field; the note-twin of breath, so the ribbon of notes finally has a body)
+  const Sickle = global.SickleField = { version: "0.38.0", flock: null, gpu: null, stage: "loaded", booted: false };   // 0.28: MEDIUM · 0.29: FORCES · 0.30: ENVIRONMENT·CURRENT (ZIG_CURRENT drift/gyre/eddy — the world's flow the field rides, composes with medium+forces)   // 0.26: note-impulse + MIDI monitor + ribbon-off bugfix · 0.27: SMOKE/FOG (ZIG_SMOKE — breath lifts & billows luminous puffs, notes puff bursts, silence thins them)   // 0.25: melodic ribbon (shelved) · 0.26: NOTE-IMPULSE (ZIG_NOTEPULSE — each note is a nerve pulse traveling through the organism, flaring the tissue; energy of the notes INTO the body)   // 0.24.1: fly dolly smoothed · 0.25: MELODIC RIBBON (ZIG_RIBBON — pitch draws a glowing streamer through the field; the note-twin of breath, so the ribbon of notes finally has a body)
   /* v0.2 — THE PULSE: the ZigPhase heartbeat in the spectral register.
      Every stroke carries a blink oscillator; breath = coupling. In spectral
      ink (P), the flash is a surge of pure rainbow — six thousand color-
@@ -483,6 +483,14 @@
        "natural" — currents that push, individuals that differ, a reaction delay,
        a heading apart from the velocity, gliding blades, and no speed floor in
        silence (STILLNESS acts as glass). Absent = classic, byte-identical. */
+    /* SWELL (0.38.0 · engine 0.52 · ZigCore.Swell): window.ZIG_SWELL = "swell" |
+       "sets" — the ocean's grammar where the shards are drawn. The surface sits a
+       little above the roost, so a field that MASS settles in silence sinks below
+       the swell and calms; breath lifts it back into the waves. Shares
+       noteBands[5] with MELODIC STRATA / RELAY, so it is refused alongside them. */
+    const SWELL_OPT = (ZC.Swell && global.ZIG_SWELL && !STRATA_ON && !RELAY_ON)
+      ? ZC.Swell.resolve(String(global.ZIG_SWELL).toLowerCase(), ANCHOR[1] + 12) : null;
+    let swellE = 0.2;
     const NATURE_OPT = (ZC.Nature && global.ZIG_NATURE) ? ZC.Nature.resolve(String(global.ZIG_NATURE).toLowerCase()) : null;
     const MASS_OPT = (ZC.Mass && global.ZIG_MASS) ? ZC.Mass.resolve(String(global.ZIG_MASS).toLowerCase()) : null;
     const SOLID_OPT = (+global.ZIG_SOLID > 0)
@@ -492,6 +500,7 @@
       godRays: GODRAYS_OFF ? false : undefined,
       mass: MASS_OPT || undefined,
       nature: NATURE_OPT || undefined,
+      swell: SWELL_OPT || undefined,
       solid: SOLID_OPT || undefined,
       ground: GROUND || undefined,   // GROUND: a sceneless build still has a floor of light
       contact: CONTACT_R > 0 ? { r: CONTACT_R, k: 45, damp: 4, max: 12 } : null,
@@ -555,6 +564,7 @@
         godRays: GODRAYS_OFF ? false : undefined,
         mass: MASS_OPT || undefined,
         nature: NATURE_OPT || undefined,
+        swell: SWELL_OPT || undefined,
         solid: SOLID_OPT || undefined,
         ground: GROUND || undefined,
         contact: CONTACT_R > 0 ? { r: CONTACT_R, k: 45, damp: 4, max: 12 } : null,
@@ -1205,7 +1215,23 @@
       }
       if (zt) zt.frame(dt);                                     // ZIGTOUCH — after the Bee has spoken, so the hand can only ADD to her
       view[68] = 0;                                             // render2.x avatar idx
-      view[69] = dial.cockpit ? 0 : [0, 0.9, 3.0][dial.mark];  // beacon off in first person
+      /* SWELL: breath is the WIND. The sea builds over seconds and lies down
+         slower; in ALIVE a gentle swell never quite stops, in SOLO only you
+         raise it. Energy + phase to noteBands[5] (view[104..105]). */
+      if (SWELL_OPT) {
+        const want = (solo ? 0 : 0.2) + 0.8 * state.liveBreath;
+        swellE += (want - swellE) * Math.min(1, sdt / (want > swellE ? 2.5 : 6.0));
+        view[104] = swellE; view[105] = st;
+      }
+      /* 0.38.0 — HER GLOW FOLLOWS HER ATTENTION. Since before v5.6 this line
+         overwrote the Bee block's glow with the fixed beacon level every frame,
+         so she lit the same whatever you played. With the Bee on, V now sets how
+         far her glow (and her drawn swell) RISES with attention: hidden · ember
+         (0.6x) · beacon (full, 0.9 at rest -> 3.5 fully attended). Bee off = the
+         old fixed beacon exactly. */
+      view[69] = dial.cockpit ? 0
+        : (BEE > 0 ? (dial.mark === 0 ? 0 : (0.9 + 2.6 * beeAttn) * (dial.mark === 2 ? 1 : 0.6))
+                   : [0, 0.9, 3.0][dial.mark]);
       /* SKY none no longer zeroes render2.y: the god rays are gone from the shader
          (engine 0.49 godRays:false), so this number is her ember alone and she stays lit. */
       /* HER BODY (0.35.0 · engine 0.48): the kernel learns the size she is DRAWN

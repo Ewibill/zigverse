@@ -100,6 +100,28 @@ await fresh("#sky=none&touch=nucleus&bee=magnetic&beemode=cozy"); await wait(300
 const ember = await page.evaluate(() => SickleField.view[69]);
 say(ember > 0.5, `render2.y (her ember) is ${ember.toFixed(2)} with SKY none (0 in v5.6.1)`);
 
+console.log("[BEE v5.9 — her glow follows her attention]");
+{
+  await fresh("#bee=magnetic&beemode=cozy&touch=off&mass=stone&nature=natural"); await wait(2500);
+  const rest = await page.evaluate(() => SickleField.view[69]);
+  await page.evaluate(() => { ZigCore.Perf.heldT.set(72, performance.now()); });   // a long note, held
+  await wait(3500);
+  const held = await page.evaluate(() => SickleField.view[69]);
+  await page.evaluate(() => { ZigCore.Perf.heldT.clear(); }); await wait(2500);
+  const after = await page.evaluate(() => SickleField.view[69]);
+  say(held > rest + 1.5, `a held note raises her glow: ${rest.toFixed(2)} -> ${held.toFixed(2)} (fixed at 3.00 before v5.9)`);
+  say(after < held - 1.0, `and it falls back when the note ends: -> ${after.toFixed(2)}`);
+}
+console.log("[SWELL — breath is the wind]");
+{
+  await fresh("#swell=sets&touch=off"); await wait(3000);
+  const e0 = await page.evaluate(() => SickleField.view[104]);
+  await page.keyboard.down("b"); await wait(6000); const e1 = await page.evaluate(() => SickleField.view[104]); await page.keyboard.up("b");
+  await wait(8000); const e2 = await page.evaluate(() => SickleField.view[104]);
+  say(e0 > 0.1 && e0 < 0.35, `in ALIVE a gentle sea never quite stops: energy ${e0.toFixed(2)}`);
+  say(e1 > e0 + 0.4, `breath builds the sea over seconds: ${e0.toFixed(2)} -> ${e1.toFixed(2)}`);
+  say(e2 < e1 - 0.2, `silence lets it lie down, slower: -> ${e2.toFixed(2)}`);
+}
 console.log("[SENSITIVITY — live, remembered, reaches the ears]");
 await fresh("#mic=listen&touch=off");
 const opts = await page.evaluate(() => Array.from(document.getElementById("senspick").options).map((o) => o.value).join(","));

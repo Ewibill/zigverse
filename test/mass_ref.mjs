@@ -135,7 +135,7 @@ function shaders(extra, material) {
 }
 const base = shaders(null), stone = shaders({ mass: M.resolve("stone") });
 chk("E  engine builds with MASS stone", !stone.err, stone.err);
-chk("E  a = F/m: the integrate is baked with dt/3", stone.all.includes("v += accel * (U.dt * 0.33333);"));
+chk("E  a = F/m: the integrate is baked with dt/3 (v5.9: the Bee steers at m = 1)", stone.all.includes("v += accel * (U.dt * select(0.33333, 1.0, i32(U.avatarA.x) == i32(i)));"));
 chk("E  drag is a force too: divided by the same mass", /v \*= \(1\.0 - U\.dt \* \([^;]*\) \* 0\.33333\);/.test(stone.all));
 chk("E  the roost is lowered by the sink in silence", stone.all.includes("- 14.000 * (1.0 - U.morph.w);"));
 chk("E  the weight block is baked (w 4, bed = roost - 14)", stone.all.includes("let wDown = 4.000 * (1.0 - U.morph.w);") && stone.all.includes("let bed = U.anchor.y - 14.000;"));
