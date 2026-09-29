@@ -2975,3 +2975,15 @@ Unchanged when not used: desktop with no `#view=` and `#touch=off` is v5.4 exact
 
 **Passed (Glyph's container):** manifold_ref PASS (+3 phone wiring checks) - _calabiboot PASS on source and bundle, with a new PHONE section on an emulated 390x844 touch screen (hold gathers 36 -> 75%, slide turns 1.06 -> 2.08 rad, lift releases, double-tap 5 -> 3, no errors) - all 57 reference tests PASS.
 **Not measured:** a real iPhone (frame rate, feel) - Bill's first test. The stranger test - the friend is the first one: note their FIRST words.
+
+
+**2026-09-29 - CALABI-YAU STUDY v0.3 - LISTEN** - calabi_study.html v0.3 - `dist/Calabi_Yau_Study_v0_3.html` + `dist/calabi.html` (the STABLE link: always the newest study) - engine and species UNTOUCHED - **no Metal gate needed**
+
+**Plain English (Bill):**
+- **Bill:** "Is this audio responsive?" It was not - EWI over MIDI, touch and keys only. Chose A: a listen button, OFF by default.
+- **LISTEN.** A "listen" button (top right; M on a computer). Nothing asks for the microphone until it is tapped, so a stranger never meets a permission prompt unasked. Tapped, it hears through the engine's own ears (ZigCore.Timbre - auto-levelled for a phone or laptop mic, never for the MOTU). Loudness is breath: sound gathers the shape. Brightness - a higher or brighter note - turns it through the 4th dimension (the first sound sets the centre, then the voice's own centre is learned slowly). An attack scatters the shards for a moment before they settle. Tap again = stop (audio suspended). The EWI over MIDI still wins; a finger still works alongside.
+- **The stable link:** dist/calabi.html is always the newest study, so a link Bill texts keeps improving. Versioned files stay for history (v0_2 is unchanged).
+- The title moved below the buttons on the phone.
+
+**Passed (Glyph's container):** manifold_ref PASS (+2 listen checks) - _calabiboot PASS on source and bundle, new LISTEN section with Chrome's fake mic: no mic before the tap, then listening auto-levelled, sound 0.90 gathers 62 -> 98%, tap again suspends and the sound fades - all 57 reference tests PASS.
+**Not measured:** a real iPhone mic and Bill's horn in a real room - Bill's first test.

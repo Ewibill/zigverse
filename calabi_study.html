@@ -21,12 +21,15 @@
   html, body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; overscroll-behavior: none; }
   .phone #hud { top: calc(env(safe-area-inset-top) + 52px); font-size: 10.5px; white-space: pre-wrap; right: 14px; }
   #intro, #hint { position: fixed; left: 0; right: 0; text-align: center; pointer-events: none; color: #c9cfd9; font: 300 15px/1.5 -apple-system, "Segoe UI", Helvetica, sans-serif; letter-spacing: .04em; transition: opacity 2.4s ease; opacity: 0; }
-  #intro { top: calc(env(safe-area-inset-top) + 22px); }
+  #intro { top: calc(env(safe-area-inset-top) + 62px); }
   #intro b { display: block; font-weight: 500; font-size: 13px; letter-spacing: .42em; color: #e8ecf2; margin-bottom: 2px; }
   #intro span, #hint { font-size: 13px; color: #8a93a3; }
   #hint { bottom: calc(env(safe-area-inset-bottom) + 26px); }
   #info { position: fixed; right: 10px; top: calc(env(safe-area-inset-top) + 10px); width: 34px; height: 34px; border-radius: 17px; border: 1px solid #39404c; background: rgba(3,4,6,.5); color: #8a93a3; font: italic 15px Georgia, serif; display: none; }
   .phone #info { display: block; }
+  #listen { position: fixed; right: 10px; top: calc(env(safe-area-inset-top) + 10px); height: 34px; padding: 0 14px; border-radius: 17px; border: 1px solid #39404c; background: rgba(3,4,6,.5); color: #8a93a3; font: 13px -apple-system, "Segoe UI", Helvetica, sans-serif; letter-spacing: .06em; }
+  .phone #listen { right: 52px; }
+  #listen.on { color: #e8ecf2; border-color: #8fa3b8; }
   .show { opacity: 1 !important; }
 </style>
 </head>
@@ -34,8 +37,9 @@
 <canvas id="c"></canvas>
 <div id="hud"></div>
 <div id="intro"><b>CALABI-YAU</b><span>a shape from four dimensions, seen in three</span></div>
-<div id="hint">hold to gather &middot; slide to turn it through the fourth dimension<br>double-tap for another shape</div>
+<div id="hint">hold to gather &middot; slide to turn it through the fourth dimension<br>double-tap for another shape &middot; or tap listen and play to it</div>
 <button id="info" aria-label="about">i</button>
+<button id="listen" aria-label="listen with the microphone">listen</button>
 <script src="engine/zigcore.js"></script>
 <script src="engine/zigmanifold.js"></script>
 <script>
@@ -61,6 +65,13 @@
    A quality governor drops the shard count if the phone cannot hold ~40 fps;
    portrait framing pulls the camera back so the whole shape fits. "Add to
    Home Screen" opens it full-screen with its own icon (cut from the canvas).
+   LISTEN (v0.3, 2026-09-29): a button, OFF by default, so a stranger never
+   meets a microphone prompt unasked. Tapped, it opens the mic through the
+   engine's own ears (ZigCore.Timbre: auto-levelled for a phone or laptop mic,
+   never for the MOTU). Sound becomes breath (loudness gathers the shape),
+   brightness - a higher or brighter note - turns it through the 4th dimension,
+   and an attack scatters the shards for a moment before they settle. The EWI
+   over MIDI still wins; a finger still works. Tap again (or M) = stop.
    ========================================================================== */
 (function () {
   const ZC = window.ZigCore, ZM = window.ZigManifold, Perf = ZC.Perf;
@@ -175,6 +186,25 @@
   const up = (e) => { if (e.pointerType === "mouse") { drag = null; return; } fingers.delete(e.pointerId); if (fingers.size < 2) pinch0 = 0; };
   cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
   document.getElementById("info").addEventListener("click", () => { showHud = !showHud; });
+  /* ---- LISTEN: the engine's ears, opt-in ------------------------------------ */
+  const TB = ZC.Timbre, lbtn = document.getElementById("listen");
+  let listening = false, arming = false, refSet = false, soundB = 0, brightS = 0.5, brightRef = 0.5, soundTurn = 0, kick = 0, heard = "";
+  async function toggleListen() {
+    if (arming) return;
+    if (listening) { listening = false; try { TB._ctx && TB._ctx.suspend(); } catch (_) {} lbtn.classList.remove("on"); lbtn.textContent = "listen"; return; }
+    if (TB.live) { try { await TB._ctx.resume(); } catch (_) {} listening = true; lbtn.classList.add("on"); lbtn.textContent = "listening"; return; }
+    arming = true; lbtn.textContent = "…";
+    const ok = await TB.arm(/M2|MOTU/i);
+    arming = false;
+    if (!ok) { lbtn.textContent = "no mic"; heard = TB.err; setTimeout(() => { if (!listening) lbtn.textContent = "listen"; }, 2500); return; }
+    TB.trim = 1; TB.auto = !TB.iface;                                // a phone/laptop mic is auto-levelled; the MOTU never is
+    try { if (TB._ctx.state !== "running") await TB._ctx.resume(); } catch (_) {}
+    listening = true; heard = TB.device; lbtn.classList.add("on"); lbtn.textContent = "listening";
+  }
+  lbtn.addEventListener("click", (e) => { e.stopPropagation(); toggleListen(); });
+  addEventListener("keydown", (e) => { if (e.code === "KeyM" && !e.repeat) toggleListen(); });
+  /* iOS can hand back a suspended audio clock; any touch wakes it */
+  addEventListener("pointerdown", () => { if (listening && TB._ctx && TB._ctx.state !== "running") TB._ctx.resume().catch(() => {}); }, true);
   cv.addEventListener("wheel", (e) => { dist = Math.max(2.2, Math.min(12, dist * (1 + e.deltaY * 0.001))); e.preventDefault(); }, { passive: false });
 
   /* ---- matrices ---------------------------------------------------------- */
@@ -195,20 +225,32 @@
     if (keys.has("ArrowLeft")) handTurn -= dt * 0.9; if (keys.has("ArrowRight")) handTurn += dt * 0.9;
     if (!paused) drift += dt * 0.05;
     bendS += (Perf.bend - bendS) * Math.min(1, dt * 3);
-    alpha = drift + handTurn + bendS * 1.6;                          // BEND turns it through the 4th dimension
+    /* LISTEN: loudness is breath; brightness (a higher / brighter note) turns it;
+       an attack kicks the shards loose for a moment. Gated so a quiet room stays still. */
+    if (listening) {
+      TB.update(dt);
+      const sb = Math.max(0, Math.min(1, (TB.body - 0.08) / 0.5));
+      soundB += (sb - soundB) * Math.min(1, dt * (sb > soundB ? 6 : 1.2));
+      brightS += (TB.brightness - brightS) * Math.min(1, dt * 4);
+      if (soundB > 0.15) { if (!refSet) { brightRef = brightS; refSet = true; }        // the first sound sets the centre...
+        brightRef += (brightS - brightRef) * Math.min(1, dt * 0.15); }                 // ...then the voice's own centre is learned slowly
+      soundTurn += (Math.max(-1.2, Math.min(1.2, (brightS - brightRef) * 3.0)) * Math.min(1, soundB * 2) - soundTurn) * Math.min(1, dt * 2.5);
+      kick = Math.max(kick * Math.exp(-dt / 0.35), soundB > 0.1 ? TB.flux : 0);
+    } else { soundB *= Math.exp(-dt / 0.8); soundTurn *= Math.exp(-dt / 1.2); kick *= Math.exp(-dt / 0.35); }
+    alpha = drift + handTurn + bendS * 1.6 + soundTurn;             // BEND (or a brighter note) turns it through the 4th dimension
     const live = Perf.live || Perf._sim > 0;
     const hold = fingers.size > 0 ? 1 : 0;
     touchB += (hold - touchB) * Math.min(1, dt * (hold ? 1.4 : 0.9));   // a held finger breathes in; lifting it lets go, slower
     /* on the phone nobody is playing, so the idle auto-breath would gather it
        on its own - there, the finger is the only breath (the EWI still wins) */
-    const breathIn = live ? Perf.breath : PHONE ? touchB : Math.max(Perf.breath, touchB);
+    const breathIn = live ? Perf.breath : (PHONE || listening) ? Math.max(touchB, soundB) : Math.max(Perf.breath, touchB);
     const wantG = Math.min(1, (PHONE && !live ? 0.32 : 0.25) + 0.95 * breathIn);
     gather += (wantG - gather) * Math.min(1, dt * (wantG > gather ? 2.0 : 0.6));
     hue += dt * 0.01;
 
     ZM.frame(S, alpha, 1.35, T, TN);
     const ca = Math.cos(alpha), sa = Math.sin(alpha);
-    const k = 1.2 + 9.0 * gather, damp = 2.2 + 2.0 * gather, cloud = (1 - gather) * 0.55;
+    const k = 1.2 + 9.0 * gather, damp = 2.2 + 2.0 * gather, cloud = (1 - gather) * 0.55 + kick * 0.35;
     for (let i = 0; i < N; i++) {
       const o = 3 * i, s = seed[i];
       const nx = Math.sin(t * 0.31 + s * 17.0 + P[o + 1] * 1.7), ny = Math.sin(t * 0.27 + s * 11.0 + P[o + 2] * 1.9), nz = Math.sin(t * 0.23 + s * 23.0 + P[o] * 1.5);
@@ -252,13 +294,13 @@
     }
 
     hud.innerHTML = showHud
-      ? "<b>CALABI-YAU STUDY</b>  v0.2\nthe Fermat surface z\u2081" + SUP[n] + " + z\u2082" + SUP[n] + " = 1, a slice of a Calabi-Yau space,\nprojected from four dimensions into this room\n\n" +
+      ? "<b>CALABI-YAU STUDY</b>  v0.3\nthe Fermat surface z\u2081" + SUP[n] + " + z\u2082" + SUP[n] + " = 1, a slice of a Calabi-Yau space,\nprojected from four dimensions into this room\n\n" +
         "n " + n + " · " + N + " shards · 4th-dimension turn " + alpha.toFixed(2) + " rad" + (paused ? " (drift paused)" : "") + "\n" +
-        (live ? "LIVE" : "idle") + " · breath " + "▮".repeat(Math.round(breathIn * 10)).padEnd(10, "▯") + " · gathered " + Math.round(gather * 100) + "% · bend " + Perf.bend.toFixed(2) + "\n" + (PHONE && !live ? "your finger is the breath" + (gov.drops ? " · shards " + N + " (tuned for this phone)" : "") : ewi) + "\n\n" +
-        (PHONE ? "hold = gather · slide = turn it through the 4th dimension · double-tap = another degree · two fingers = orbit / zoom\n\nThe maths is real (every point lies on the surface). Whether hidden dimensions of our universe look like this is string theory, and untested."
-               : "bend = turn it through the 4th dimension · breath = gather\nB breath · ← → turn · 3 4 5 degree · space drift · H hide · drag/wheel view")
+        (live ? "LIVE" : listening ? "LISTEN" : "idle") + " · breath " + "▮".repeat(Math.round(breathIn * 10)).padEnd(10, "▯") + " · gathered " + Math.round(gather * 100) + "% · bend " + Perf.bend.toFixed(2) + "\n" + (listening ? "listening · " + heard + " · sound " + "▮".repeat(Math.round(soundB * 10)).padEnd(10, "▯") + (TB.auto ? " (auto-level x" + TB.gain.toFixed(1) + ")" : "") + "\n" : "") + (PHONE && !live ? "your finger is the breath" + (gov.drops ? " · shards " + N + " (tuned for this phone)" : "") : ewi) + "\n\n" +
+        (PHONE ? "hold = gather · slide = turn it through the 4th dimension · double-tap = another degree · two fingers = orbit / zoom · listen = let it hear you\n\nThe maths is real (every point lies on the surface). Whether hidden dimensions of our universe look like this is string theory, and untested."
+               : "bend = turn it through the 4th dimension · breath = gather\nB breath · ← → turn · 3 4 5 degree · space drift · H hide · M listen · drag/wheel view")
       : "";
-    window.CalabiStudy.frames++; window.CalabiStudy.booted = true; window.CalabiStudy.alpha = alpha; window.CalabiStudy.gather = gather; window.CalabiStudy.n = n; window.CalabiStudy.N = N; window.CalabiStudy.touchB = touchB; window.CalabiStudy.dropped = gov.drops; window.CalabiStudy.fingers = fingers.size;
+    window.CalabiStudy.frames++; window.CalabiStudy.booted = true; window.CalabiStudy.alpha = alpha; window.CalabiStudy.gather = gather; window.CalabiStudy.n = n; window.CalabiStudy.N = N; window.CalabiStudy.touchB = touchB; window.CalabiStudy.dropped = gov.drops; window.CalabiStudy.fingers = fingers.size; window.CalabiStudy.listening = listening; window.CalabiStudy.soundB = soundB; window.CalabiStudy.soundTurn = soundTurn; window.CalabiStudy.kick = kick;
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);

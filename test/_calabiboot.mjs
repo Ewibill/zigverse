@@ -5,11 +5,13 @@
    it proves shards are drawn, that bend turns the shape (the pixels change),
    that breath gathers it, and that 3/4/5 rebuild the surface.
    v0.2: the PHONE - a held finger gathers, a slide turns it, double-tap rebuilds.
+   v0.3: LISTEN - no mic until tapped; then sound gathers it; tap again stops.
    ========================================================================== */
 import path from "node:path"; import { pathToFileURL } from "node:url"; import { existsSync } from "node:fs";
 const FILE = process.argv[2] || "calabi_study.html";
 let pw; try { pw = await import("playwright-core"); } catch (_) { pw = await import("playwright"); }
-const args = ["--no-sandbox", "--enable-webgl", "--ignore-gpu-blocklist"];
+const args = ["--no-sandbox", "--enable-webgl", "--ignore-gpu-blocklist",
+  "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"];      // LISTEN: Chrome's fake mic (a beep), auto-allowed
 async function open() {
   if (process.env.ZIG_BROWSER && existsSync(process.env.ZIG_BROWSER)) return pw.chromium.launch({ executablePath: process.env.ZIG_BROWSER, args });
   try { return await pw.chromium.launch({ channel: "chrome", args }); } catch (_) {}
@@ -62,6 +64,21 @@ console.log("[PHONE - a finger is the breath]");
   await ph.waitForTimeout(500); const f4 = await pst();
   say(f4.n === 3, `double-tap changes the shape (degree 5 -> ${f4.n})`);
   await ctx.close(); }
+console.log("[LISTEN - the engine's ears, opt-in]");
+{ const lp = await browser.newPage({ viewport: { width: 1000, height: 700 } }); lp.on("pageerror", (e) => errs.push(String(e)));
+  await lp.goto(pathToFileURL(path.resolve(FILE)).href + "#count=1500", { waitUntil: "load" });
+  await lp.waitForFunction(() => window.CalabiStudy && window.CalabiStudy.frames > 30, null, { timeout: 30000 });
+  await lp.waitForTimeout(2000);
+  const l0 = await lp.evaluate(() => ({ on: CalabiStudy.listening, mic: ZigCore.Timbre.live, g: CalabiStudy.gather }));
+  say(!l0.on && !l0.mic, "the mic is NOT opened until listen is tapped (a stranger never meets a prompt unasked)");
+  await lp.click("#listen"); await lp.waitForTimeout(4000);
+  const l1 = await lp.evaluate(() => ({ on: CalabiStudy.listening, mic: ZigCore.Timbre.live, auto: ZigCore.Timbre.auto, sb: CalabiStudy.soundB, g: CalabiStudy.gather, lbl: document.getElementById("listen").textContent }));
+  say(l1.on && l1.mic && l1.auto && l1.lbl === "listening", `tapped: it listens through the engine's ears, auto-levelled (a non-MOTU mic)`);
+  say(l1.sb > 0.3 && l1.g > l0.g + 0.1, `sound is breath: heard ${l1.sb.toFixed(2)}, gathered ${Math.round(l0.g * 100)}% -> ${Math.round(l1.g * 100)}%`);
+  await lp.click("#listen"); await lp.waitForTimeout(2500);
+  const l2 = await lp.evaluate(() => ({ on: CalabiStudy.listening, sb: CalabiStudy.soundB, st: ZigCore.Timbre._ctx.state }));
+  say(!l2.on && l2.st === "suspended" && l2.sb < l1.sb * 0.2, `tap again stops listening (audio ${l2.st}, sound fades to ${l2.sb.toFixed(2)})`);
+  await lp.close(); }
 say(errs.length === 0, "no page errors" + (errs.length ? ": " + errs[0].slice(0, 140) : ""));
 await browser.close();
 console.log("\n" + (fail ? "CALABIBOOT FAIL — " + fail : "CALABIBOOT PASS"));
