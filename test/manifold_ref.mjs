@@ -38,7 +38,13 @@ chk("normals are unit length", nbad === 0);
   chk("normals are perpendicular to the surface", Math.abs(U[0] * Nn[0] + U[1] * Nn[1] + U[2] * Nn[2]) / Math.hypot(...U) < 1e-3); }
 const H = fs.readFileSync(path.join(ROOT, "calabi_study.html"), "utf8");
 chk("study: bend turns the shape through the 4th dimension", H.includes("alpha = drift + handTurn + bendS * 1.6;"));
-chk("study: breath gathers the shards (silence loosens them into a cloud)", H.includes("const wantG = Math.min(1, 0.25 + 0.95 * Perf.breath);") && H.includes("cloud = (1 - gather) * 0.55"));
+chk("study: breath gathers the shards (silence loosens them into a cloud)", H.includes("const wantG = Math.min(1, (PHONE && !live ? 0.32 : 0.25) + 0.95 * breathIn);") && H.includes("cloud = (1 - gather) * 0.55"));
+chk("phone: the finger is the breath (hold gathers), and the EWI still wins when it plays",
+  H.includes("const breathIn = live ? Perf.breath : PHONE ? touchB : Math.max(Perf.breath, touchB);") && H.includes("const hold = fingers.size > 0 ? 1 : 0;"));
+chk("phone: slide turns it through the 4th dimension; double-tap changes degree; two fingers orbit/zoom",
+  H.includes("handTurn += dx * 0.006") && H.includes("build(n === 5 ? 3 : n === 3 ? 4 : 5)") && H.includes("dist * pinch0 / Math.max(1, d)"));
+chk("phone: portrait framing, quality governor, home-screen app meta",
+  H.includes("0.75 / (w / Math.max(1, h))") && H.includes("PHONE && !FIXED && F >= 40") && H.includes('name="apple-mobile-web-app-capable"'));
 chk("study: reads the EWI through the engine's own Perf path", H.includes('<script src="engine/zigcore.js"></script>') && H.includes("Perf.init("));
 console.log("\n" + (bad ? `FAIL — ${bad} check(s)` : "PASS — all checks"));
 process.exit(bad ? 1 : 0);

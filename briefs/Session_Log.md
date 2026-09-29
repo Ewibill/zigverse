@@ -2961,3 +2961,17 @@ Unchanged when not used: desktop with no `#view=` and `#touch=off` is v5.4 exact
 
 **Passed (Glyph's container):** manifold_ref PASS - _calabiboot PASS on the source and the bundle (5625 shards, 17% of frame lit, breath gathers 57 -> 90%, bend turns 0.12 -> 1.45 rad with visible change, key 3 rebuilds to 6084) - all 57 reference tests PASS - camera pulled back (dist 7.6) after screenshots showed the shape clipped.
 **Not measured:** the stranger test.
+
+
+**2026-09-29 - CALABI-YAU STUDY v0.2 - THE PHONE** - calabi_study.html v0.2 - `dist/Calabi_Yau_Study_v0_2.html` - engine and species UNTOUCHED - **no Metal gate needed**
+
+**Plain English (Bill):**
+- **Why:** a friend asked to see what we could do with the Calabi-Yau. v0.2 makes it something you can TEXT: a link that opens on any phone, no EWI, no install.
+- **A finger is the breath.** Hold = the loose cloud gathers into the shape; lift = it lets go, slower. Slide sideways = turn it through the 4th dimension. Slide up/down = tilt. Two fingers = orbit + pinch zoom. Double-tap = another shape (degree 5 -> 3 -> 4). On the phone the idle auto-breath is ignored, so the first thing a viewer discovers is that THEY hold it together. The EWI still wins whenever it plays.
+- **First sight:** "CALABI-YAU / a shape from four dimensions, seen in three" and a one-line hint; both fade after the first touch. The (i) button shows the full caption, including the honest line: the maths is real, the hidden-dimensions idea is untested string theory.
+- **Phone fit:** portrait pulls the camera back so the whole shape fits; the phone opens at the classic angle (the cube-like angle 0 read as a box); shards spawn as a soft ball, not a box; a quality governor drops the shard count (x0.6, at most twice) if the phone cannot hold ~40 fps; pixel ratio capped at 2.
+- **Add to Home Screen:** opens full-screen with its own icon, cut from the living canvas.
+- Desktop behaviour is unchanged (keys, drag, wheel, HUD).
+
+**Passed (Glyph's container):** manifold_ref PASS (+3 phone wiring checks) - _calabiboot PASS on source and bundle, with a new PHONE section on an emulated 390x844 touch screen (hold gathers 36 -> 75%, slide turns 1.06 -> 2.08 rad, lift releases, double-tap 5 -> 3, no errors) - all 57 reference tests PASS.
+**Not measured:** a real iPhone (frame rate, feel) - Bill's first test. The stranger test - the friend is the first one: note their FIRST words.

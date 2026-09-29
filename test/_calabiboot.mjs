@@ -4,6 +4,7 @@
    Unlike the WebGPU engine, this study is WebGL2, so the canvas CAN be read:
    it proves shards are drawn, that bend turns the shape (the pixels change),
    that breath gathers it, and that 3/4/5 rebuild the surface.
+   v0.2: the PHONE - a held finger gathers, a slide turns it, double-tap rebuilds.
    ========================================================================== */
 import path from "node:path"; import { pathToFileURL } from "node:url"; import { existsSync } from "node:fs";
 const FILE = process.argv[2] || "calabi_study.html";
@@ -39,6 +40,28 @@ say(a1 - a0 > 1.3, `bend turns it through the 4th dimension: ${a0.toFixed(2)} ->
 say(diff(q0, q1) > 8, `...and the picture really transforms (pixel change ${diff(q0, q1).toFixed(1)})`);
 await page.keyboard.press("Digit3"); await page.waitForTimeout(800); const s3 = await st();
 say(s3.n === 3 && s3.N > 5000, `3 rebuilds the cubic slice (${s3.N} shards glide to it)`);
+await page.close();                                                              // one page at a time: the desktop field would slow the phone clock
+console.log("[PHONE - a finger is the breath]");
+{ const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const ph = await ctx.newPage(); ph.on("pageerror", (e) => errs.push(String(e)));
+  await ph.goto(pathToFileURL(path.resolve(FILE)).href + "#count=1500", { waitUntil: "load" });
+  await ph.waitForFunction(() => window.CalabiStudy && window.CalabiStudy.frames > 30, null, { timeout: 30000 });
+  const pst = () => ph.evaluate(() => ({ ...window.CalabiStudy }));
+  const P = (type, x, y) => ph.evaluate(([t, x, y]) => document.getElementById("c").dispatchEvent(new PointerEvent(t, { pointerId: 7, pointerType: "touch", clientX: x, clientY: y, bubbles: true })), [type, x, y]);
+  await ph.waitForTimeout(2500); const f0 = await pst();
+  say(f0.phone === true && f0.touchB === 0, "a touch screen is recognised as a phone; untouched, the finger-breath is 0 (idle auto-breath ignored)");
+  await P("pointerdown", 195, 500); await ph.waitForTimeout(3000); const f1 = await pst();
+  say(f1.gather > f0.gather + 0.1, `holding a finger gathers the shape: ${Math.round(f0.gather * 100)}% -> ${Math.round(f1.gather * 100)}%`);
+  for (let k = 1; k <= 20; k++) { await P("pointermove", 195 + k * 8, 500); await ph.waitForTimeout(30); }
+  const f2 = await pst();
+  say(f2.alpha - f1.alpha > 0.7, `sliding sideways turns it through the 4th dimension: ${f1.alpha.toFixed(2)} -> ${f2.alpha.toFixed(2)} rad`);
+  await P("pointerup", 355, 500); await ph.waitForTimeout(4000); const f3 = await pst();
+  say(f3.fingers === 0 && f3.touchB < f2.touchB - 0.3, `lifting the finger lets it go (finger-breath ${f2.touchB.toFixed(2)} -> ${f3.touchB.toFixed(2)})`);
+  await ph.evaluate(() => { const c = document.getElementById("c"); const ev = (t) => c.dispatchEvent(new PointerEvent(t, { pointerId: 8, pointerType: "touch", clientX: 195, clientY: 500, bubbles: true }));
+    ev("pointerdown"); ev("pointerup"); ev("pointerdown"); ev("pointerup"); });
+  await ph.waitForTimeout(500); const f4 = await pst();
+  say(f4.n === 3, `double-tap changes the shape (degree 5 -> ${f4.n})`);
+  await ctx.close(); }
 say(errs.length === 0, "no page errors" + (errs.length ? ": " + errs[0].slice(0, 140) : ""));
 await browser.close();
 console.log("\n" + (fail ? "CALABIBOOT FAIL — " + fail : "CALABIBOOT PASS"));
