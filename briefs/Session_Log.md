@@ -2948,3 +2948,16 @@ Unchanged when not used: desktop with no `#view=` and `#touch=off` is v5.4 exact
 
 **Passed (Glyph's container):** reference gate 56/56 (+`swell_ref` 25 checks; `mass_ref` integrate check updated for the Bee's m = 1) - byte-identity 5/5 IDENTICAL to v5.6.1 - boot gate 0 driver errors: swell - sets+stone+natural+solid - swell+natural+wood+sky none+nucleus+cozy Bee+velvet+emerald - default - the app bundle - `_touchboot` PASS (36 controls) - `_massboot` PASS incl. the Bee glow and SWELL energy lines.
 **Not run:** Metal gate - REQUIRED. **Not measured:** does the sea read as sea to a stranger - the only test that matters.
+
+
+**2026-09-28 - CALABI-YAU STUDY v0.1** - NEW engine/zigmanifold.js (ZigManifold 0.1.0, pure maths) - NEW calabi_study.html (WebGL2, standalone) - `dist/Calabi_Yau_Study_v0_1.html` - **engine and species UNTOUCHED: no Metal gate needed**
+
+**Plain English (Bill):**
+- **What it is.** Steve's Calabi-Yau. The Fermat surface z1^n + z2^n = 1 (n = 5 by default; keys 3/4/5) is a real 2D slice of a Calabi-Yau space. It lives in FOUR dimensions. The room has three, so the study keeps three and mixes the fourth in by an angle.
+- **The instrument.** Bend = turn it THROUGH the fourth dimension (petals trade places, the body turns inside out - no 3D object can move like that). Breath = gather: silence lets the shards drift loose around the surface, breath pulls them onto it. Arrows turn by hand, drag orbits, wheel zooms, H hides the text.
+- **Evidence level.** ESTABLISHED: the maths (every point lands on the surface to 5e-15, manifold_ref). NOT a claim: that this is the shape of hidden dimensions - that is untested string theory. Here it is geometry only, and the HUD says so.
+- **Capability, not specimen:** ZigManifold is a projection law (4D -> room by angle). Any future species can wear a 4D body and let bend turn it; a Signature pose is the first candidate.
+- **Kill criterion (Scout's rule):** show it with no story. "Screensaver" or "math visualization" = park it. "What IS that, how is it moving like that?" = it earns a place as a Signature pose.
+
+**Passed (Glyph's container):** manifold_ref PASS - _calabiboot PASS on the source and the bundle (5625 shards, 17% of frame lit, breath gathers 57 -> 90%, bend turns 0.12 -> 1.45 rad with visible change, key 3 rebuilds to 6084) - all 57 reference tests PASS - camera pulled back (dist 7.6) after screenshots showed the shape clipped.
+**Not measured:** the stranger test.
