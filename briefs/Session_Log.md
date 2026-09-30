@@ -3046,3 +3046,16 @@ Unchanged when not used: desktop with no `#view=` and `#touch=off` is v5.4 exact
 - eyeZ, with key logging: the page RECEIVED all 7 ArrowUp (none marked repeat) yet the test saw 64 -> 69. So no key was lost and the e.repeat theory was also wrong. Cause: ChladniStudy.note / n / m / k / noteSrc were copied into the test object once per DRAWN FRAME; on eyeZ several key presses land between two frames, and the test read the copy from the frame before. (It also explains the earlier finger-slide miss, which read the note right after the move.)
 - Fix: those values are now live getters - the test sees the note as it IS. Proof in the container: with drawing frozen completely, seven presses read 64 -> 71, k 37. The plate itself was never wrong.
 - Lesson for every study's test hooks: a value a test reads right after an input must be live, not a per-frame mirror.
+
+
+**2026-09-30 - CHLADNI v0.3 - THE BIG SCREEN (eyeZ)** - NEW engine/zigchladnigpu.js (ZigChladniGPU 0.1.0) - NEW studies/chladni.js (the study, shared) - NEW chladni_eyez.html (big-screen host) - chladni_study.html is now a thin host - ZigShardGL 0.1.0 -> 0.2.0 (exports FS / lens / program) - `dist/Chladni_Study_v0_3.html` + `dist/chladni.html`, `dist/Chladni_eyeZ_v0_3.html` + `dist/chladni_eyez.html` - engine WGSL and species UNTOUCHED - **no Metal gate needed**
+
+**Plain English (Bill):**
+- **Bill:** "Can you create this also for the eyeZ" - chose the big-screen study.
+- **The sand moves on the graphics card.** ZigChladniGPU runs the SAME law as ZigChladni (shake by |u| + floor, slide down u^2, hops under gravity, reflection at the edge, rice turning along its line) as a WebGL2 transform-feedback shader: 150,000 grains of sand (9,000 rice) instead of the ~40,000 a CPU can move. Nothing new is decided in the GPU file; the law lives in zigchladni.js first.
+- **One study, two hosts** (the platform pattern): studies/chladni.js is the study; chladni_study.html (phone + desktop, CPU) and chladni_eyez.html (GPU, stage) only set window.ZIG_CHLADNI. A fix to the study reaches both.
+- **Stage manners on eyeZ:** no text until H; F = full screen; the buttons and the cursor fade after 3 s without the mouse; the plate fills ~3/4 of a wide screen. If the GPU path cannot start, the CPU law takes over and the HUD says so.
+- **No stalls:** the HUD's numbers read 3,000 grains back from the GPU with a fence (asks, answers a few frames later) - a first version waited for the GPU every quarter second, which would hitch at 150,000 grains.
+
+**Passed (Glyph's container):** chladni_ref PASS (+5: the GPU shader carries the same law and the same defaults as the CPU; the shared look; the eyeZ host; the CPU fallback) - _chladniboot PASS on source and on both bundles, new GPU section (20,000 grains in the container: forms 45%, re-forms on a new note, rice aligns, every grain stays on the plate, stage manners, controls fade) - 150,000 grains boot on the GPU path with no errors (0.1 fps in the container's software GL) - all 58 reference tests PASS.
+**Not measured:** the frame rate of 150,000 grains on eyeZ's real GPU; how the figures read on the big screen or a projector.

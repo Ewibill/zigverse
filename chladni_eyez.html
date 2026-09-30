@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Chladni</title>
+<title>Chladni - eyeZ</title>
 <meta name="description" content="Sand on a singing plate. Hold to play the plate; every note draws its own figure.">
 <meta property="og:title" content="Chladni - a Zigverse study">
 <meta property="og:description" content="Sand on a singing plate. Hold to play it; every note draws its own figure.">
@@ -31,6 +31,9 @@
   #medium { order: 1; } #listen { order: 2; }
   #listen.on { color: #e8ecf2; border-color: #8fa3b8; }
   .show { opacity: 1 !important; }
+  .stage #bar { transition: opacity 1.2s ease; }
+  .stage.idle #bar { opacity: 0; pointer-events: none; }
+  .stage.idle, .stage.idle canvas { cursor: none; }
 </style>
 </head>
 <body>
@@ -47,11 +50,15 @@
 <script src="engine/zigchladni.js"></script>
 <script src="engine/zigpitch.js"></script>
 <script src="engine/zigshardgl.js"></script>
+<script src="engine/zigchladnigpu.js"></script>
 <script>
-/* CHLADNI - the phone and desktop host. The study itself is studies/chladni.js
-   (shared with chladni_eyez.html, the big-screen host). Here the CPU moves
-   the sand: 40,000 grains on a computer, 16,000 to start on a phone. */
-window.ZIG_CHLADNI = { engine: "cpu" };
+/* CHLADNI - the eyeZ host: the big screen. Same study (studies/chladni.js),
+   but the sand is moved by the graphics card (engine/zigchladnigpu.js, the
+   same law as engine/zigchladni.js): 150,000 grains of sand, 9,000 of rice.
+   Stage manners: no text until H, F = full screen, the buttons and the cursor
+   fade after 3 s without the mouse. If the GPU path cannot start, the CPU law
+   takes over and the HUD says so. */
+window.ZIG_CHLADNI = { engine: "gpu", count: { sand: 150000, rice: 9000 }, stage: true, dist: 5.9, pitch: 1.05 };
 </script>
 <script src="studies/chladni.js"></script>
 </body>

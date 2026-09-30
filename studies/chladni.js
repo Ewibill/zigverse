@@ -1,0 +1,286 @@
+/* =============================================================================
+   studies/chladni.js - CHLADNI STUDY v0.3 (2026-09-30) - the study's code,
+   shared by its host pages (the platform pattern: thin hosts set window.ZIG_*):
+     chladni_study.html   phone + desktop, sand moved by the CPU law
+     chladni_eyez.html    the big screen: the SAME law on the graphics card
+                          (engine/zigchladnigpu.js) - 150,000 grains of sand,
+                          full screen (F), the controls fade when the mouse rests
+   window.ZIG_CHLADNI = { engine: "cpu" | "gpu", count: { sand, rice },
+                          stage: true (big-screen manners), dist, pitch }
+   #engine=cpu|gpu and #count=N in the link override it (tests use them).
+
+   CHLADNI STUDY v0.1 (2026-09-30) - a STUDY, the second shape after the
+   Calabi-Yau. Question it exists to answer (kill criterion): does a stranger
+   HEAR the figure change with the note? If they see "a pattern generator",
+   park it. If they say "wait - the sound is drawing that?", it earns a place.
+
+     the plate   engine/zigchladni.js - the textbook square-plate modes and the
+                 SAND LAW: grains are shaken in proportion to how hard their
+                 spot moves, so they leave the loud places and pile up on the
+                 still lines. Nothing draws the figure; it forms.
+     PITCH       picks the plate's resonance - a higher note, a finer figure.
+                 The map is FIXED (the same note always draws the same figure),
+                 so it can be learned like an instrument.
+     BREATH      how hard the plate is bowed: more breath, faster forming,
+                 more grains hopping. SILENCE stops the plate - the last figure
+                 stays exactly where it fell.
+     BEND        morphs between the two families of figures (through the grid)
+     ATTACK      a strike - the sand jumps
+     phone       hold = bow; slide up/down = the note (3 octaves across the
+                 screen); side to side = bend; double-tap = shake it clean;
+                 two fingers = orbit / zoom. LISTEN (opt-in) hears the voice
+                 or horn: loudness bows, and the SUNG PITCH picks the figure
+                 (engine/zigpitch.js - the phone finally hears which note).
+     keys        B hold = bow · up/down = note · left/right = bend ·
+                 space = shake clean · G sand/rice · M listen · H hide text
+     MEDIUM (v0.2, 2026-09-30) - Bill: "an option between rice and grains of
+                 sand". SAND: 40,000 fine grains (16,000 to start on a phone) -
+                 the figure is everything. RICE: 5,000 long grains - every one
+                 is a body you can follow; they hop higher, tumble, and turn to
+                 lie ALONG the line they find (ZigChladni.orient). The button
+                 (or G, or #medium=rice) pours the other one onto a clean plate;
+                 the choice is remembered on the device.
+   Renderer: engine/zigshardgl.js (the Calabi-Yau shard, shared).
+   ========================================================================== */
+(function () {
+  const ZC = window.ZigCore, CH = window.ZigChladni, ZP = window.ZigPitch, Perf = ZC.Perf;
+  const CFG = Object.assign({ engine: "cpu", count: null, stage: false, dist: 6.6, pitch: 1.02 }, window.ZIG_CHLADNI || {});
+  const engAsked = /(\?|#|&)engine=(cpu|gpu)\b/.exec(location.hash); if (engAsked) CFG.engine = engAsked[2];
+  const cv = document.getElementById("c"), hud = document.getElementById("hud");
+  const PHONE = matchMedia("(pointer: coarse)").matches || /(\?|#|&)phone\b/.test(location.hash);
+  if (PHONE) document.documentElement.classList.add("phone");
+  window.ChladniStudy = { booted: false, frames: 0, phone: PHONE };
+  const R = ZigShardGL.create(cv, { preserve: !PHONE });
+  if (!R) { hud.textContent = "WebGL2 is not available in this browser."; return; }
+  let GPU = CFG.engine === "gpu" && !!window.ZigChladniGPU, G = null, gpuNote = "";
+  if (CFG.stage) document.documentElement.classList.add("stage");
+
+  /* ---- the plate and its sand ------------------------------------------ */
+  const MODES = CH.modes(10), PLATE = 2.0;
+  const FIXED = /(\?|#|&)count=(\d+)/.exec(location.hash);
+  const mediumAsked = /(\?|#|&)medium=(sand|rice)\b/.exec(location.hash);
+  let medium = mediumAsked ? mediumAsked[2] : (() => { try { return localStorage.getItem("zigverse.chladni.medium") === "rice" ? "rice" : "sand"; } catch (_) { return "sand"; } })();
+  let M = CH.MEDIA[medium];
+  const countFor = (med) => FIXED ? +FIXED[2] : (CFG.count && CFG.count[med]) || (PHONE ? CH.MEDIA[med].phone : CH.MEDIA[med].count);
+  let COUNT = countFor(medium);
+  let seedH = 99991; const rnd = () => (seedH = (seedH * 16807) % 2147483647) / 2147483647;
+  let P, N, tilt, spin;
+  function build(count) {
+    if (GPU) {                                          // the graphics card moves the sand
+      if (G) G.dispose();
+      G = ZigChladniGPU.create(R.gl, count, { segments: medium === "sand" ? 5 : 10 });
+      if (G) { N = count; G.scatter(rnd); return; }
+      GPU = false; gpuNote = " (GPU sand unavailable here - the CPU moves it)"; count = Math.min(count, CH.MEDIA[medium].count);
+    }
+    const old = P; N = count; P = CH.create(N); tilt = new Float32Array(3 * N); spin = new Float32Array(N);
+    if (old) { for (let i = 0; i < N; i++) { const j = i % old.x.length; P.x[i] = old.x[j]; P.y[i] = old.y[j]; } } else CH.scatter(P, rnd);
+    for (let i = 0; i < N; i++) { tilt[3 * i] = rnd() - 0.5; tilt[3 * i + 1] = rnd() - 0.5; tilt[3 * i + 2] = rnd(); spin[i] = rnd() * 6.2832; P.a[i] = spin[i]; }
+    R.alloc(N);
+  }
+  build(COUNT);
+  const mbtn = document.getElementById("medium");
+  function pour(med) {                                 // a clean plate, the other medium poured on
+    medium = med; M = CH.MEDIA[medium]; mbtn.textContent = medium;
+    try { localStorage.setItem("zigverse.chladni.medium", medium); } catch (_) {}
+    COUNT = countFor(medium);
+    P = null; build(COUNT); gov.drops = 0; gov.k = 0; gov.t = 0;
+  }
+  mbtn.textContent = medium;
+  mbtn.addEventListener("click", (e) => { e.stopPropagation(); pour(medium === "sand" ? "rice" : "sand"); });
+
+  let mode = CH.pick(MODES, CH.kFor(64)), prev = null, fadeW = 1, note = 64, noteSrc = "", sMorph = -1, bendS = 0;
+  /* what the note IS right now - read live, never a copy from the last frame
+     (a test that presses keys faster than frames are drawn must see every step) */
+  Object.defineProperties(window.ChladniStudy, {
+    note: { get: () => note, enumerable: true }, noteSrc: { get: () => noteSrc, enumerable: true },
+    n: { get: () => mode.n, enumerable: true }, m: { get: () => mode.m, enumerable: true }, k: { get: () => mode.k, enumerable: true }
+  });
+  function setNote(nt, src) {
+    note = nt; noteSrc = src;
+    const md = CH.pick(MODES, CH.kFor(nt));
+    if (md !== mode) { prev = { n: mode.n, m: mode.m, s: sMorph }; mode = md; fadeW = 0; }
+  }
+
+  /* ---- input: EWI (Perf), keys, touch, listen --------------------------- */
+  let ewi = "EWI: looking…";
+  Perf.init({ idle: true, onStatus: (s) => { ewi = s; } });
+  let showHud = !PHONE && !CFG.stage, yaw = Math.PI / 2, pitch = CFG.pitch, dist = CFG.dist, drag = null, keyBend = 0;
+  const shakeClean = () => { if (GPU && G) G.scatter(rnd); else CH.scatter(P, rnd); };
+  /* big-screen manners: the controls and the cursor fade when the mouse rests */
+  let idleT = 0; if (CFG.stage) addEventListener("pointermove", () => { idleT = 0; document.documentElement.classList.remove("idle"); });
+  const keys = new Set(), keyLog = []; window.ChladniStudy.keyLog = keyLog;   // the test reads what really arrived
+  addEventListener("keydown", (e) => {
+    keys.add(e.code); keyLog.push(e.code + (e.repeat ? "R" : ""));
+    /* the note keys step on EVERY press, repeats included: holding an arrow glides
+       through the notes, and a fast press the browser marks as a repeat is never lost */
+    if (e.code === "ArrowUp") { setNote(Math.round(note) + 1, "keys"); e.preventDefault(); return; }
+    if (e.code === "ArrowDown") { setNote(Math.round(note) - 1, "keys"); e.preventDefault(); return; }
+    if (e.repeat) return;                                  // toggles fire once per press
+    if (e.code === "KeyB") Perf.sim(0.85);
+    if (e.code === "KeyH") showHud = !showHud;
+    if (e.code === "Space") { shakeClean(); e.preventDefault(); }
+    if (e.code === "KeyF") { try { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); } catch (_) {} }
+    if (e.code === "KeyM") toggleListen();
+    if (e.code === "KeyG") pour(medium === "sand" ? "rice" : "sand");
+  });
+  addEventListener("keyup", (e) => { keys.delete(e.code); if (e.code === "KeyB") Perf.sim(0); });
+
+  const fingers = new Map(); let pinch0 = 0, mid0 = null, lastTap = 0, touched = false, touchE = 0, touchBend = 0;
+  const two = () => { const [a, b] = [...fingers.values()]; return [Math.hypot(a[0] - b[0], a[1] - b[1]), [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]]; };
+  const fingerPlay = (x, y) => {                      // the finger's place IS the note and the bend
+    setNote(Math.round(CH.NOTE_REF + (0.5 - y / innerHeight) * 36), "touch");
+    touchBend = Math.max(-1, Math.min(1, (x / innerWidth - 0.5) * 2.4));
+  };
+  cv.addEventListener("pointerdown", (e) => {
+    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+    if (e.pointerType === "mouse") { drag = [e.clientX, e.clientY]; return; }
+    const now = performance.now();
+    if (fingers.size === 0) { if (now - lastTap < 320) { shakeClean(); lastTap = 0; } else lastTap = now; }
+    fingers.set(e.pointerId, [e.clientX, e.clientY]); touched = true;
+    if (fingers.size === 1) fingerPlay(e.clientX, e.clientY);
+    if (fingers.size === 2) { [pinch0, mid0] = two(); }
+  });
+  cv.addEventListener("pointermove", (e) => {
+    if (e.pointerType === "mouse") { if (!drag) return; yaw -= (e.clientX - drag[0]) * 0.005; pitch = Math.max(0.15, Math.min(1.45, pitch + (e.clientY - drag[1]) * 0.005)); drag = [e.clientX, e.clientY]; return; }
+    const f = fingers.get(e.pointerId); if (!f) return;
+    if (Math.abs(e.clientX - f[0]) + Math.abs(e.clientY - f[1]) > 6) lastTap = 0;
+    fingers.set(e.pointerId, [e.clientX, e.clientY]);
+    if (fingers.size === 1) fingerPlay(e.clientX, e.clientY);
+    else if (fingers.size === 2) { const [d, m] = two();
+      if (pinch0 > 0) dist = Math.max(2.5, Math.min(14, dist * pinch0 / Math.max(1, d)));
+      yaw -= (m[0] - mid0[0]) * 0.006; pitch = Math.max(0.15, Math.min(1.45, pitch + (m[1] - mid0[1]) * 0.004)); pinch0 = d; mid0 = m; }
+  });
+  const up = (e) => { if (e.pointerType === "mouse") { drag = null; return; } fingers.delete(e.pointerId); if (fingers.size < 2) pinch0 = 0; };
+  cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
+  cv.addEventListener("wheel", (e) => { dist = Math.max(2.5, Math.min(14, dist * (1 + e.deltaY * 0.001))); e.preventDefault(); }, { passive: false });
+  document.getElementById("info").addEventListener("click", () => { showHud = !showHud; });
+
+  const TB = ZC.Timbre, lbtn = document.getElementById("listen");
+  let listening = false, arming = false, soundB = 0, heard = "", sung = null;
+  async function toggleListen() {
+    if (arming) return;
+    if (listening) { listening = false; try { TB._ctx && TB._ctx.suspend(); } catch (_) {} lbtn.classList.remove("on"); lbtn.textContent = "listen"; return; }
+    if (TB.live) { try { await TB._ctx.resume(); } catch (_) {} listening = true; lbtn.classList.add("on"); lbtn.textContent = "listening"; return; }
+    arming = true; lbtn.textContent = "…";
+    const ok = await TB.arm(/M2|MOTU/i);
+    arming = false;
+    if (!ok) { lbtn.textContent = "no mic"; heard = TB.err; setTimeout(() => { if (!listening) lbtn.textContent = "listen"; }, 2500); return; }
+    TB.trim = 1; TB.auto = !TB.iface;
+    try { if (TB._ctx.state !== "running") await TB._ctx.resume(); } catch (_) {}
+    listening = true; heard = TB.device; lbtn.classList.add("on"); lbtn.textContent = "listening";
+  }
+  lbtn.addEventListener("click", (e) => { e.stopPropagation(); toggleListen(); });
+  addEventListener("pointerdown", () => { if (listening && TB._ctx && TB._ctx.state !== "running") TB._ctx.resume().catch(() => {}); }, true);
+
+  /* ---- the loop ---------------------------------------------------------- */
+  const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  const noteName = (n) => NAMES[((Math.round(n) % 12) + 12) % 12] + (Math.floor(Math.round(n) / 12) - 1);
+  const gov = { t: 0, k: 0, drops: 0 }, intro = document.getElementById("intro"), hint = document.getElementById("hint");
+  let baseKey = -1, baseVal = 1, aligned = 0, formedRaw = 0;
+  function alignOf(S, count, stride) {                  // 0 = random, 1 = every grain on a line lies along it
+    let al = 0, c = 0; const A = [0, 0, 0];
+    for (let i = 0; i < count; i += stride) { CH.ug(mode.n, mode.m, sMorph, S.x[i], S.y[i], A); if (Math.abs(A[0]) < 0.3 && S.h[i] <= 0) { al += Math.abs(Math.cos(Math.atan2(A[2], A[1]) + Math.PI / 2 - S.a[i])); c++; } }
+    return c ? Math.max(0, (al / c - 0.637) / 0.363) : 0;
+  }
+  let last = performance.now(), t = 0, E = 0, formed = 0, hue = 0.55, tTouch = -1, lastNote = -1;
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt;
+    Perf.update(dt, t);
+    const live = Perf.live || Perf._sim > 0;
+
+    /* which note is the plate asked to sing? EWI > sung > touch/keys */
+    if (Perf.live && Perf.lastNote >= 0 && Perf.lastNote !== lastNote) { lastNote = Perf.lastNote; setNote(lastNote, "EWI"); }
+    if (listening) {
+      TB.update(dt);
+      const sb = Math.max(0, Math.min(1, (TB.body - 0.08) / 0.5));
+      soundB += (sb - soundB) * Math.min(1, dt * (sb > soundB ? 6 : 1.2));
+      if (sb > 0.1 && TB._time) {
+        const pz = ZP.detect(TB._time, TB._ctx.sampleRate);
+        if (pz.clarity > 0.85 && pz.hz > 60) { sung = pz; if (!Perf.live) { const nt = Math.round(pz.note); if (nt !== Math.round(note) || noteSrc !== "voice") setNote(nt, "voice"); } }
+      }
+    } else soundB *= Math.exp(-dt / 0.8);
+    if (keys.has("ArrowLeft")) keyBend = Math.max(-1, keyBend - dt * 0.8);
+    if (keys.has("ArrowRight")) keyBend = Math.min(1, keyBend + dt * 0.8);
+
+    /* how hard is the plate bowed? */
+    const hold = fingers.size === 1 ? 1 : 0;
+    touchE += (hold - touchE) * Math.min(1, dt * (hold ? 3 : 1.5));
+    let drive;
+    if (Perf.live) drive = Perf.breath + 0.6 * Perf.attack;
+    else if (Perf._sim > 0) drive = Perf.breath;
+    else drive = Math.max(touchE, soundB, PHONE ? 0.05 : 0.22 * Perf.breath);   // idle: the plate barely hums
+    E += (Math.min(1.2, drive) - E) * Math.min(1, dt * 6);
+
+    const bendIn = Perf.live ? Perf.bend : (fingers.size ? touchBend : keyBend);
+    bendS += (bendIn - bendS) * Math.min(1, dt * 4);
+    sMorph = CH.morph(bendS);
+    if (fadeW < 1) fadeW = Math.min(1, fadeW + dt / 0.15);
+
+    /* the sand - low figures have wide loud regions, so they shake harder */
+    const shake = 0.16 * Math.max(1, Math.sqrt(25 / mode.k));
+    const law = { shake: shake * M.shake / 0.16, floor: M.floor, slide: M.slide, hop: M.hop, hopRate: M.hopRate, prev, w: fadeW };
+    const bkey = mode.k * 1000 + mode.n * 10 + Math.round(sMorph * 50);                  // the even-spread baseline only changes with the figure
+    if (bkey !== baseKey) { baseKey = bkey; baseVal = CH.baseline(mode.n, mode.m, sMorph); }
+    const base = baseVal;
+    if (GPU) {
+      G.step(Object.assign({ n: mode.n, m: mode.m, s: sMorph, E, dt, align: M.align }, law));
+      const Sm = G.peek(3000);                                                           // the HUD's numbers: 3,000 grains, read back WITHOUT stalling the GPU
+      if (Sm) { let acc = 0; for (let i = 0; i < Sm.x.length; i++) acc += Math.abs(CH.u(mode.n, mode.m, sMorph, Sm.x[i], Sm.y[i]));
+        formedRaw = Math.max(0, 1 - acc / Sm.x.length / base); if (M.align) aligned = alignOf(Sm, Sm.x.length, 1); }
+      formed += (formedRaw - formed) * Math.min(1, dt * 3);
+    } else {
+      const a = CH.step(P, mode.n, mode.m, sMorph, E, dt, rnd, law);
+      if (M.align) CH.orient(P, mode.n, mode.m, sMorph, E, dt, M.align);                  // long grains turn to lie along the line
+      formed += (Math.max(0, 1 - a / base) - formed) * Math.min(1, dt * 3);
+      if (M.align && (window.ChladniStudy.frames % 20 === 0)) aligned = alignOf(P, N, 3);  // how well do the grains on a line lie along it?
+    }
+    hue += dt * 0.01;
+
+    /* instances: a grain lies flat on the plate, tilted a little; a hop tumbles it */
+    const inst = R.inst;
+    if (!GPU) for (let i = 0; i < N; i++) {
+      const b = 10 * i, h = P.h[i], tb = M.tilt * (1 + 3 * h);             // sand lies every which way (its edges catch the thin film); rice lies flat
+      if (h > 0) { spin[i] += dt * 9; if (M.align) P.a[i] += dt * 9; }       // a grain in the air tumbles
+      inst[b] = P.x[i] * PLATE; inst[b + 1] = h * 0.9 + 0.004; inst[b + 2] = P.y[i] * PLATE;
+      inst[b + 3] = tilt[3 * i] * tb; inst[b + 4] = -1; inst[b + 5] = tilt[3 * i + 1] * tb;   // face down: the camera sees the pale (bone) side - sand is pale
+      const th = M.align ? P.a[i] : spin[i]; inst[b + 6] = Math.cos(th); inst[b + 7] = 0; inst[b + 8] = Math.sin(th); inst[b + 9] = tilt[3 * i + 2];
+    }
+
+    const dpr = PHONE ? Math.min(2, devicePixelRatio) : devicePixelRatio;
+    const [w, hh] = R.frame(dpr);
+    if (!drag && !fingers.size) yaw += dt * 0.015;
+    const fit = Math.max(1, 0.95 / (w / Math.max(1, hh))), D = dist * fit;   // portrait: step back so the whole plate fits
+    const eye = [Math.cos(yaw) * Math.cos(pitch) * D, Math.sin(pitch) * D, Math.sin(yaw) * Math.cos(pitch) * D];
+    const vp = ZigShardGL.mul(ZigShardGL.persp(0.8, w / Math.max(1, hh), 0.05, 60), ZigShardGL.look(eye, [0, 0, 0]));
+    const look = { vp, eye, sun: [0.25, 0.92, -0.30], size: M.size * Math.sqrt((PHONE ? M.phone : M.count) / N), iri: 0.75 + 0.5 * Math.min(1, E), hue };
+    if (GPU) G.draw(Object.assign(look, { plate: PLATE, tilt: M.tilt, aligned: !!M.align })); else R.draw(N, look);
+    if (CFG.stage) { idleT += dt; document.documentElement.classList.toggle("idle", idleT > 3); }
+
+    const F = window.ChladniStudy.frames;
+    if (F === 240) { try { const ic = document.createElement("canvas"); ic.width = ic.height = 180; const s2 = Math.min(w, hh) * 0.8;
+      ic.getContext("2d").drawImage(cv, (w - s2) / 2, (hh - s2) / 2, s2, s2, 0, 0, 180, 180); document.getElementById("icon").href = ic.toDataURL("image/png"); } catch (_) {} }
+    if (PHONE && !FIXED && F >= 40) { gov.t += dt; gov.k++;
+      if (gov.k === 90) { if (gov.t / gov.k > 1 / 40 && COUNT > Math.max(1500, 0.3 * M.count)) { COUNT = Math.round(COUNT * 0.6); build(COUNT); gov.drops++; } gov.t = 0; gov.k = 0; if (gov.drops >= 2) gov.k = -1e9; } }
+    if (PHONE) {
+      intro.classList.toggle("show", t > 0.6 && t < (touched ? tTouch + 2.5 : 1e9) && !showHud);
+      hint.classList.toggle("show", t > 2.2 && !touched);
+      if (touched && tTouch < 0) tTouch = t;
+    }
+
+    hud.innerHTML = showHud
+      ? "<b>CHLADNI</b>  v0.3\n" + medium + " on a singing plate - the square plate's resonances, the textbook form\n\n" +
+        "note " + noteName(note) + (noteSrc ? " (" + noteSrc + ")" : "") + " · figure (" + mode.n + "," + mode.m + ") k " + mode.k + " · bend " + bendS.toFixed(2) + "\n" +
+        "bowed " + "▮".repeat(Math.round(Math.min(1, E) * 10)).padEnd(10, "▯") + " · figure formed " + Math.round(formed * 100) + "% · " + N + " grains of " + medium + (GPU ? " (on the GPU)" : "") + gpuNote + (M.align ? " · aligned " + Math.round(aligned * 100) + "%" : "") + "\n" +
+        (listening ? "listening · " + heard + (sung ? " · hears " + Math.round(sung.hz) + " Hz" : "") + "\n" : "") +
+        (live ? "LIVE" : "idle") + " · " + (PHONE && !live ? "your finger bows the plate" : ewi) + "\n\n" +
+        (PHONE ? "hold = bow · up/down = the note · side to side = bend · double-tap = shake it clean · two fingers = orbit / zoom · sand/rice = what is on the plate · listen = sing to it\n\nIn 1787 Ernst Chladni bowed a sand-covered plate and the sand gathered on the lines that do not move. Nothing here draws those lines: the grains are shaken off the moving parts and find them on their own."
+               : "pitch = the figure · breath = the bow · bend = morph the figure · attack = the sand jumps · silence = it stays\nB bow · ↑ ↓ note · ← → bend · space shake clean · G sand/rice · M listen · F full screen · H hide · drag/wheel view")
+      : "";
+    const S = window.ChladniStudy;
+    S.frames++; S.booted = true; S.N = N; S.engine = GPU ? "gpu" : "cpu"; S.s = sMorph; S.E = E; S.formed = formed;
+    S.medium = medium; S.aligned = aligned; S.listening = listening; S.fingers = fingers.size; S.sung = sung; S.dropped = gov.drops; S.hopping = GPU ? 0 : (() => { let c = 0; for (let i = 0; i < N; i += 7) if (P.h[i] > 0) c++; return c; })();
+    requestAnimationFrame(frame);
+  }
+  window.ChladniStudy.plate = () => (GPU ? G.sample() : P);
+  requestAnimationFrame(frame);
+})();

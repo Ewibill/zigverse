@@ -77,7 +77,7 @@ chk("breath noise is not a note (clarity low)", nz.clarity < 0.5, nz.clarity.toF
 chk("silence is not a note", Z.detect(new Float32Array(2048), sr).clarity === 0);
 
 /* ---- the shared renderer + the study's wiring ----------------------------- */
-const R = read("engine/zigshardgl.js"), H = read("chladni_study.html");
+const R = read("engine/zigshardgl.js"), H = read("chladni_study.html") + read("studies/chladni.js");   // the host + the shared study code
 chk("ZigShardGL carries the Calabi shard (lens, SOLID terminator, thin film) for every new study",
   R.includes("smoothstep(-0.08, 0.45, d)") && R.includes("thin-film at the turning edge") && R.includes("global.ZigShardGL = ZigShardGL"));
 chk("the study loads core, plate, ear and renderer",
@@ -92,7 +92,23 @@ chk("listen stays opt-in (no mic until tapped) and the MOTU is never auto-levell
 chk("the study pours sand or rice (button, G, #medium=), remembers it, and turns rice along its lines",
   H.includes('id="medium"') && H.includes('if (e.code === "KeyG") pour(') && H.includes("medium=(sand|rice)") && H.includes('"zigverse.chladni.medium"') && H.includes("if (M.align) CH.orient(P, mode.n, mode.m, sMorph, E, dt, M.align);"));
 chk("phone: the finger bows, its height is the note, double-tap shakes the plate clean",
-  H.includes("const hold = fingers.size === 1 ? 1 : 0;") && H.includes("(0.5 - y / innerHeight) * 36") && H.includes("if (now - lastTap < 320) { CH.scatter(P, rnd);"));
+  H.includes("const hold = fingers.size === 1 ? 1 : 0;") && H.includes("(0.5 - y / innerHeight) * 36") && H.includes("if (now - lastTap < 320) { shakeClean();"));
+
+/* ---- the GPU mirror (eyeZ) ------------------------------------------------ */
+const GP = read("engine/zigchladnigpu.js"), EZ = read("chladni_eyez.html"), LAW = read("engine/zigchladni.js");
+chk("the GPU sand runs the SAME law: shake by |u| + floor, the slide down u^2, hops under gravity 9, reflection, alignment",
+  GP.includes("uShake * sqrt(uDt) * uE * (amp + uFloor)") && GP.includes("- sl * 2.0 * u * g") && GP.includes("vh -= 9.0 * uDt") &&
+  GP.includes("if (p.x > 1.0) p.x = 2.0 - p.x;") && GP.includes("r3 < amp * uE * uDt * uHopRate") && GP.includes("atan(g2.y, g2.x) + PI * 0.5 - a") &&
+  LAW.includes("P.vh[i] -= 9.0 * dt") && LAW.includes("rnd() < amp * E * dt * hopRate"));
+chk("...with the same defaults as the CPU law (floor 0.07, slide 0.0012, hop 0.9, hop rate 6)",
+  GP.includes("p.floor == null ? 0.07") && GP.includes("p.slide == null ? 0.0012") && GP.includes("p.hop == null ? 0.9") && GP.includes("p.hopRate == null ? 6") &&
+  LAW.includes("o.floor == null ? 0.07") && LAW.includes("o.slide == null ? 0.0012") && LAW.includes("o.hop == null ? 0.9") && LAW.includes("o.hopRate == null ? 6"));
+chk("the GPU shard wears the shared look (ZigShardGL.FS), face down like the CPU grains",
+  GP.includes("draw = SG.program(gl, DRAW_VS, SG.FS)") && GP.includes("-1.0, (hs(seed * 3.31 + 2.0) - 0.5) * tb"));
+chk("eyeZ host: GPU engine, 150,000 sand / 9,000 rice, stage manners, one shared study file",
+  EZ.includes('engine: "gpu", count: { sand: 150000, rice: 9000 }, stage: true') && EZ.includes('<script src="engine/zigchladnigpu.js"></script>') &&
+  EZ.includes('<script src="studies/chladni.js"></script>') && read("chladni_study.html").includes('<script src="studies/chladni.js"></script>'));
+chk("if the GPU path cannot start, the CPU law takes over and says so", H.includes('GPU = false; gpuNote = " (GPU sand unavailable here - the CPU moves it)"'));
 
 console.log("\n" + (bad ? `FAIL — ${bad} check(s)` : "PASS — all checks"));
 process.exit(bad ? 1 : 0);

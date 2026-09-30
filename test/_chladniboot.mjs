@@ -9,6 +9,7 @@
    ========================================================================== */
 import path from "node:path"; import { pathToFileURL } from "node:url"; import { existsSync } from "node:fs";
 const FILE = process.argv[2] || "chladni_study.html";
+const EYEZ = process.argv[3] || path.join(path.dirname(FILE), "chladni_eyez.html");   // the big-screen host next to it (dist: pass the eyeZ bundle)
 let pw; try { pw = await import("playwright-core"); } catch (_) { pw = await import("playwright"); }
 const args = ["--no-sandbox", "--enable-webgl", "--ignore-gpu-blocklist", "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"];
 async function open() {
@@ -115,6 +116,32 @@ console.log("[LISTEN - opt-in, then it hears the note]");
   say(l1.on, "tapped: it listens (auto-levelled, a non-MOTU mic)");
   say(heard, heard ? `...and hears a NOTE: ${Math.round(l1.sung.hz)} Hz (clarity ${l1.sung.clarity.toFixed(2)}) -> figure for note ${l1.note}` : "...but heard no clear note from the test microphone");
   await lp.close(); }
+
+console.log("[GPU - eyeZ: the same law on the graphics card]");
+{ const gp = await browser.newPage({ viewport: { width: 1280, height: 720 } }); gp.on("pageerror", (e) => errs.push(String(e)));
+  await gp.goto(pathToFileURL(path.resolve(EYEZ)).href + "#count=20000", { waitUntil: "load" });
+  await until(gp, () => window.ChladniStudy && window.ChladniStudy.frames > 5, null, 60000);
+  const g0 = await gp.evaluate(() => ({ e: ChladniStudy.engine, N: ChladniStudy.N, hud: document.getElementById("hud").textContent.length, stage: document.documentElement.classList.contains("stage") }));
+  say(g0.e === "gpu" && g0.N === 20000, `the eyeZ page moves the sand on the GPU (${g0.N} grains here; 150,000 on eyeZ)`);
+  say(g0.stage && g0.hud === 0, "stage manners: no text until H");
+  await gp.keyboard.down("b");
+  const gf = await until(gp, () => window.ChladniStudy.formed > 0.45, null, 90000);
+  const g1 = await gp.evaluate(() => ({ f: ChladniStudy.formed }));
+  say(gf, `the GPU sand finds the lines too: formed ${Math.round(g1.f * 100)}% (same law as the CPU)`);
+  const k0 = await gp.evaluate(() => ChladniStudy.k); for (let k = 0; k < 5; k++) await gp.keyboard.press("ArrowUp");
+  const gr = await until(gp, (k) => window.ChladniStudy.k > k && window.ChladniStudy.formed > 0.4, k0, 90000);
+  say(gr, "a new note re-forms the GPU sand");
+  await gp.keyboard.press("KeyG");
+  const ga = await until(gp, () => window.ChladniStudy.medium === "rice" && window.ChladniStudy.aligned > 0.6, null, 120000);
+  const g2 = await gp.evaluate(() => ({ a: ChladniStudy.aligned, N: ChladniStudy.N }));
+  say(ga, `GPU rice lies along its lines: aligned ${Math.round(g2.a * 100)}%`);
+  const P = await gp.evaluate(() => { const P = ChladniStudy.plate(); let ok = true; for (let i = 0; i < P.x.length; i++) if (!(Math.abs(P.x[i]) <= 1 && Math.abs(P.y[i]) <= 1 && P.h[i] >= 0)) ok = false; return ok; });
+  say(P, "every GPU grain is on the plate and no hop runs away");
+  await gp.keyboard.up("b"); await gp.waitForTimeout(3600);
+  const idle = await gp.evaluate(() => document.documentElement.classList.contains("idle"));
+  say(idle, "the buttons and cursor fade when the mouse rests");
+  await gp.evaluate(() => localStorage.removeItem("zigverse.chladni.medium"));
+  await gp.close(); }
 
 say(errs.length === 0, "no page errors" + (errs.length ? ": " + errs[0].slice(0, 140) : ""));
 await browser.close();
