@@ -2987,3 +2987,62 @@ Unchanged when not used: desktop with no `#view=` and `#touch=off` is v5.4 exact
 
 **Passed (Glyph's container):** manifold_ref PASS (+2 listen checks) - _calabiboot PASS on source and bundle, new LISTEN section with Chrome's fake mic: no mic before the tap, then listening auto-levelled, sound 0.90 gathers 62 -> 98%, tap again suspends and the sound fades - all 57 reference tests PASS.
 **Not measured:** a real iPhone mic and Bill's horn in a real room - Bill's first test.
+
+
+**2026-09-29 - CALABI-YAU STUDY v0.4 - PLAYED** - calabi_study.html v0.4 - `dist/Calabi_Yau_Study_v0_4.html` + `dist/calabi.html` (the stable link, now v0.4) - engine and species UNTOUCHED - **no Metal gate needed**
+
+**Plain English (Bill):**
+- **Bill** played it on the EWI with no knobs: "more response would be nice but I'm greedy". v0.3 heard only breath (gather) and bend (turn); the EWI also sends pitch, attack and held notes, and the study ignored them.
+- **PITCH turns it through the 4th dimension** - a melody is a PATH through the shape. About 1.1 rad per octave around the centre of your own range (the first note sets it; it follows your tessitura over ~20 s). In silence the last turn is held - memory - then relaxes over ~6 s. Bend still turns on top.
+- **ATTACK scatters:** each note-on loosens the shards for a moment, so articulation shows.
+- **SUSTAIN glows:** a held note raises the iridescence and pulls the shape tighter.
+- **BREATH swells** the body (+8% at full breath) as well as gathering it.
+- Tunables if it is too much or too little: 1.1 rad/octave, 0.6 attack scatter, 0.45 sustain glow, 8% swell.
+
+**Passed (Glyph's container):** manifold_ref PASS (+1 played check) - _calabiboot PASS on source and bundle, new PLAYED section with simulated MIDI: an octave up turns 0.00 -> 0.99 rad, a held note glows 0.97, an attack kicks 0.33 - all 57 reference tests PASS.
+**Not measured:** Bill's eye on a real phrase - too busy on fast passages? too little on long tones?
+
+
+**2026-09-30 - CHLADNI STUDY v0.1 - SAND ON A SINGING PLATE** - NEW engine/zigchladni.js (ZigChladni 0.1.0) - NEW engine/zigpitch.js (ZigPitch 0.1.0) - NEW engine/zigshardgl.js (ZigShardGL 0.1.0) - NEW chladni_study.html - `dist/Chladni_Study_v0_1.html` + `dist/chladni.html` (the stable link) - test/_calabiboot.mjs waits for results instead of fixed sleeps - engine WGSL and species UNTOUCHED - **no Metal gate needed**
+
+**Plain English (Bill):**
+- **Why:** of six shapes proposed, Chladni is the one that is ABOUT sound. In 1787 Ernst Chladni bowed a sand-covered plate and the sand gathered on the lines that do not move; every resonance draws its own figure.
+- **The sand is not drawn.** The plate shakes each grain in proportion to how hard its spot moves, so grains leave the loud places and pile up on the still lines - the figure EMERGES (CPU proof: mean plate motion under the grains falls to ~0.23 of an even spread in 5 s). Silence stops the plate: the last figure stays exactly where it fell.
+- **PITCH picks the figure** - a higher note, a finer figure. The map is FIXED (E4 = the (4,3) figure; an octave doubles the mode number) so it can be learned like an instrument: the same note always draws the same figure. 28 distinct figures across an EWI's range.
+- **BREATH is the bow** (more breath, faster forming, more grains hopping). **BEND morphs** between the two classic families of figures, through the plain grid. **ATTACK** makes the sand jump.
+- **Phone:** hold = bow; finger height = the note (3 octaves across the screen); side to side = bend; double-tap = shake it clean; two fingers orbit/zoom. **LISTEN** (opt-in) now hears WHICH NOTE: a new pitch detector means a voice or horn at a phone picks the figure.
+- **The grains are pale** (sand) and lie at every angle, with a small floor of plate jitter so a line has width, not one grain.
+- **Capabilities gained (platform, not project):** ZigChladni (plate modes + the sand law - any species can stand on a singing plate), ZigPitch (the phone finally hears pitch, not just loudness - every future study and the app can use it), ZigShardGL (the Calabi shard renderer lifted out so every new shape study shares it; calabi_study.html keeps its own frozen copy - it is published and in videos).
+- **Kill criterion (Scout's rule):** show it with no story. "A pattern generator" = park it. "Wait - the sound is drawing that?" = it earns a place.
+
+**Passed (Glyph's container):** chladni_ref PASS (23 checks: exact gradients; antisymmetry; morph; fixed learnable note map; the figure emerges; more breath forms faster; silence freezes; a new note re-forms; ZigPitch E2..F#6 within 10 cents on sine / saw / horn-like tones with noise, no octave errors; noise and silence are not notes) - _chladniboot PASS on source and bundle (draws; bowing forms 0 -> 45%; a note changes the figure and the sand re-forms; EWI note / breath / bend reach the plate; phone finger bows and chooses the note; double-tap shakes clean; listen off until tapped, then hears Chrome's test tone at 401 Hz) - _calabiboot PASS - all 58 reference tests PASS.
+**Not measured:** a real iPhone (frame rate at 12,000 grains - the governor drops to 7,200 / 4,300 if needed), a real horn through LISTEN, and the stranger test.
+
+
+**2026-09-30 - CHLADNI STUDY v0.2 - SAND OR RICE** - ZigChladni 0.1.0 -> 0.2.0 (MEDIA + orient) - chladni_study.html v0.2 - `dist/Chladni_Study_v0_2.html` + `dist/chladni.html` (the stable link, now v0.2) - engine WGSL and species UNTOUCHED - **no Metal gate needed**
+
+**Plain English (Bill):**
+- **Bill:** "Is there the possibility to have an option between rice and grains of sand?" They are not the same experiment, and the difference is the Zigverse's own: SAND disappears into the figure; RICE keeps every grain a body you can follow - it IS the shard.
+- **SAND:** 40,000 fine grains (16,000 to start on a phone; the governor may drop it). The figure is everything.
+- **RICE:** 5,000 long grains (~1/60 of the plate, like real rice on a real plate). They hop higher, tumble in the air, settle a little slower - and because they are LONG, the vibration turns each one until it lies ALONG the line it has found (a grain across a line has one end moving and one still). Measured: alignment of grains on the lines goes from random (0.64) to 1.00. No script lays them out; ZigChladni.orient is the law.
+- **The switch:** a "sand / rice" button (top right, next to listen), G on a keyboard, or #medium=rice in the link. It pours the other medium onto a clean plate, and the choice is remembered on the device.
+
+**Passed (Glyph's container):** chladni_ref PASS (+4: two media; rice forms the figure; rice aligns 0.64 -> 1.00; silence does not turn it) - _chladniboot PASS on source and bundle, new RICE section (5,000 grains; bowed, formed 45% and aligned 99%; G pours 40,000 grains of sand and remembers it); the LISTEN check now waits up to 45 s for the test mic's brief beep on slow machines - all 58 reference tests PASS.
+**Not measured:** 40,000 grains of sand on eyeZ at full frame rate (the container runs ~11 ms of sand law per frame; eyeZ should be several times faster) and on the iPhone at 16,000.
+
+
+**2026-09-30 - CHLADNI BOOT TEST - SELF-DIAGNOSING** - test/_chladniboot.mjs + chladni_study.html (exposes noteSrc / fingers to the test; no behaviour change)
+- On eyeZ two checks failed that pass in Glyph's container on the same Chrome (141): seven ArrowUp steps landed on note 70 not 71 (the plate had started at 63, which draws the same (4,3) figure), and a finger slide did not move the note. Container cannot reproduce. Hypothesis (NOT proven): a live MIDI device on eyeZ (the EWI) is heard by the hidden test browser and moves the note.
+- The test now prints which MIDI inputs the browser sees, checks seven steps RELATIVE to where the note started, waits for the slide to land, and on a failure prints where the note came from (EWI / touch / keys / voice), fingers down, and whether the EWI is live.
+
+
+**2026-09-30 - CHLADNI - NOTE KEYS NEVER DROP A PRESS** - chladni_study.html + test/_chladniboot.mjs
+- eyeZ ran the self-diagnosing test: MIDI inputs "none" - the EWI hypothesis was WRONG. The finger slide passed this time. The key check failed again: seven ArrowUp gave 64 -> 69, every change from "keys" - presses were being dropped (6 of 7 the run before, 5 of 7 now).
+- Most likely cause (still a hypothesis until eyeZ re-runs): the page ignored any keydown marked e.repeat, which suits toggles (H, G, M, space) but not the note keys. The arrows now step on EVERY press, repeats included - holding an arrow now glides through the notes, which also suits playing it.
+- The test now records every key the page receives; if a step is still missing it prints the ArrowUp events that actually arrived (R = marked repeat), which separates "the browser never delivered it" from "the page threw it away".
+
+
+**2026-09-30 - CHLADNI - THE TEST READS LIVE VALUES** - chladni_study.html
+- eyeZ, with key logging: the page RECEIVED all 7 ArrowUp (none marked repeat) yet the test saw 64 -> 69. So no key was lost and the e.repeat theory was also wrong. Cause: ChladniStudy.note / n / m / k / noteSrc were copied into the test object once per DRAWN FRAME; on eyeZ several key presses land between two frames, and the test read the copy from the frame before. (It also explains the earlier finger-slide miss, which read the note right after the move.)
+- Fix: those values are now live getters - the test sees the note as it IS. Proof in the container: with drawing frozen completely, seven presses read 64 -> 71, k 37. The plate itself was never wrong.
+- Lesson for every study's test hooks: a value a test reads right after an input must be live, not a per-frame mirror.

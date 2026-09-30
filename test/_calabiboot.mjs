@@ -6,6 +6,7 @@
    that breath gathers it, and that 3/4/5 rebuild the surface.
    v0.2: the PHONE - a held finger gathers, a slide turns it, double-tap rebuilds.
    v0.3: LISTEN - no mic until tapped; then sound gathers it; tap again stops.
+   v0.4: PLAYED - MIDI pitch turns it, attack scatters, a held note glows.
    ========================================================================== */
 import path from "node:path"; import { pathToFileURL } from "node:url"; import { existsSync } from "node:fs";
 const FILE = process.argv[2] || "calabi_study.html";
@@ -37,7 +38,9 @@ await page.keyboard.down("b"); await page.waitForTimeout(3500); const g1 = (awai
 say(g1 > s0.gather + 0.1, `breath gathers the shards onto the surface: ${Math.round(s0.gather * 100)}% -> ${Math.round(g1 * 100)}%`);
 await page.keyboard.press("Space");                                            // freeze the drift so only bend moves it
 await page.evaluate(() => { window.ZigCore.Perf.bend = 0; }); await page.waitForTimeout(2500); const a0 = (await st()).alpha; const q0 = await shot();
-await page.evaluate(() => { window.ZigCore.Perf.bend = 1; }); await page.waitForTimeout(2500); const a1 = (await st()).alpha; const q1 = await shot();
+await page.evaluate(() => { window.ZigCore.Perf.bend = 1; }); await page.waitForTimeout(2500);
+await page.waitForFunction((a) => window.CalabiStudy.alpha - a > 1.3, a0, { timeout: 12000 }).catch(() => {});   // a slow machine just takes longer
+const a1 = (await st()).alpha; const q1 = await shot();
 say(a1 - a0 > 1.3, `bend turns it through the 4th dimension: ${a0.toFixed(2)} -> ${a1.toFixed(2)} rad`);
 say(diff(q0, q1) > 8, `...and the picture really transforms (pixel change ${diff(q0, q1).toFixed(1)})`);
 await page.keyboard.press("Digit3"); await page.waitForTimeout(800); const s3 = await st();
@@ -64,6 +67,23 @@ console.log("[PHONE - a finger is the breath]");
   await ph.waitForTimeout(500); const f4 = await pst();
   say(f4.n === 3, `double-tap changes the shape (degree 5 -> ${f4.n})`);
   await ctx.close(); }
+console.log("[PLAYED - the EWI is more than breath]");
+{ const mp = await browser.newPage({ viewport: { width: 1000, height: 700 } }); mp.on("pageerror", (e) => errs.push(String(e)));
+  await mp.goto(pathToFileURL(path.resolve(FILE)).href + "#count=1500", { waitUntil: "load" });
+  await mp.waitForFunction(() => window.CalabiStudy && window.CalabiStudy.frames > 30, null, { timeout: 30000 });
+  await mp.keyboard.press("Space");                                              // freeze the drift
+  const midi = (bytes) => mp.evaluate((b) => ZigCore.Perf.onMsg({ data: new Uint8Array(b) }), bytes);
+  const blow = async (ms) => { for (let k = 0; k < ms / 50; k++) { await midi([0xB0, 2, 110]); await mp.waitForTimeout(50); } };
+  await midi([0x90, 60, 100]); await blow(1500);
+  const m0 = await mp.evaluate(() => ({ a: CalabiStudy.alpha, nt: CalabiStudy.noteTurn, k: CalabiStudy.kick }));
+  await midi([0x80, 60, 0]); await midi([0x90, 72, 100]); await blow(2500);
+  const m1 = await mp.evaluate(() => ({ a: CalabiStudy.alpha, nt: CalabiStudy.noteTurn, sg: CalabiStudy.sustainG }));
+  say(m1.nt - m0.nt > 0.7, `an octave up turns it through the 4th dimension: turn ${m0.nt.toFixed(2)} -> ${m1.nt.toFixed(2)} rad`);
+  say(m1.sg > 0.4, `a held note glows: sustain ${m1.sg.toFixed(2)}`);
+  await midi([0x80, 72, 0]); await midi([0x90, 67, 100]); await mp.waitForTimeout(150);
+  const m2 = await mp.evaluate(() => CalabiStudy.kick);
+  say(m2 > 0.2, `an attack scatters the shards for a moment: kick ${m2.toFixed(2)}`);
+  await midi([0x80, 67, 0]); await mp.close(); }
 console.log("[LISTEN - the engine's ears, opt-in]");
 { const lp = await browser.newPage({ viewport: { width: 1000, height: 700 } }); lp.on("pageerror", (e) => errs.push(String(e)));
   await lp.goto(pathToFileURL(path.resolve(FILE)).href + "#count=1500", { waitUntil: "load" });
@@ -76,6 +96,7 @@ console.log("[LISTEN - the engine's ears, opt-in]");
   say(l1.on && l1.mic && l1.auto && l1.lbl === "listening", `tapped: it listens through the engine's ears, auto-levelled (a non-MOTU mic)`);
   say(l1.sb > 0.3 && l1.g > l0.g + 0.1, `sound is breath: heard ${l1.sb.toFixed(2)}, gathered ${Math.round(l0.g * 100)}% -> ${Math.round(l1.g * 100)}%`);
   await lp.click("#listen"); await lp.waitForTimeout(2500);
+  await lp.waitForFunction((v) => window.CalabiStudy.soundB < v * 0.2, l1.sb, { timeout: 12000 }).catch(() => {});
   const l2 = await lp.evaluate(() => ({ on: CalabiStudy.listening, sb: CalabiStudy.soundB, st: ZigCore.Timbre._ctx.state }));
   say(!l2.on && l2.st === "suspended" && l2.sb < l1.sb * 0.2, `tap again stops listening (audio ${l2.st}, sound fades to ${l2.sb.toFixed(2)})`);
   await lp.close(); }

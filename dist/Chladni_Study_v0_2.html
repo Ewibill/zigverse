@@ -3,32 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Calabi-Yau</title>
-<meta name="description" content="A shape from four dimensions, seen in three. Hold to gather it; slide to turn it through the fourth dimension.">
-<meta property="og:title" content="Calabi-Yau - a Zigverse study">
-<meta property="og:description" content="A shape from four dimensions, seen in three. Hold to gather it; slide to turn it through the fourth.">
+<title>Chladni</title>
+<meta name="description" content="Sand on a singing plate. Hold to play the plate; every note draws its own figure.">
+<meta property="og:title" content="Chladni - a Zigverse study">
+<meta property="og:description" content="Sand on a singing plate. Hold to play it; every note draws its own figure.">
 <meta name="theme-color" content="#030406">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Calabi-Yau">
+<meta name="apple-mobile-web-app-title" content="Chladni">
 <link id="icon" rel="apple-touch-icon" href="data:,">
 <style>
-  html, body { margin: 0; height: 100%; background: #030406; overflow: hidden; }
+  html, body { margin: 0; height: 100%; background: #030406; overflow: hidden; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; overscroll-behavior: none; }
   canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
   #hud { position: fixed; left: 14px; top: 12px; font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; color: #8a93a3; letter-spacing: .02em; pointer-events: none; white-space: pre; }
   #hud b { color: #d8dde6; font-weight: 600; letter-spacing: .12em; }
-  html, body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; overscroll-behavior: none; }
   .phone #hud { top: calc(env(safe-area-inset-top) + 52px); font-size: 10.5px; white-space: pre-wrap; right: 14px; }
   #intro, #hint { position: fixed; left: 0; right: 0; text-align: center; pointer-events: none; color: #c9cfd9; font: 300 15px/1.5 -apple-system, "Segoe UI", Helvetica, sans-serif; letter-spacing: .04em; transition: opacity 2.4s ease; opacity: 0; }
   #intro { top: calc(env(safe-area-inset-top) + 62px); }
   #intro b { display: block; font-weight: 500; font-size: 13px; letter-spacing: .42em; color: #e8ecf2; margin-bottom: 2px; }
   #intro span, #hint { font-size: 13px; color: #8a93a3; }
   #hint { bottom: calc(env(safe-area-inset-bottom) + 26px); }
-  #info { position: fixed; right: 10px; top: calc(env(safe-area-inset-top) + 10px); width: 34px; height: 34px; border-radius: 17px; border: 1px solid #39404c; background: rgba(3,4,6,.5); color: #8a93a3; font: italic 15px Georgia, serif; display: none; }
+  #bar { position: fixed; right: 10px; top: calc(env(safe-area-inset-top) + 10px); display: flex; gap: 8px; }
+  button { height: 34px; border-radius: 17px; border: 1px solid #39404c; background: rgba(3,4,6,.5); color: #8a93a3; padding: 0 14px; font: 13px -apple-system, "Segoe UI", Helvetica, sans-serif; letter-spacing: .06em; }
+  #info { width: 34px; padding: 0; font: italic 15px Georgia, serif; display: none; order: 3; }
   .phone #info { display: block; }
-  #listen { position: fixed; right: 10px; top: calc(env(safe-area-inset-top) + 10px); height: 34px; padding: 0 14px; border-radius: 17px; border: 1px solid #39404c; background: rgba(3,4,6,.5); color: #8a93a3; font: 13px -apple-system, "Segoe UI", Helvetica, sans-serif; letter-spacing: .06em; }
-  .phone #listen { right: 52px; }
+  #medium { order: 1; } #listen { order: 2; }
   #listen.on { color: #e8ecf2; border-color: #8fa3b8; }
   .show { opacity: 1 !important; }
 </style>
@@ -36,10 +36,13 @@
 <body>
 <canvas id="c"></canvas>
 <div id="hud"></div>
-<div id="intro"><b>CALABI-YAU</b><span>a shape from four dimensions, seen in three</span></div>
-<div id="hint">hold to gather &middot; slide to turn it through the fourth dimension<br>double-tap for another shape &middot; or tap listen and play to it</div>
-<button id="info" aria-label="about">i</button>
+<div id="intro"><b>CHLADNI</b><span>sand on a singing plate</span></div>
+<div id="hint">hold to play the plate &middot; slide up and down to change the note<br>side to side bends the figure &middot; double-tap shakes it clean<br>tap sand for rice &middot; or tap listen and sing</div>
+<div id="bar">
+<button id="medium" aria-label="what is on the plate">sand</button>
 <button id="listen" aria-label="listen with the microphone">listen</button>
+<button id="info" aria-label="about">i</button>
+</div>
 <script>
 /* ===== inlined: engine/zigcore.js ===== */
 /* ============================================================================
@@ -3555,153 +3558,270 @@
 
 </script>
 <script>
-/* ===== inlined: engine/zigmanifold.js ===== */
+/* ===== inlined: engine/zigchladni.js ===== */
 /* =============================================================================
-   ZigManifold 0.1.0 — a shape with more dimensions than the room it is drawn in
-   (classic script · exposes global `ZigManifold` · pure maths, no GPU)
+   ZigChladni 0.2.0 — sand (or rice) on a singing plate
+   (classic script · exposes global `ZigChladni` · pure law, no GPU, no DOM)
 
-   Steve's Calabi-Yau. What is ESTABLISHED: the mathematics. The Fermat surface
-   z1^n + z2^n = 1 in two complex dimensions (four real ones) is the standard
-   2D slice used for the famous Calabi-Yau images (A. Hanson's parametrisation).
-   What is NOT: any claim that this is the shape of our universe's hidden
-   dimensions - that is string theory, and untested. Here it is geometry only.
+   What is ESTABLISHED: Ernst Chladni (1787) bowed a sand-covered plate and the
+   sand gathered on the NODAL LINES - the places that do not move. Each
+   resonance of the plate draws its own figure, and a higher note draws a finer
+   one. For a square plate the classic approximation of a mode (n, m) is
+       u(x, y) = cos(n pi X) cos(m pi Y)  +  s * cos(m pi X) cos(n pi Y)
+   (X, Y in 0..1 across the plate), whose frequency rises with k = n^2 + m^2.
+   s = -1 and s = +1 are the two classic families of figures; in between the
+   figure morphs through the plain grid (s = 0). What is NOT exact: a real
+   free-edged plate needs a numerical solution - this is the textbook form,
+   and it is what the famous figures look like.
 
-   The capability is the PROJECTION. The surface lives in four real dimensions;
-   a 3D view keeps three of them and mixes the fourth in by an angle alpha:
-       P = ( Re z1, Re z2, cos(alpha) Im z1 + sin(alpha) Im z2 )
-   Turning alpha rotates the shape THROUGH a dimension the room does not have,
-   so it transforms in ways no 3D object can - petals trade places, the body
-   turns inside out. Performed, alpha is pitch-bend.
+   THE SAND IS NOT DRAWN. Nothing here places a grain on a line. The plate
+   shakes each grain in proportion to how hard its spot is moving (|u|), so
+   grains random-walk OUT of the loud places and pile up where the plate is
+   still - which is how real sand finds the lines. A gentle drift down the
+   slope of u^2 speeds it up. Silence stops the shaking, so the last figure
+   stays exactly where it fell: the plate REMEMBERS.
 
-   Parametrisation (per patch k1, k2 in 0..n-1, z = x + i y,
-   x in [-a, a], y in [0, pi/2]):
-       z1 = e^(2 pi i k1 / n) * cosh(z)^(2/n)
-       z2 = e^(2 pi i k2 / n) * (-i sinh(z))^(2/n)
-   so z1^n + z2^n = cosh^2 - sinh^2 = 1 exactly (test/manifold_ref.mjs).
+   Pieces (all pure, all tested in test/chladni_ref.mjs):
+     modes(maxN)            every (n, m, k) with 0 <= m < n <= maxN, sorted by k
+     u(n, m, s, x, y)       displacement at plate coords x, y in -1..1
+     grad(n, m, s, x, y)    [du/dx, du/dy] (analytic)
+     kFor(note, ref)        the mode number a note asks for (fixed, learnable)
+     pick(list, k)          the mode closest to k (in log - frequency is log)
+     morph(bend)            s from pitch-bend: 0 -> -1, +-0.5 -> 0, +-1 -> +1
+     step(P, n, m, s, E, dt, rnd, opts)   one tick of the sand
+     orient(P, n, m, s, E, dt)            long grains turn to lie ALONG the lines
+     MEDIA.sand / MEDIA.rice              what is on the plate (0.2.0)
+
+   MEDIA (0.2.0, 2026-09-30). Bill: "an option between rice and grains of sand".
+   They are not the same experiment. SAND is fine and numerous: the figure
+   is everything, the grain disappears into it. RICE is few, large and long:
+   every grain is a body you can follow - it is the Zigverse shard - it hops
+   higher and tumbles, settles a little slower, and because it is LONG it is
+   turned by the vibration until it lies along the line it has found, the
+   way real rice does on a speaker. The law is the same; only the medium
+   changes (count, size, how hard it is shaken, how high it hops, alignment).
    ========================================================================== */
 (function (global) {
   "use strict";
-  const C = {
-    mul: (a, b) => [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]],
-    pow: (a, p) => { const r = Math.hypot(a[0], a[1]), t = Math.atan2(a[1], a[0]); if (r === 0) return [0, 0]; const R = Math.pow(r, p); return [R * Math.cos(p * t), R * Math.sin(p * t)]; },
-    exp_i: (t) => [Math.cos(t), Math.sin(t)],
-    cosh: (x, y) => [Math.cosh(x) * Math.cos(y), Math.sinh(x) * Math.sin(y)],
-    sinh: (x, y) => [Math.sinh(x) * Math.cos(y), Math.cosh(x) * Math.sin(y)]
-  };
+  const PI = Math.PI;
 
-  const ZigManifold = {
-    VERSION: "0.1.0",
-    C,
-    /* the point on the Fermat surface of degree n for patch (k1, k2) at (x, y) */
-    point(n, k1, k2, x, y) {
-      const z1 = C.mul(C.exp_i(2 * Math.PI * k1 / n), C.pow(C.cosh(x, y), 2 / n));
-      const s = C.sinh(x, y), mis = [s[1], -s[0]];                    // -i * sinh(z)
-      const z2 = C.mul(C.exp_i(2 * Math.PI * k2 / n), C.pow(mis, 2 / n));
-      return [z1[0], z1[1], z2[0], z2[1]];                            // Re z1, Im z1, Re z2, Im z2
+  const ZigChladni = {
+    VERSION: "0.2.0",
+    MEDIA: {
+      sand: { count: 40000, phone: 16000, size: 0.016, shake: 0.16, floor: 0.07, slide: 0.0012, hop: 0.9, hopRate: 6, align: 0, tilt: 1.7 },
+      rice: { count: 5000, phone: 5000, size: 0.045, shake: 0.13, floor: 0.05, slide: 0.0012, hop: 1.5, hopRate: 4, align: 4.0, tilt: 0.45 }
     },
-    /* project a 4D point into the room at angle alpha */
-    project(q, alpha) { return [q[0], q[2], Math.cos(alpha) * q[1] + Math.sin(alpha) * q[3]]; },
-    /* sample `count` points spread evenly over all n^2 patches, with a little
-       deterministic jitter so the lattice never reads as a grid. Returns
-       { n, count, q: Float64Array(4*count), qx, qy (4D tangents for normals) } */
-    sample(n, count, a) {
-      a = a || 1.0;
-      const patches = n * n, per = Math.max(4, Math.floor(count / patches)), side = Math.max(2, Math.round(Math.sqrt(per)));
-      const total = patches * side * side;
-      const q = new Float64Array(4 * total), qx = new Float64Array(4 * total), qy = new Float64Array(4 * total);
-      let h = 1234567, i = 0;
-      const rnd = () => { h = (h * 16807) % 2147483647; return h / 2147483647; };
-      const e = 1e-4;
-      for (let k1 = 0; k1 < n; k1++) for (let k2 = 0; k2 < n; k2++)
-        for (let u = 0; u < side; u++) for (let v = 0; v < side; v++) {
-          const x = -a + 2 * a * (u + 0.2 + 0.6 * rnd()) / side, y = (Math.PI / 2) * (v + 0.2 + 0.6 * rnd()) / side;
-          const p = this.point(n, k1, k2, x, y), px = this.point(n, k1, k2, x + e, y), py = this.point(n, k1, k2, x, y + e);
-          for (let c = 0; c < 4; c++) { q[4 * i + c] = p[c]; qx[4 * i + c] = (px[c] - p[c]) / e; qy[4 * i + c] = (py[c] - p[c]) / e; }
-          i++;
+    K_REF: 25,          // the mode number of the reference note (the (4,3) figure)
+    NOTE_REF: 64,       // E4 - an EWI's range (~55..91) then spans k ~ 15..120
+
+    modes(maxN) {
+      const out = [];
+      for (let n = 1; n <= maxN; n++) for (let m = 0; m < n; m++) out.push({ n, m, k: n * n + m * m });
+      return out.sort((a, b) => a.k - b.k || b.m - a.m);          // a tie (25 = 5,0 = 4,3) goes to the more woven figure
+    },
+
+    u(n, m, s, x, y) {
+      const X = PI * (x + 1) / 2, Y = PI * (y + 1) / 2;
+      return Math.cos(n * X) * Math.cos(m * Y) + s * Math.cos(m * X) * Math.cos(n * Y);
+    },
+
+    grad(n, m, s, x, y) {
+      const X = PI * (x + 1) / 2, Y = PI * (y + 1) / 2, h = PI / 2;
+      const cnX = Math.cos(n * X), snX = Math.sin(n * X), cmX = Math.cos(m * X), smX = Math.sin(m * X);
+      const cnY = Math.cos(n * Y), snY = Math.sin(n * Y), cmY = Math.cos(m * Y), smY = Math.sin(m * Y);
+      return [h * (-n * snX * cmY - s * m * smX * cnY), h * (-m * cnX * smY - s * n * cmX * snY)];
+    },
+
+    /* u and its gradient together (they share every trig call) -> out [u, dx, dy] */
+    ug(n, m, s, x, y, out) {
+      const X = PI * (x + 1) / 2, Y = PI * (y + 1) / 2, h = PI / 2;
+      const cnX = Math.cos(n * X), snX = Math.sin(n * X), cmX = Math.cos(m * X), smX = Math.sin(m * X);
+      const cnY = Math.cos(n * Y), snY = Math.sin(n * Y), cmY = Math.cos(m * Y), smY = Math.sin(m * Y);
+      out[0] = cnX * cmY + s * cmX * cnY;
+      out[1] = h * (-n * snX * cmY - s * m * smX * cnY);
+      out[2] = h * (-m * cnX * smY - s * n * cmX * snY);
+      return out;
+    },
+
+    /* a FIXED map, so an instrument can be learned: the same note always asks
+       for the same figure. Frequency doubles per octave, so k does too. */
+    kFor(note, ref) { return this.K_REF * Math.pow(2, (note - (ref == null ? this.NOTE_REF : ref)) / 12); },
+
+    pick(list, k) {
+      let best = list[0], bd = Infinity; const lk = Math.log(Math.max(1e-6, k));
+      for (const md of list) { const d = Math.abs(Math.log(md.k) - lk); if (d < bd) { bd = d; best = md; } }
+      return best;
+    },
+
+    morph(bend) { return -Math.cos(PI * Math.max(-1, Math.min(1, bend || 0))); },
+
+    /* ONE TICK OF THE SAND. P = { x, y, h, vh: Float32Array(N) } plate coords
+       (x, y in -1..1), h = hop height. E = drive 0..1 (how hard the plate is
+       bowed). rnd() -> 0..1. The mode can be cross-faded: opts.prev = {n, m, s}
+       and opts.w (0..1 weight of the new mode) - a plate does not jump modes
+       in zero time, and a 0.15 s fade keeps a note change from popping.
+       Returns the mean |u| under the grains (low = the figure has formed). */
+    step(P, n, m, s, E, dt, rnd, opts) {
+      const o = opts || {}, N = P.x.length;
+      const shake = (o.shake == null ? 0.16 : o.shake) * E * Math.sqrt(dt);
+      const slide = (o.slide == null ? 0.0012 : o.slide) * E * dt;    // gentle: the shaking alone finds the lines; the slide only speeds it (too strong and a line collapses to one grain)
+      const prev = o.prev, w = o.w == null ? 1 : o.w, floor = o.floor == null ? 0.07 : o.floor;
+      const hop = o.hop == null ? 0.9 : o.hop, hopRate = o.hopRate == null ? 6 : o.hopRate;
+      let acc = 0; const A = this._A, B = this._B;
+      for (let i = 0; i < N; i++) {
+        let x = P.x[i], y = P.y[i];
+        this.ug(n, m, s, x, y, A);
+        let a = A[0], gx = A[1], gy = A[2];
+        if (prev && w < 1) {
+          this.ug(prev.n, prev.m, prev.s, x, y, B);
+          a = B[0] + (a - B[0]) * w; gx = B[1] + (gx - B[1]) * w; gy = B[2] + (gy - B[2]) * w;
         }
-      return { n, count: total, q, qx, qy };
-    },
-    /* positions + unit normals of a sample at angle alpha, scaled */
-    frame(S, alpha, scale, outP, outN) {
-      const ca = Math.cos(alpha), sa = Math.sin(alpha);
-      for (let i = 0; i < S.count; i++) {
-        const o = 4 * i;
-        const P = [S.q[o], S.q[o + 2], ca * S.q[o + 1] + sa * S.q[o + 3]];
-        const U = [S.qx[o], S.qx[o + 2], ca * S.qx[o + 1] + sa * S.qx[o + 3]];
-        const V = [S.qy[o], S.qy[o + 2], ca * S.qy[o + 1] + sa * S.qy[o + 3]];
-        let nx = U[1] * V[2] - U[2] * V[1], ny = U[2] * V[0] - U[0] * V[2], nz = U[0] * V[1] - U[1] * V[0];
-        const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
-        outP[3 * i] = P[0] * scale; outP[3 * i + 1] = P[1] * scale; outP[3 * i + 2] = P[2] * scale;
-        outN[3 * i] = nx; outN[3 * i + 1] = ny; outN[3 * i + 2] = nz;
+        const amp = Math.abs(a);
+        acc += amp;
+        if (E > 0) {
+          /* random walk scaled by how hard this spot moves (Box-Muller pair) */
+          const r1 = Math.max(1e-9, rnd()), r2 = rnd(), R = Math.sqrt(-2 * Math.log(r1));
+          const k = shake * (amp + floor);                            // a real plate is never perfectly still: the floor gives a line its width
+          x += k * R * Math.cos(6.2831853 * r2) - slide * 2 * a * gx;
+          y += k * R * Math.sin(6.2831853 * r2) - slide * 2 * a * gy;
+          /* the plate edge: grains bounce back in (a real free plate would lose them) */
+          if (x > 1) x = 2 - x; else if (x < -1) x = -2 - x;
+          if (y > 1) y = 2 - y; else if (y < -1) y = -2 - y;
+          P.x[i] = Math.max(-1, Math.min(1, x)); P.y[i] = Math.max(-1, Math.min(1, y));
+          /* a hop: loud spots toss grains up, gravity brings them down */
+          if (P.h[i] <= 0 && rnd() < amp * E * dt * hopRate) P.vh[i] = (0.25 + 0.75 * rnd()) * amp * E * hop;
+        }
+        if (P.h[i] > 0 || P.vh[i] > 0) {
+          P.vh[i] -= 9.0 * dt; P.h[i] += P.vh[i] * dt;
+          if (P.h[i] <= 0) { P.h[i] = 0; P.vh[i] = 0; }
+        }
       }
-    }
+      return acc / Math.max(1, N);
+    },
+
+    _A: [0, 0, 0], _B: [0, 0, 0],
+    /* LONG GRAINS ALIGN. A grain lying across a nodal line has one end in
+       motion and one end still, so the shaking turns it until it lies ALONG
+       the line (perpendicular to the slope of u). P.a holds each grain's
+       angle on the plate; a grain has no head or tail, so it turns the
+       shorter way (a doubled angle). A grain in the air is left to tumble. */
+    orient(P, n, m, s, E, dt, rate) {
+      if (!P.a || !(E > 0)) return;
+      const k = Math.min(1, (rate == null ? 4 : rate) * E * dt), A = this._A;
+      for (let i = 0; i < P.a.length; i++) {
+        if (P.h[i] > 0) continue;
+        this.ug(n, m, s, P.x[i], P.y[i], A);
+        if (A[1] * A[1] + A[2] * A[2] < 1e-6) continue;
+        const along = Math.atan2(A[2], A[1]) + PI / 2, d2 = 2 * (along - P.a[i]);
+        P.a[i] += 0.5 * Math.atan2(Math.sin(d2), Math.cos(d2)) * k;
+      }
+    },
+
+    /* sand scattered evenly across the plate (a fresh plate, or a shake) */
+    scatter(P, rnd) {
+      for (let i = 0; i < P.x.length; i++) { P.x[i] = rnd() * 2 - 1; P.y[i] = rnd() * 2 - 1; P.h[i] = 0; P.vh[i] = 0; if (P.a) P.a[i] = rnd() * PI * 2; }
+    },
+    create(N) { return { x: new Float32Array(N), y: new Float32Array(N), h: new Float32Array(N), vh: new Float32Array(N), a: new Float32Array(N) }; },
+
+    /* mean |u| of an EVEN spread - the baseline a formed figure is judged against */
+    baseline(n, m, s) { let a = 0, c = 0; for (let i = 0; i < 64; i++) for (let j = 0; j < 64; j++) { a += Math.abs(this.u(n, m, s, -1 + (i + 0.5) / 32, -1 + (j + 0.5) / 32)); c++; } return a / c; }
   };
-  global.ZigManifold = ZigManifold;
+  global.ZigChladni = ZigChladni;
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
 <script>
+/* ===== inlined: engine/zigpitch.js ===== */
 /* =============================================================================
-   CALABI-YAU STUDY v0.1 (2026-09-28) — a one-off STUDY, not a species.
-   Question it exists to answer (Bill's kill criterion): does a shape turning
-   through a dimension it does not have read as "what IS that?" - or as math
-   art / screensaver? If the latter, park it.
-     the shape    the Fermat surface z1^n + z2^n = 1 (n = 5: the famous
-                  quintic slice), projected from four real dimensions
-     BEND         turns it through the fourth dimension (the projection angle)
-     BREATH       gathers the shards onto the surface; silence loosens them
-                  into a cloud that still remembers the shape
-     keys         B hold = breath · <- -> turn by hand · 3 4 5 = degree n
-                  space = pause the slow drift · H = hide this text
-                  drag = orbit · wheel = zoom
-   Geometry: engine/zigmanifold.js (reusable; test/manifold_ref.mjs).
-   Input: ZigCore.Perf (the same EWI path as the engine).
-   Renderer: WebGL2 - runs on any machine and on the phone.
-   PHONE (v0.2, 2026-09-29): a finger is the breath. Hold = gather, slide
-   sideways = turn through the 4th dimension, slide up/down = tilt, two
-   fingers = orbit + pinch zoom, double-tap = next degree (5 -> 3 -> 4).
-   A quality governor drops the shard count if the phone cannot hold ~40 fps;
-   portrait framing pulls the camera back so the whole shape fits. "Add to
-   Home Screen" opens it full-screen with its own icon (cut from the canvas).
-   LISTEN (v0.3, 2026-09-29): a button, OFF by default, so a stranger never
-   meets a microphone prompt unasked. Tapped, it opens the mic through the
-   engine's own ears (ZigCore.Timbre: auto-levelled for a phone or laptop mic,
-   never for the MOTU). Sound becomes breath (loudness gathers the shape),
-   brightness - a higher or brighter note - turns it through the 4th dimension,
-   and an attack scatters the shards for a moment before they settle. The EWI
-   over MIDI still wins; a finger still works. Tap again (or M) = stop.
-   PLAYED (v0.4, 2026-09-29): Bill played it and wanted more response. The EWI
-   gives more than breath and bend, and v0.3 ignored the rest:
-     PITCH    turns it through the 4th dimension - a melody is a PATH. About
-              1.1 rad per octave around the centre of your own range (the first
-              note sets it, then it follows your tessitura slowly, ~20 s). In
-              silence the last turn is held (memory), then relaxes over ~6 s.
-     ATTACK   each note-on scatters the shards a little - articulation shows.
-     SUSTAIN  a held note glows (iridescence) and pulls the shape tighter.
-     BREATH   swells the body (+8% at full breath) as well as gathering it.
-   Bend still turns on top of pitch.
-   ========================================================================== */
-(function () {
-  const ZC = window.ZigCore, ZM = window.ZigManifold, Perf = ZC.Perf;
-  const cv = document.getElementById("c"), hud = document.getElementById("hud");
-  const PHONE = matchMedia("(pointer: coarse)").matches || /(\?|#|&)phone\b/.test(location.hash);
-  if (PHONE) document.documentElement.classList.add("phone");
-  const gl = cv.getContext("webgl2", { antialias: true, premultipliedAlpha: false, preserveDrawingBuffer: !PHONE });
-  window.CalabiStudy = { booted: false, frames: 0, phone: PHONE };
-  if (!gl) { hud.textContent = "WebGL2 is not available in this browser."; return; }
+   ZigPitch 0.1.0 — what note is the room singing?
+   (classic script · exposes global `ZigPitch` · pure, no DOM)
 
-  /* ---- the shard: a lens, like the engine's petals ---------------------- */
-  const SH = []; const SEG = 10;
-  for (let k = 0; k < SEG; k++) {                      // lens outline in (s along, w across)
-    const a0 = Math.PI * k / SEG, a1 = Math.PI * (k + 1) / SEG;
-    const pt = (a, side) => [Math.cos(a), side * 0.34 * Math.sin(a)];
-    const u0 = pt(a0, 1), u1 = pt(a1, 1), d0 = pt(a0, -1), d1 = pt(a1, -1);
-    SH.push(0, 0, u0[0], u0[1], u1[0], u1[1], 0, 0, d1[0], d1[1], d0[0], d0[1]);
-  }
+   ZigCore.Timbre hears HOW (loud, bright, breathy, struck). It never heard
+   WHICH NOTE - so on a phone, where there is no MIDI, pitch was lost. This is
+   the missing ear: a normalised-difference autocorrelation (the NSDF of
+   McLeod & Wyvill, 2005) over the analyser's time buffer.
+     detect(time, sampleRate, opts) -> { hz, note, clarity }
+       time      Float32Array of samples (Timbre._time is 2048 long)
+       clarity   0..1 - how periodic the sound is. A horn or a voice reads
+                 ~0.9; breath noise and a room read low. Callers gate on it.
+       note      MIDI note number (fractional - 69 = A4 = 440 Hz)
+   Cost: the buffer is decimated by 2 and lags cover 55..1500 Hz (G1..F#6), so one call is
+   ~0.4 M multiply-adds - fine at 60 fps on a phone, and only run while listening.
+   ========================================================================== */
+(function (global) {
+  "use strict";
+  const ZigPitch = {
+    VERSION: "0.1.0",
+    _buf: null, _nsdf: null,
+    noteOf(hz) { return 69 + 12 * Math.log2(hz / 440); },
+    detect(time, sampleRate, opts) {
+      const o = opts || {}, fmin = o.fmin || 55, fmax = o.fmax || 1500, dec = o.decimate || 2;
+      const L = Math.floor(time.length / dec), sr = sampleRate / dec;
+      if (!this._buf || this._buf.length !== L) { this._buf = new Float32Array(L); this._nsdf = new Float32Array(L); }
+      const b = this._buf, nsdf = this._nsdf;
+      let mean = 0;
+      for (let i = 0; i < L; i++) { let v = 0; for (let j = 0; j < dec; j++) v += time[i * dec + j]; b[i] = v / dec; mean += b[i]; }
+      mean /= L; let energy = 0;
+      for (let i = 0; i < L; i++) { b[i] -= mean; energy += b[i] * b[i]; }
+      if (energy / L < 1e-7) return { hz: 0, note: 0, clarity: 0 };
+      const tMin = Math.max(2, Math.floor(sr / fmax)), tMax = Math.min(L - 2, Math.ceil(sr / fmin));
+      for (let t = 1; t <= tMax; t++) {                            // from lag 1, so the zero-lag lobe is really crossed
+        let ac = 0, m = 0;
+        for (let i = 0; i + t < L; i++) { ac += b[i] * b[i + t]; m += b[i] * b[i] + b[i + t] * b[i + t]; }
+        nsdf[t] = m > 0 ? 2 * ac / m : 0;
+      }
+      /* McLeod's pick: the first key maximum within 90% of the highest one (avoids octave errors) */
+      let maxV = -1; const peaks = [];
+      let t = 1; while (t <= tMax && nsdf[t] > 0) t++;             // skip the zero-lag lobe (it starts at lag 0, not at tMin)
+      for (; t <= tMax; t++) {
+        if (nsdf[t] > 0) {
+          let best = t; while (t <= tMax && nsdf[t] > 0) { if (nsdf[t] > nsdf[best]) best = t; t++; }
+          if (best >= tMin) { peaks.push(best); if (nsdf[best] > maxV) maxV = nsdf[best]; }   // above fmax: not a pitch we accept
+        }
+      }
+      if (!peaks.length || maxV <= 0) return { hz: 0, note: 0, clarity: 0 };
+      const pk = peaks.find((p) => nsdf[p] >= 0.9 * maxV);
+      /* parabolic interpolation for a sub-sample lag */
+      const a = nsdf[pk - 1] || 0, c = nsdf[pk] || 0, d = nsdf[pk + 1] || 0, den = a - 2 * c + d;
+      const shift = den !== 0 ? 0.5 * (a - d) / den : 0;
+      const hz = sr / (pk + shift);
+      return { hz, note: this.noteOf(hz), clarity: Math.max(0, Math.min(1, c)) };
+    }
+  };
+  global.ZigPitch = ZigPitch;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>
+/* ===== inlined: engine/zigshardgl.js ===== */
+/* =============================================================================
+   ZigShardGL 0.1.0 — the Zigverse shard, drawn with WebGL2
+   (classic script · exposes global `ZigShardGL`)
+
+   The WebGPU engine draws the organisms; the STUDIES (Calabi-Yau, Chladni, the
+   shapes to come) need something smaller that runs on any phone. This is the
+   Calabi-Yau study's renderer lifted out so every shape study shares one
+   shard: a cupped lens, two-tone (moss front / bone back), a firm SOLID
+   terminator, thin-film iridescence at the turning edge, a specular glint, fog.
+
+     const R = ZigShardGL.create(canvas, { preserve })   // null if no WebGL2
+     R.alloc(N)                                          // instance capacity
+     R.inst                                              // Float32Array(10*N):
+        per shard: pos xyz · normal xyz · tangent xyz · seed (0..1)
+     R.frame(dpr) -> [w, h]                              // size + clear
+     R.draw(N, { vp, eye, sun, size, iri, hue })
+     ZigShardGL.persp / look / mul                       // camera matrices
+
+   The Calabi-Yau study (calabi_study.html v0.4) still carries its own copy of
+   this code - it is published and in videos, so it stays frozen; new studies
+   use this file.
+   ========================================================================== */
+(function (global) {
+  "use strict";
   const VS = `#version 300 es
   layout(location=0) in vec2 aL;
   layout(location=1) in vec3 aP; layout(location=2) in vec3 aN; layout(location=3) in vec3 aT; layout(location=4) in float aS;
-  uniform mat4 uVP; uniform vec3 uEye; uniform float uSize;
+  uniform mat4 uVP; uniform float uSize;
   out vec3 vN; out vec3 vW; out float vS; out float vU;
   void main() {
     vec3 n = normalize(aN), t = normalize(aT - n * dot(aT, n)), b = cross(n, t);
@@ -3731,73 +3851,207 @@
     float fog = exp(-0.018 * length(uEye - vW) * length(uEye - vW) * 0.02);
     o = vec4(mix(vec3(0.012, 0.014, 0.02), c, fog), 1.0);
   }`;
-  const sh = (t, s) => { const x = gl.createShader(t); gl.shaderSource(x, s); gl.compileShader(x); if (!gl.getShaderParameter(x, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(x)); return x; };
-  const prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
-  const U = (n) => gl.getUniformLocation(prog, n);
-  const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
-  const bShape = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bShape); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(SH), gl.STATIC_DRAW);
-  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-  const bInst = gl.createBuffer();
 
-  /* ---- the field --------------------------------------------------------- */
-  let n = 5, S = null, N = 0, P, V, T, TN, TU, seed, inst;
-  const FIXED = /(\?|#|&)count=(\d+)/.exec(location.hash); let COUNT = FIXED ? +FIXED[2] : 6000;
-  function build(deg) {
-    n = deg; S = ZM.sample(n, COUNT, 1.0); const old = P, oldN = N; N = S.count;
-    P = new Float32Array(3 * N); V = new Float32Array(3 * N); T = new Float32Array(3 * N); TN = new Float32Array(3 * N); TU = new Float32Array(3 * N);
-    seed = new Float32Array(N); for (let i = 0; i < N; i++) { const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453; seed[i] = x - Math.floor(x); }
-    for (let i = 0; i < N; i++) { const j = old ? i % oldN : -1;
-      if (old) { for (let c = 0; c < 3; c++) P[3 * i + c] = old[3 * j + c]; continue; }
-      const u = Math.random() * 2 - 1, ph = Math.random() * 6.2832, r = 2.4 * Math.cbrt(Math.random()), q = Math.sqrt(1 - u * u);   // a soft ball, not a box
-      P[3 * i] = r * q * Math.cos(ph); P[3 * i + 1] = r * u; P[3 * i + 2] = r * q * Math.sin(ph); }
-    inst = new Float32Array(10 * N);
-    gl.bindBuffer(gl.ARRAY_BUFFER, bInst); gl.bufferData(gl.ARRAY_BUFFER, inst.byteLength, gl.DYNAMIC_DRAW);
-    const st = 40; [[1, 3, 0], [2, 3, 12], [3, 3, 24], [4, 1, 36]].forEach(([loc, sz, off]) => {
-      gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, sz, gl.FLOAT, false, st, off); gl.vertexAttribDivisor(loc, 1); });
+  function lens(SEG) {
+    const SH = [];
+    for (let k = 0; k < SEG; k++) {
+      const a0 = Math.PI * k / SEG, a1 = Math.PI * (k + 1) / SEG;
+      const pt = (a, side) => [Math.cos(a), side * 0.34 * Math.sin(a)];
+      const u0 = pt(a0, 1), u1 = pt(a1, 1), d0 = pt(a0, -1), d1 = pt(a1, -1);
+      SH.push(0, 0, u0[0], u0[1], u1[0], u1[1], 0, 0, d1[0], d1[1], d0[0], d0[1]);
+    }
+    return new Float32Array(SH);
   }
-  build(5);
 
-  /* ---- input ------------------------------------------------------------- */
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const norm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+
+  const ZigShardGL = {
+    VERSION: "0.1.0",
+    persp(f, a, nr, fr) { const t = 1 / Math.tan(f / 2); return [t / a, 0, 0, 0, 0, t, 0, 0, 0, 0, (fr + nr) / (nr - fr), -1, 0, 0, 2 * fr * nr / (nr - fr), 0]; },
+    look(e, c) { const z = norm(sub(e, c)), x = norm(cross([0, 1, 0], z)), y = cross(z, x);
+      return [x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -dot(x, e), -dot(y, e), -dot(z, e), 1]; },
+    mul(a, b) { const r = new Array(16).fill(0); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) for (let k = 0; k < 4; k++) r[j * 4 + i] += a[k * 4 + i] * b[j * 4 + k]; return r; },
+
+    create(canvas, opts) {
+      const o = opts || {};
+      const gl = canvas.getContext("webgl2", { antialias: true, premultipliedAlpha: false, preserveDrawingBuffer: !!o.preserve });
+      if (!gl) return null;
+      const sh = (t, s) => { const x = gl.createShader(t); gl.shaderSource(x, s); gl.compileShader(x); if (!gl.getShaderParameter(x, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(x)); return x; };
+      const prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+      const U = {}; ["uVP", "uEye", "uSun", "uSize", "uIri", "uHue"].forEach((n) => { U[n] = gl.getUniformLocation(prog, n); });
+      const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+      const SH = lens(10);
+      const bShape = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bShape); gl.bufferData(gl.ARRAY_BUFFER, SH, gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      const bInst = gl.createBuffer();
+      const R = {
+        gl, canvas, inst: null, cap: 0,
+        alloc(N) {
+          this.cap = N; this.inst = new Float32Array(10 * N);
+          gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, bInst); gl.bufferData(gl.ARRAY_BUFFER, this.inst.byteLength, gl.DYNAMIC_DRAW);
+          [[1, 3, 0], [2, 3, 12], [3, 3, 24], [4, 1, 36]].forEach(([loc, sz, off]) => {
+            gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, sz, gl.FLOAT, false, 40, off); gl.vertexAttribDivisor(loc, 1); });
+          return this.inst;
+        },
+        frame(dpr) {
+          const w = canvas.clientWidth * dpr | 0, h = canvas.clientHeight * dpr | 0;
+          if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+          gl.viewport(0, 0, w, h); gl.clearColor(0.012, 0.014, 0.02, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
+          return [w, h];
+        },
+        draw(N, p) {
+          gl.useProgram(prog); gl.bindVertexArray(vao);
+          gl.uniformMatrix4fv(U.uVP, false, p.vp); gl.uniform3fv(U.uEye, p.eye); gl.uniform3fv(U.uSun, p.sun || [0.35, 0.62, -0.30]);
+          gl.uniform1f(U.uSize, p.size); gl.uniform1f(U.uIri, p.iri); gl.uniform1f(U.uHue, p.hue);
+          gl.bindBuffer(gl.ARRAY_BUFFER, bInst); gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.inst, 0, 10 * N);
+          gl.drawArraysInstanced(gl.TRIANGLES, 0, SH.length / 2, N);
+        }
+      };
+      return R;
+    }
+  };
+  global.ZigShardGL = ZigShardGL;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>
+/* =============================================================================
+   CHLADNI STUDY v0.1 (2026-09-30) - a STUDY, the second shape after the
+   Calabi-Yau. Question it exists to answer (kill criterion): does a stranger
+   HEAR the figure change with the note? If they see "a pattern generator",
+   park it. If they say "wait - the sound is drawing that?", it earns a place.
+
+     the plate   engine/zigchladni.js - the textbook square-plate modes and the
+                 SAND LAW: grains are shaken in proportion to how hard their
+                 spot moves, so they leave the loud places and pile up on the
+                 still lines. Nothing draws the figure; it forms.
+     PITCH       picks the plate's resonance - a higher note, a finer figure.
+                 The map is FIXED (the same note always draws the same figure),
+                 so it can be learned like an instrument.
+     BREATH      how hard the plate is bowed: more breath, faster forming,
+                 more grains hopping. SILENCE stops the plate - the last figure
+                 stays exactly where it fell.
+     BEND        morphs between the two families of figures (through the grid)
+     ATTACK      a strike - the sand jumps
+     phone       hold = bow; slide up/down = the note (3 octaves across the
+                 screen); side to side = bend; double-tap = shake it clean;
+                 two fingers = orbit / zoom. LISTEN (opt-in) hears the voice
+                 or horn: loudness bows, and the SUNG PITCH picks the figure
+                 (engine/zigpitch.js - the phone finally hears which note).
+     keys        B hold = bow · up/down = note · left/right = bend ·
+                 space = shake clean · G sand/rice · M listen · H hide text
+     MEDIUM (v0.2, 2026-09-30) - Bill: "an option between rice and grains of
+                 sand". SAND: 40,000 fine grains (16,000 to start on a phone) -
+                 the figure is everything. RICE: 5,000 long grains - every one
+                 is a body you can follow; they hop higher, tumble, and turn to
+                 lie ALONG the line they find (ZigChladni.orient). The button
+                 (or G, or #medium=rice) pours the other one onto a clean plate;
+                 the choice is remembered on the device.
+   Renderer: engine/zigshardgl.js (the Calabi-Yau shard, shared).
+   ========================================================================== */
+(function () {
+  const ZC = window.ZigCore, CH = window.ZigChladni, ZP = window.ZigPitch, Perf = ZC.Perf;
+  const cv = document.getElementById("c"), hud = document.getElementById("hud");
+  const PHONE = matchMedia("(pointer: coarse)").matches || /(\?|#|&)phone\b/.test(location.hash);
+  if (PHONE) document.documentElement.classList.add("phone");
+  window.ChladniStudy = { booted: false, frames: 0, phone: PHONE };
+  const R = ZigShardGL.create(cv, { preserve: !PHONE });
+  if (!R) { hud.textContent = "WebGL2 is not available in this browser."; return; }
+
+  /* ---- the plate and its sand ------------------------------------------ */
+  const MODES = CH.modes(10), PLATE = 2.0;
+  const FIXED = /(\?|#|&)count=(\d+)/.exec(location.hash);
+  const mediumAsked = /(\?|#|&)medium=(sand|rice)\b/.exec(location.hash);
+  let medium = mediumAsked ? mediumAsked[2] : (() => { try { return localStorage.getItem("zigverse.chladni.medium") === "rice" ? "rice" : "sand"; } catch (_) { return "sand"; } })();
+  let M = CH.MEDIA[medium];
+  let COUNT = FIXED ? +FIXED[2] : (PHONE ? M.phone : M.count);
+  let seedH = 99991; const rnd = () => (seedH = (seedH * 16807) % 2147483647) / 2147483647;
+  let P, N, tilt, spin;
+  function build(count) {
+    const old = P; N = count; P = CH.create(N); tilt = new Float32Array(3 * N); spin = new Float32Array(N);
+    if (old) { for (let i = 0; i < N; i++) { const j = i % old.x.length; P.x[i] = old.x[j]; P.y[i] = old.y[j]; } } else CH.scatter(P, rnd);
+    for (let i = 0; i < N; i++) { tilt[3 * i] = rnd() - 0.5; tilt[3 * i + 1] = rnd() - 0.5; tilt[3 * i + 2] = rnd(); spin[i] = rnd() * 6.2832; P.a[i] = spin[i]; }
+    R.alloc(N);
+  }
+  build(COUNT);
+  const mbtn = document.getElementById("medium");
+  function pour(med) {                                 // a clean plate, the other medium poured on
+    medium = med; M = CH.MEDIA[medium]; mbtn.textContent = medium;
+    try { localStorage.setItem("zigverse.chladni.medium", medium); } catch (_) {}
+    if (!FIXED) COUNT = PHONE ? M.phone : M.count;
+    P = null; build(COUNT); gov.drops = 0; gov.k = 0; gov.t = 0;
+  }
+  mbtn.textContent = medium;
+  mbtn.addEventListener("click", (e) => { e.stopPropagation(); pour(medium === "sand" ? "rice" : "sand"); });
+
+  let mode = CH.pick(MODES, CH.kFor(64)), prev = null, fadeW = 1, note = 64, noteSrc = "", sMorph = -1, bendS = 0;
+  /* what the note IS right now - read live, never a copy from the last frame
+     (a test that presses keys faster than frames are drawn must see every step) */
+  Object.defineProperties(window.ChladniStudy, {
+    note: { get: () => note, enumerable: true }, noteSrc: { get: () => noteSrc, enumerable: true },
+    n: { get: () => mode.n, enumerable: true }, m: { get: () => mode.m, enumerable: true }, k: { get: () => mode.k, enumerable: true }
+  });
+  function setNote(nt, src) {
+    note = nt; noteSrc = src;
+    const md = CH.pick(MODES, CH.kFor(nt));
+    if (md !== mode) { prev = { n: mode.n, m: mode.m, s: sMorph }; mode = md; fadeW = 0; }
+  }
+
+  /* ---- input: EWI (Perf), keys, touch, listen --------------------------- */
   let ewi = "EWI: looking…";
   Perf.init({ idle: true, onStatus: (s) => { ewi = s; } });
-  let handTurn = 0, paused = false, showHud = !PHONE, yaw = 0.6, pitch = 0.35, dist = 7.6, drag = null;
-  let touchB = 0, touched = false, lastTap = 0; const fingers = new Map(); let pinch0 = 0, mid0 = null;
+  let showHud = !PHONE, yaw = Math.PI / 2, pitch = 1.02, dist = 6.6, drag = null, keyBend = 0;
+  const keys = new Set(), keyLog = []; window.ChladniStudy.keyLog = keyLog;   // the test reads what really arrived
   addEventListener("keydown", (e) => {
-    if (e.repeat) return;
+    keys.add(e.code); keyLog.push(e.code + (e.repeat ? "R" : ""));
+    /* the note keys step on EVERY press, repeats included: holding an arrow glides
+       through the notes, and a fast press the browser marks as a repeat is never lost */
+    if (e.code === "ArrowUp") { setNote(Math.round(note) + 1, "keys"); e.preventDefault(); return; }
+    if (e.code === "ArrowDown") { setNote(Math.round(note) - 1, "keys"); e.preventDefault(); return; }
+    if (e.repeat) return;                                  // toggles fire once per press
     if (e.code === "KeyB") Perf.sim(0.85);
-    if (e.code === "Space") { paused = !paused; e.preventDefault(); }
     if (e.code === "KeyH") showHud = !showHud;
-    if (e.code === "Digit3" || e.code === "Digit4" || e.code === "Digit5") build(+e.code.slice(-1));
+    if (e.code === "Space") { CH.scatter(P, rnd); e.preventDefault(); }
+    if (e.code === "KeyM") toggleListen();
+    if (e.code === "KeyG") pour(medium === "sand" ? "rice" : "sand");
   });
-  const keys = new Set(); addEventListener("keydown", (e) => keys.add(e.code)); addEventListener("keyup", (e) => { keys.delete(e.code); if (e.code === "KeyB") Perf.sim(0); });
-  /* mouse: drag orbits (as v0.1). touch: the finger IS the breath. */
+  addEventListener("keyup", (e) => { keys.delete(e.code); if (e.code === "KeyB") Perf.sim(0); });
+
+  const fingers = new Map(); let pinch0 = 0, mid0 = null, lastTap = 0, touched = false, touchE = 0, touchBend = 0;
   const two = () => { const [a, b] = [...fingers.values()]; return [Math.hypot(a[0] - b[0], a[1] - b[1]), [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]]; };
+  const fingerPlay = (x, y) => {                      // the finger's place IS the note and the bend
+    setNote(Math.round(CH.NOTE_REF + (0.5 - y / innerHeight) * 36), "touch");
+    touchBend = Math.max(-1, Math.min(1, (x / innerWidth - 0.5) * 2.4));
+  };
   cv.addEventListener("pointerdown", (e) => {
     try { cv.setPointerCapture(e.pointerId); } catch (_) {}
     if (e.pointerType === "mouse") { drag = [e.clientX, e.clientY]; return; }
     const now = performance.now();
-    if (fingers.size === 0) { if (now - lastTap < 320) { build(n === 5 ? 3 : n === 3 ? 4 : 5); lastTap = 0; } else lastTap = now; }
+    if (fingers.size === 0) { if (now - lastTap < 320) { CH.scatter(P, rnd); lastTap = 0; } else lastTap = now; }
     fingers.set(e.pointerId, [e.clientX, e.clientY]); touched = true;
+    if (fingers.size === 1) fingerPlay(e.clientX, e.clientY);
     if (fingers.size === 2) { [pinch0, mid0] = two(); }
   });
   cv.addEventListener("pointermove", (e) => {
-    if (e.pointerType === "mouse") { if (!drag) return; yaw -= (e.clientX - drag[0]) * 0.005; pitch = Math.max(-1.3, Math.min(1.3, pitch + (e.clientY - drag[1]) * 0.005)); drag = [e.clientX, e.clientY]; return; }
+    if (e.pointerType === "mouse") { if (!drag) return; yaw -= (e.clientX - drag[0]) * 0.005; pitch = Math.max(0.15, Math.min(1.45, pitch + (e.clientY - drag[1]) * 0.005)); drag = [e.clientX, e.clientY]; return; }
     const f = fingers.get(e.pointerId); if (!f) return;
-    const dx = e.clientX - f[0], dy = e.clientY - f[1]; fingers.set(e.pointerId, [e.clientX, e.clientY]);
-    if (Math.abs(dx) + Math.abs(dy) > 6) lastTap = 0;                     // a slide is not a tap
-    if (fingers.size === 1) { handTurn += dx * 0.006; pitch = Math.max(-1.3, Math.min(1.3, pitch + dy * 0.004)); }
+    if (Math.abs(e.clientX - f[0]) + Math.abs(e.clientY - f[1]) > 6) lastTap = 0;
+    fingers.set(e.pointerId, [e.clientX, e.clientY]);
+    if (fingers.size === 1) fingerPlay(e.clientX, e.clientY);
     else if (fingers.size === 2) { const [d, m] = two();
-      if (pinch0 > 0) dist = Math.max(2.2, Math.min(12, dist * pinch0 / Math.max(1, d)));
-      yaw -= (m[0] - mid0[0]) * 0.006; pinch0 = d; mid0 = m; }
+      if (pinch0 > 0) dist = Math.max(2.5, Math.min(14, dist * pinch0 / Math.max(1, d)));
+      yaw -= (m[0] - mid0[0]) * 0.006; pitch = Math.max(0.15, Math.min(1.45, pitch + (m[1] - mid0[1]) * 0.004)); pinch0 = d; mid0 = m; }
   });
   const up = (e) => { if (e.pointerType === "mouse") { drag = null; return; } fingers.delete(e.pointerId); if (fingers.size < 2) pinch0 = 0; };
   cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
+  cv.addEventListener("wheel", (e) => { dist = Math.max(2.5, Math.min(14, dist * (1 + e.deltaY * 0.001))); e.preventDefault(); }, { passive: false });
   document.getElementById("info").addEventListener("click", () => { showHud = !showHud; });
-  /* ---- LISTEN: the engine's ears, opt-in ------------------------------------ */
+
   const TB = ZC.Timbre, lbtn = document.getElementById("listen");
-  let noteSeen = -1, noteRef = -1, noteTarget = 0, noteTurn = 0, sustainG = 0;   // PLAYED
-  let listening = false, arming = false, refSet = false, soundB = 0, brightS = 0.5, brightRef = 0.5, soundTurn = 0, kick = 0, heard = "";
+  let listening = false, arming = false, soundB = 0, heard = "", sung = null;
   async function toggleListen() {
     if (arming) return;
     if (listening) { listening = false; try { TB._ctx && TB._ctx.suspend(); } catch (_) {} lbtn.classList.remove("on"); lbtn.textContent = "listen"; return; }
@@ -3806,105 +4060,90 @@
     const ok = await TB.arm(/M2|MOTU/i);
     arming = false;
     if (!ok) { lbtn.textContent = "no mic"; heard = TB.err; setTimeout(() => { if (!listening) lbtn.textContent = "listen"; }, 2500); return; }
-    TB.trim = 1; TB.auto = !TB.iface;                                // a phone/laptop mic is auto-levelled; the MOTU never is
+    TB.trim = 1; TB.auto = !TB.iface;
     try { if (TB._ctx.state !== "running") await TB._ctx.resume(); } catch (_) {}
     listening = true; heard = TB.device; lbtn.classList.add("on"); lbtn.textContent = "listening";
   }
   lbtn.addEventListener("click", (e) => { e.stopPropagation(); toggleListen(); });
-  addEventListener("keydown", (e) => { if (e.code === "KeyM" && !e.repeat) toggleListen(); });
-  /* iOS can hand back a suspended audio clock; any touch wakes it */
   addEventListener("pointerdown", () => { if (listening && TB._ctx && TB._ctx.state !== "running") TB._ctx.resume().catch(() => {}); }, true);
-  cv.addEventListener("wheel", (e) => { dist = Math.max(2.2, Math.min(12, dist * (1 + e.deltaY * 0.001))); e.preventDefault(); }, { passive: false });
-
-  /* ---- matrices ---------------------------------------------------------- */
-  const persp = (f, a, nr, fr) => { const t = 1 / Math.tan(f / 2); return [t / a, 0, 0, 0, 0, t, 0, 0, 0, 0, (fr + nr) / (nr - fr), -1, 0, 0, 2 * fr * nr / (nr - fr), 0]; };
-  const look = (e, c) => { const z = norm(sub(e, c)), x = norm(cross([0, 1, 0], z)), y = cross(z, x);
-    return [x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -dot(x, e), -dot(y, e), -dot(z, e), 1]; };
-  const mulM = (a, b) => { const r = new Array(16).fill(0); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) for (let k = 0; k < 4; k++) r[j * 4 + i] += a[k * 4 + i] * b[j * 4 + k]; return r; };
-  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]], norm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
 
   /* ---- the loop ---------------------------------------------------------- */
-  const SUP = { 3: "\u00b3", 4: "\u2074", 5: "\u2075" };
-  const gov = { t: 0, k: 0, drops: 0 }; const intro = document.getElementById("intro"), hint = document.getElementById("hint"); let tTouch = -1;
-  let last = performance.now(), t = 0, alpha = 0.6, drift = PHONE ? 0.9 : 0,   /* the phone opens at the classic angle, not the cube-like one */ bendS = 0, gather = 0.5, hue = 0.33;
+  const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  const noteName = (n) => NAMES[((Math.round(n) % 12) + 12) % 12] + (Math.floor(Math.round(n) / 12) - 1);
+  const gov = { t: 0, k: 0, drops: 0 }, intro = document.getElementById("intro"), hint = document.getElementById("hint");
+  let baseKey = -1, baseVal = 1, aligned = 0;
+  let last = performance.now(), t = 0, E = 0, formed = 0, hue = 0.55, tTouch = -1, lastNote = -1;
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt;
     Perf.update(dt, t);
-    if (keys.has("ArrowLeft")) handTurn -= dt * 0.9; if (keys.has("ArrowRight")) handTurn += dt * 0.9;
-    if (!paused) drift += dt * 0.05;
-    bendS += (Perf.bend - bendS) * Math.min(1, dt * 3);
-    /* LISTEN: loudness is breath; brightness (a higher / brighter note) turns it;
-       an attack kicks the shards loose for a moment. Gated so a quiet room stays still. */
+    const live = Perf.live || Perf._sim > 0;
+
+    /* which note is the plate asked to sing? EWI > sung > touch/keys */
+    if (Perf.live && Perf.lastNote >= 0 && Perf.lastNote !== lastNote) { lastNote = Perf.lastNote; setNote(lastNote, "EWI"); }
     if (listening) {
       TB.update(dt);
       const sb = Math.max(0, Math.min(1, (TB.body - 0.08) / 0.5));
       soundB += (sb - soundB) * Math.min(1, dt * (sb > soundB ? 6 : 1.2));
-      brightS += (TB.brightness - brightS) * Math.min(1, dt * 4);
-      if (soundB > 0.15) { if (!refSet) { brightRef = brightS; refSet = true; }        // the first sound sets the centre...
-        brightRef += (brightS - brightRef) * Math.min(1, dt * 0.15); }                 // ...then the voice's own centre is learned slowly
-      soundTurn += (Math.max(-1.2, Math.min(1.2, (brightS - brightRef) * 3.0)) * Math.min(1, soundB * 2) - soundTurn) * Math.min(1, dt * 2.5);
-      kick = Math.max(kick * Math.exp(-dt / 0.35), soundB > 0.1 ? TB.flux : 0);
-    } else { soundB *= Math.exp(-dt / 0.8); soundTurn *= Math.exp(-dt / 1.2); kick *= Math.exp(-dt / 0.35); }
-    /* PLAYED: pitch is a path through the 4th dimension; attack scatters; a held note glows */
-    if (Perf.live && Perf.lastNote >= 0) {
-      if (Perf.lastNote !== noteSeen) { noteSeen = Perf.lastNote; if (noteRef < 0) noteRef = noteSeen; }
-      noteRef += (noteSeen - noteRef) * Math.min(1, dt * 0.05);                           // follow the tessitura, slowly
-      noteTarget = Math.max(-1.6, Math.min(1.6, (noteSeen - noteRef) / 12 * 1.1));
-      kick = Math.max(kick, 0.6 * Perf.attack);
-    } else noteTarget *= Math.exp(-dt / 6);                                                 // silence: hold the turn, then let it relax
-    noteTurn += (noteTarget - noteTurn) * Math.min(1, dt * 2.2);                           // a glide, like portamento
-    sustainG += (Math.min(1, Perf.holdSec / 2.5) * (Perf.held.size > 0 ? 1 : 0) - sustainG) * Math.min(1, dt * 2);
-    alpha = drift + handTurn + bendS * 1.6 + soundTurn + noteTurn;             // BEND (or a brighter note) turns it through the 4th dimension
-    const live = Perf.live || Perf._sim > 0;
-    const hold = fingers.size > 0 ? 1 : 0;
-    touchB += (hold - touchB) * Math.min(1, dt * (hold ? 1.4 : 0.9));   // a held finger breathes in; lifting it lets go, slower
-    /* on the phone nobody is playing, so the idle auto-breath would gather it
-       on its own - there, the finger is the only breath (the EWI still wins) */
-    const breathIn = live ? Perf.breath : (PHONE || listening) ? Math.max(touchB, soundB) : Math.max(Perf.breath, touchB);
-    const wantG = Math.min(1, (PHONE && !live ? 0.32 : 0.25) + 0.95 * breathIn + 0.12 * sustainG);
-    gather += (wantG - gather) * Math.min(1, dt * (wantG > gather ? 2.0 : 0.6));
+      if (sb > 0.1 && TB._time) {
+        const pz = ZP.detect(TB._time, TB._ctx.sampleRate);
+        if (pz.clarity > 0.85 && pz.hz > 60) { sung = pz; if (!Perf.live) { const nt = Math.round(pz.note); if (nt !== Math.round(note) || noteSrc !== "voice") setNote(nt, "voice"); } }
+      }
+    } else soundB *= Math.exp(-dt / 0.8);
+    if (keys.has("ArrowLeft")) keyBend = Math.max(-1, keyBend - dt * 0.8);
+    if (keys.has("ArrowRight")) keyBend = Math.min(1, keyBend + dt * 0.8);
+
+    /* how hard is the plate bowed? */
+    const hold = fingers.size === 1 ? 1 : 0;
+    touchE += (hold - touchE) * Math.min(1, dt * (hold ? 3 : 1.5));
+    let drive;
+    if (Perf.live) drive = Perf.breath + 0.6 * Perf.attack;
+    else if (Perf._sim > 0) drive = Perf.breath;
+    else drive = Math.max(touchE, soundB, PHONE ? 0.05 : 0.22 * Perf.breath);   // idle: the plate barely hums
+    E += (Math.min(1.2, drive) - E) * Math.min(1, dt * 6);
+
+    const bendIn = Perf.live ? Perf.bend : (fingers.size ? touchBend : keyBend);
+    bendS += (bendIn - bendS) * Math.min(1, dt * 4);
+    sMorph = CH.morph(bendS);
+    if (fadeW < 1) fadeW = Math.min(1, fadeW + dt / 0.15);
+
+    /* the sand - low figures have wide loud regions, so they shake harder */
+    const shake = 0.16 * Math.max(1, Math.sqrt(25 / mode.k));
+    const a = CH.step(P, mode.n, mode.m, sMorph, E, dt, rnd, { shake: shake * M.shake / 0.16, floor: M.floor, slide: M.slide, hop: M.hop, hopRate: M.hopRate, prev, w: fadeW });
+    if (M.align) CH.orient(P, mode.n, mode.m, sMorph, E, dt, M.align);                    // long grains turn to lie along the line
+    const bkey = mode.k * 1000 + mode.n * 10 + Math.round(sMorph * 50);                  // the even-spread baseline only changes with the figure
+    if (bkey !== baseKey) { baseKey = bkey; baseVal = CH.baseline(mode.n, mode.m, sMorph); }
+    const base = baseVal;
+    formed += (Math.max(0, 1 - a / base) - formed) * Math.min(1, dt * 3);
+    if (M.align && (window.ChladniStudy.frames % 20 === 0)) {                            // how well do the grains on a line lie along it?
+      let al = 0, c = 0; const A = [0, 0, 0];
+      for (let i = 0; i < N; i += 3) { CH.ug(mode.n, mode.m, sMorph, P.x[i], P.y[i], A); if (Math.abs(A[0]) < 0.3 && P.h[i] <= 0) { al += Math.abs(Math.cos(Math.atan2(A[2], A[1]) + Math.PI / 2 - P.a[i])); c++; } }
+      aligned = c ? Math.max(0, (al / c - 0.637) / 0.363) : 0;                           // 0 = random, 1 = every grain along its line
+    }
     hue += dt * 0.01;
 
-    ZM.frame(S, alpha, 1.35 * (1 + 0.08 * breathIn), T, TN);                      // breath swells the body
-    const ca = Math.cos(alpha), sa = Math.sin(alpha);
-    const k = 1.2 + 9.0 * gather, damp = 2.2 + 2.0 * gather, cloud = (1 - gather) * 0.55 + kick * 0.35;
+    /* instances: a grain lies flat on the plate, tilted a little; a hop tumbles it */
+    const inst = R.inst;
     for (let i = 0; i < N; i++) {
-      const o = 3 * i, s = seed[i];
-      const nx = Math.sin(t * 0.31 + s * 17.0 + P[o + 1] * 1.7), ny = Math.sin(t * 0.27 + s * 11.0 + P[o + 2] * 1.9), nz = Math.sin(t * 0.23 + s * 23.0 + P[o] * 1.5);
-      const tx = T[o] + nx * cloud, ty = T[o + 1] + ny * cloud, tz = T[o + 2] + nz * cloud;
-      V[o] += ((tx - P[o]) * k - V[o] * damp) * dt; V[o + 1] += ((ty - P[o + 1]) * k - V[o + 1] * damp) * dt; V[o + 2] += ((tz - P[o + 2]) * k - V[o + 2] * damp) * dt;
-      P[o] += V[o] * dt; P[o + 1] += V[o + 1] * dt; P[o + 2] += V[o + 2] * dt;
-      const q = 4 * i; const ux = S.qx[q], uy = S.qx[q + 2], uz = ca * S.qx[q + 1] + sa * S.qx[q + 3];
-      const b = 10 * i;
-      inst[b] = P[o]; inst[b + 1] = P[o + 1]; inst[b + 2] = P[o + 2];
-      inst[b + 3] = TN[o]; inst[b + 4] = TN[o + 1]; inst[b + 5] = TN[o + 2];
-      inst[b + 6] = ux; inst[b + 7] = uy; inst[b + 8] = uz; inst[b + 9] = s;
+      const b = 10 * i, h = P.h[i], tb = M.tilt * (1 + 3 * h);             // sand lies every which way (its edges catch the thin film); rice lies flat
+      if (h > 0) { spin[i] += dt * 9; if (M.align) P.a[i] += dt * 9; }       // a grain in the air tumbles
+      inst[b] = P.x[i] * PLATE; inst[b + 1] = h * 0.9 + 0.004; inst[b + 2] = P.y[i] * PLATE;
+      inst[b + 3] = tilt[3 * i] * tb; inst[b + 4] = -1; inst[b + 5] = tilt[3 * i + 1] * tb;   // face down: the camera sees the pale (bone) side - sand is pale
+      const th = M.align ? P.a[i] : spin[i]; inst[b + 6] = Math.cos(th); inst[b + 7] = 0; inst[b + 8] = Math.sin(th); inst[b + 9] = tilt[3 * i + 2];
     }
 
     const dpr = PHONE ? Math.min(2, devicePixelRatio) : devicePixelRatio;
-    const w = cv.clientWidth * dpr | 0, h = cv.clientHeight * dpr | 0;
-    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
-    gl.viewport(0, 0, w, h); gl.clearColor(0.012, 0.014, 0.02, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
-    if (!drag) yaw += dt * 0.04;
-    const fit = Math.max(1, 0.75 / (w / Math.max(1, h)));               // portrait: step back so the whole shape fits the width
-    const D = dist * fit;
+    const [w, hh] = R.frame(dpr);
+    if (!drag && !fingers.size) yaw += dt * 0.015;
+    const fit = Math.max(1, 0.95 / (w / Math.max(1, hh))), D = dist * fit;   // portrait: step back so the whole plate fits
     const eye = [Math.cos(yaw) * Math.cos(pitch) * D, Math.sin(pitch) * D, Math.sin(yaw) * Math.cos(pitch) * D];
-    const vp = mulM(persp(0.8, w / Math.max(1, h), 0.05, 60), look(eye, [0, 0, 0]));
-    gl.useProgram(prog); gl.bindVertexArray(vao);
-    gl.uniformMatrix4fv(U("uVP"), false, vp); gl.uniform3fv(U("uEye"), eye); gl.uniform3fv(U("uSun"), [0.35, 0.62, -0.30]);
-    gl.uniform1f(U("uSize"), 0.042 * Math.sqrt(6000 / N)); gl.uniform1f(U("uIri"), 0.35 + 0.5 * gather + 0.45 * sustainG); gl.uniform1f(U("uHue"), hue);
-    gl.bindBuffer(gl.ARRAY_BUFFER, bInst); gl.bufferSubData(gl.ARRAY_BUFFER, 0, inst);
-    gl.drawArraysInstanced(gl.TRIANGLES, 0, SH.length / 2, N);
-    const F = window.CalabiStudy.frames;
-    if (F === 150) {                                                     // the home-screen icon: a square cut from the living canvas
-      try { const ic = document.createElement("canvas"); ic.width = ic.height = 180; const s2 = Math.min(w, h) * 0.8;
-        ic.getContext("2d").drawImage(cv, (w - s2) / 2, (h - s2) / 2, s2, s2, 0, 0, 180, 180);
-        document.getElementById("icon").href = ic.toDataURL("image/png"); } catch (_) {}
-    }
-    /* quality governor: if the device cannot hold ~40 fps, fewer shards (each larger) */
+    const vp = ZigShardGL.mul(ZigShardGL.persp(0.8, w / Math.max(1, hh), 0.05, 60), ZigShardGL.look(eye, [0, 0, 0]));
+    R.draw(N, { vp, eye, sun: [0.25, 0.92, -0.30], size: M.size * Math.sqrt((PHONE ? M.phone : M.count) / N), iri: 0.75 + 0.5 * Math.min(1, E), hue });
+
+    const F = window.ChladniStudy.frames;
+    if (F === 240) { try { const ic = document.createElement("canvas"); ic.width = ic.height = 180; const s2 = Math.min(w, hh) * 0.8;
+      ic.getContext("2d").drawImage(cv, (w - s2) / 2, (hh - s2) / 2, s2, s2, 0, 0, 180, 180); document.getElementById("icon").href = ic.toDataURL("image/png"); } catch (_) {} }
     if (PHONE && !FIXED && F >= 40) { gov.t += dt; gov.k++;
-      if (gov.k === 90) { if (gov.t / gov.k > 1 / 40 && COUNT > 2000) { COUNT = Math.round(COUNT * 0.6); build(n); gov.drops++; } gov.t = 0; gov.k = 0; if (gov.drops >= 2) gov.k = -1e9; } }
+      if (gov.k === 90) { if (gov.t / gov.k > 1 / 40 && COUNT > Math.max(1500, 0.3 * M.count)) { COUNT = Math.round(COUNT * 0.6); build(COUNT); gov.drops++; } gov.t = 0; gov.k = 0; if (gov.drops >= 2) gov.k = -1e9; } }
     if (PHONE) {
       intro.classList.toggle("show", t > 0.6 && t < (touched ? tTouch + 2.5 : 1e9) && !showHud);
       hint.classList.toggle("show", t > 2.2 && !touched);
@@ -3912,15 +4151,20 @@
     }
 
     hud.innerHTML = showHud
-      ? "<b>CALABI-YAU STUDY</b>  v0.4\nthe Fermat surface z\u2081" + SUP[n] + " + z\u2082" + SUP[n] + " = 1, a slice of a Calabi-Yau space,\nprojected from four dimensions into this room\n\n" +
-        "n " + n + " · " + N + " shards · 4th-dimension turn " + alpha.toFixed(2) + " rad" + (paused ? " (drift paused)" : "") + "\n" +
-        (live ? "LIVE" : listening ? "LISTEN" : "idle") + " · breath " + "▮".repeat(Math.round(breathIn * 10)).padEnd(10, "▯") + " · gathered " + Math.round(gather * 100) + "% · bend " + Perf.bend.toFixed(2) + "\n" + (listening ? "listening · " + heard + " · sound " + "▮".repeat(Math.round(soundB * 10)).padEnd(10, "▯") + (TB.auto ? " (auto-level x" + TB.gain.toFixed(1) + ")" : "") + "\n" : "") + (PHONE && !live ? "your finger is the breath" + (gov.drops ? " · shards " + N + " (tuned for this phone)" : "") : ewi) + "\n\n" +
-        (PHONE ? "hold = gather · slide = turn it through the 4th dimension · double-tap = another degree · two fingers = orbit / zoom · listen = let it hear you\n\nThe maths is real (every point lies on the surface). Whether hidden dimensions of our universe look like this is string theory, and untested."
-               : "pitch + bend = turn it through the 4th dimension · breath = gather + swell · attack = scatter · a held note = glow\nB breath · ← → turn · 3 4 5 degree · space drift · H hide · M listen · drag/wheel view")
+      ? "<b>CHLADNI</b>  v0.2\n" + medium + " on a singing plate - the square plate's resonances, the textbook form\n\n" +
+        "note " + noteName(note) + (noteSrc ? " (" + noteSrc + ")" : "") + " · figure (" + mode.n + "," + mode.m + ") k " + mode.k + " · bend " + bendS.toFixed(2) + "\n" +
+        "bowed " + "▮".repeat(Math.round(Math.min(1, E) * 10)).padEnd(10, "▯") + " · figure formed " + Math.round(formed * 100) + "% · " + N + " grains of " + medium + (M.align ? " · aligned " + Math.round(aligned * 100) + "%" : "") + "\n" +
+        (listening ? "listening · " + heard + (sung ? " · hears " + Math.round(sung.hz) + " Hz" : "") + "\n" : "") +
+        (live ? "LIVE" : "idle") + " · " + (PHONE && !live ? "your finger bows the plate" : ewi) + "\n\n" +
+        (PHONE ? "hold = bow · up/down = the note · side to side = bend · double-tap = shake it clean · two fingers = orbit / zoom · sand/rice = what is on the plate · listen = sing to it\n\nIn 1787 Ernst Chladni bowed a sand-covered plate and the sand gathered on the lines that do not move. Nothing here draws those lines: the grains are shaken off the moving parts and find them on their own."
+               : "pitch = the figure · breath = the bow · bend = morph the figure · attack = the sand jumps · silence = it stays\nB bow · ↑ ↓ note · ← → bend · space shake clean · G sand/rice · M listen · H hide · drag/wheel view")
       : "";
-    window.CalabiStudy.frames++; window.CalabiStudy.booted = true; window.CalabiStudy.alpha = alpha; window.CalabiStudy.gather = gather; window.CalabiStudy.n = n; window.CalabiStudy.N = N; window.CalabiStudy.touchB = touchB; window.CalabiStudy.dropped = gov.drops; window.CalabiStudy.fingers = fingers.size; window.CalabiStudy.listening = listening; window.CalabiStudy.soundB = soundB; window.CalabiStudy.soundTurn = soundTurn; window.CalabiStudy.kick = kick; window.CalabiStudy.noteTurn = noteTurn; window.CalabiStudy.sustainG = sustainG;
+    const S = window.ChladniStudy;
+    S.frames++; S.booted = true; S.N = N; S.s = sMorph; S.E = E; S.formed = formed;
+    S.medium = medium; S.aligned = aligned; S.listening = listening; S.fingers = fingers.size; S.sung = sung; S.dropped = gov.drops; S.hopping = (() => { let c = 0; for (let i = 0; i < N; i += 7) if (P.h[i] > 0) c++; return c; })();
     requestAnimationFrame(frame);
   }
+  window.ChladniStudy.plate = () => P;
   requestAnimationFrame(frame);
 })();
 </script>

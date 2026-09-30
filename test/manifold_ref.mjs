@@ -37,8 +37,8 @@ chk("normals are unit length", nbad === 0);
   const U = [S.qx[o], S.qx[o + 2], ca * S.qx[o + 1] + sa * S.qx[o + 3]], Nn = [N1[300], N1[301], N1[302]];
   chk("normals are perpendicular to the surface", Math.abs(U[0] * Nn[0] + U[1] * Nn[1] + U[2] * Nn[2]) / Math.hypot(...U) < 1e-3); }
 const H = fs.readFileSync(path.join(ROOT, "calabi_study.html"), "utf8");
-chk("study: bend turns the shape through the 4th dimension", H.includes("alpha = drift + handTurn + bendS * 1.6 + soundTurn;"));
-chk("study: breath gathers the shards (silence loosens them into a cloud)", H.includes("const wantG = Math.min(1, (PHONE && !live ? 0.32 : 0.25) + 0.95 * breathIn);") && H.includes("cloud = (1 - gather) * 0.55"));
+chk("study: bend turns the shape through the 4th dimension", H.includes("alpha = drift + handTurn + bendS * 1.6 + soundTurn + noteTurn;"));
+chk("study: breath gathers the shards (silence loosens them into a cloud)", H.includes("const wantG = Math.min(1, (PHONE && !live ? 0.32 : 0.25) + 0.95 * breathIn + 0.12 * sustainG);") && H.includes("cloud = (1 - gather) * 0.55"));
 chk("phone: the finger is the breath (hold gathers), and the EWI still wins when it plays",
   H.includes("const breathIn = live ? Perf.breath : (PHONE || listening) ? Math.max(touchB, soundB) : Math.max(Perf.breath, touchB);") && H.includes("const hold = fingers.size > 0 ? 1 : 0;"));
 chk("phone: slide turns it through the 4th dimension; double-tap changes degree; two fingers orbit/zoom",
@@ -49,6 +49,8 @@ chk("listen: OFF until tapped - no mic prompt unasked - and it opens the engine'
   H.includes('id="listen"') && H.includes("let listening = false") && H.includes("await TB.arm(/M2|MOTU/i)") && H.includes("TB.auto = !TB.iface;") && !/TB\.arm\([^)]*\);?\s*\n\s*\}\)\(\)/.test(H));
 chk("listen: loudness gathers, brightness turns it, an attack scatters",
   H.includes("soundB += (sb - soundB)") && H.includes("(brightS - brightRef) * 3.0))") && H.includes("brightRef = brightS; refSet = true;") && H.includes("+ kick * 0.35"));
+chk("played: pitch is a path (1.1 rad / octave around your own centre), attack scatters, a held note glows, breath swells",
+  H.includes("(noteSeen - noteRef) / 12 * 1.1") && H.includes("kick = Math.max(kick, 0.6 * Perf.attack)") && H.includes("0.45 * sustainG") && H.includes("1.35 * (1 + 0.08 * breathIn)"));
 chk("study: reads the EWI through the engine's own Perf path", H.includes('<script src="engine/zigcore.js"></script>') && H.includes("Perf.init("));
 console.log("\n" + (bad ? `FAIL — ${bad} check(s)` : "PASS — all checks"));
 process.exit(bad ? 1 : 0);

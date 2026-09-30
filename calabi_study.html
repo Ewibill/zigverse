@@ -72,6 +72,16 @@
    brightness - a higher or brighter note - turns it through the 4th dimension,
    and an attack scatters the shards for a moment before they settle. The EWI
    over MIDI still wins; a finger still works. Tap again (or M) = stop.
+   PLAYED (v0.4, 2026-09-29): Bill played it and wanted more response. The EWI
+   gives more than breath and bend, and v0.3 ignored the rest:
+     PITCH    turns it through the 4th dimension - a melody is a PATH. About
+              1.1 rad per octave around the centre of your own range (the first
+              note sets it, then it follows your tessitura slowly, ~20 s). In
+              silence the last turn is held (memory), then relaxes over ~6 s.
+     ATTACK   each note-on scatters the shards a little - articulation shows.
+     SUSTAIN  a held note glows (iridescence) and pulls the shape tighter.
+     BREATH   swells the body (+8% at full breath) as well as gathering it.
+   Bend still turns on top of pitch.
    ========================================================================== */
 (function () {
   const ZC = window.ZigCore, ZM = window.ZigManifold, Perf = ZC.Perf;
@@ -188,6 +198,7 @@
   document.getElementById("info").addEventListener("click", () => { showHud = !showHud; });
   /* ---- LISTEN: the engine's ears, opt-in ------------------------------------ */
   const TB = ZC.Timbre, lbtn = document.getElementById("listen");
+  let noteSeen = -1, noteRef = -1, noteTarget = 0, noteTurn = 0, sustainG = 0;   // PLAYED
   let listening = false, arming = false, refSet = false, soundB = 0, brightS = 0.5, brightRef = 0.5, soundTurn = 0, kick = 0, heard = "";
   async function toggleListen() {
     if (arming) return;
@@ -237,18 +248,27 @@
       soundTurn += (Math.max(-1.2, Math.min(1.2, (brightS - brightRef) * 3.0)) * Math.min(1, soundB * 2) - soundTurn) * Math.min(1, dt * 2.5);
       kick = Math.max(kick * Math.exp(-dt / 0.35), soundB > 0.1 ? TB.flux : 0);
     } else { soundB *= Math.exp(-dt / 0.8); soundTurn *= Math.exp(-dt / 1.2); kick *= Math.exp(-dt / 0.35); }
-    alpha = drift + handTurn + bendS * 1.6 + soundTurn;             // BEND (or a brighter note) turns it through the 4th dimension
+    /* PLAYED: pitch is a path through the 4th dimension; attack scatters; a held note glows */
+    if (Perf.live && Perf.lastNote >= 0) {
+      if (Perf.lastNote !== noteSeen) { noteSeen = Perf.lastNote; if (noteRef < 0) noteRef = noteSeen; }
+      noteRef += (noteSeen - noteRef) * Math.min(1, dt * 0.05);                           // follow the tessitura, slowly
+      noteTarget = Math.max(-1.6, Math.min(1.6, (noteSeen - noteRef) / 12 * 1.1));
+      kick = Math.max(kick, 0.6 * Perf.attack);
+    } else noteTarget *= Math.exp(-dt / 6);                                                 // silence: hold the turn, then let it relax
+    noteTurn += (noteTarget - noteTurn) * Math.min(1, dt * 2.2);                           // a glide, like portamento
+    sustainG += (Math.min(1, Perf.holdSec / 2.5) * (Perf.held.size > 0 ? 1 : 0) - sustainG) * Math.min(1, dt * 2);
+    alpha = drift + handTurn + bendS * 1.6 + soundTurn + noteTurn;             // BEND (or a brighter note) turns it through the 4th dimension
     const live = Perf.live || Perf._sim > 0;
     const hold = fingers.size > 0 ? 1 : 0;
     touchB += (hold - touchB) * Math.min(1, dt * (hold ? 1.4 : 0.9));   // a held finger breathes in; lifting it lets go, slower
     /* on the phone nobody is playing, so the idle auto-breath would gather it
        on its own - there, the finger is the only breath (the EWI still wins) */
     const breathIn = live ? Perf.breath : (PHONE || listening) ? Math.max(touchB, soundB) : Math.max(Perf.breath, touchB);
-    const wantG = Math.min(1, (PHONE && !live ? 0.32 : 0.25) + 0.95 * breathIn);
+    const wantG = Math.min(1, (PHONE && !live ? 0.32 : 0.25) + 0.95 * breathIn + 0.12 * sustainG);
     gather += (wantG - gather) * Math.min(1, dt * (wantG > gather ? 2.0 : 0.6));
     hue += dt * 0.01;
 
-    ZM.frame(S, alpha, 1.35, T, TN);
+    ZM.frame(S, alpha, 1.35 * (1 + 0.08 * breathIn), T, TN);                      // breath swells the body
     const ca = Math.cos(alpha), sa = Math.sin(alpha);
     const k = 1.2 + 9.0 * gather, damp = 2.2 + 2.0 * gather, cloud = (1 - gather) * 0.55 + kick * 0.35;
     for (let i = 0; i < N; i++) {
@@ -275,7 +295,7 @@
     const vp = mulM(persp(0.8, w / Math.max(1, h), 0.05, 60), look(eye, [0, 0, 0]));
     gl.useProgram(prog); gl.bindVertexArray(vao);
     gl.uniformMatrix4fv(U("uVP"), false, vp); gl.uniform3fv(U("uEye"), eye); gl.uniform3fv(U("uSun"), [0.35, 0.62, -0.30]);
-    gl.uniform1f(U("uSize"), 0.042 * Math.sqrt(6000 / N)); gl.uniform1f(U("uIri"), 0.35 + 0.5 * gather); gl.uniform1f(U("uHue"), hue);
+    gl.uniform1f(U("uSize"), 0.042 * Math.sqrt(6000 / N)); gl.uniform1f(U("uIri"), 0.35 + 0.5 * gather + 0.45 * sustainG); gl.uniform1f(U("uHue"), hue);
     gl.bindBuffer(gl.ARRAY_BUFFER, bInst); gl.bufferSubData(gl.ARRAY_BUFFER, 0, inst);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, SH.length / 2, N);
     const F = window.CalabiStudy.frames;
@@ -294,13 +314,13 @@
     }
 
     hud.innerHTML = showHud
-      ? "<b>CALABI-YAU STUDY</b>  v0.3\nthe Fermat surface z\u2081" + SUP[n] + " + z\u2082" + SUP[n] + " = 1, a slice of a Calabi-Yau space,\nprojected from four dimensions into this room\n\n" +
+      ? "<b>CALABI-YAU STUDY</b>  v0.4\nthe Fermat surface z\u2081" + SUP[n] + " + z\u2082" + SUP[n] + " = 1, a slice of a Calabi-Yau space,\nprojected from four dimensions into this room\n\n" +
         "n " + n + " · " + N + " shards · 4th-dimension turn " + alpha.toFixed(2) + " rad" + (paused ? " (drift paused)" : "") + "\n" +
         (live ? "LIVE" : listening ? "LISTEN" : "idle") + " · breath " + "▮".repeat(Math.round(breathIn * 10)).padEnd(10, "▯") + " · gathered " + Math.round(gather * 100) + "% · bend " + Perf.bend.toFixed(2) + "\n" + (listening ? "listening · " + heard + " · sound " + "▮".repeat(Math.round(soundB * 10)).padEnd(10, "▯") + (TB.auto ? " (auto-level x" + TB.gain.toFixed(1) + ")" : "") + "\n" : "") + (PHONE && !live ? "your finger is the breath" + (gov.drops ? " · shards " + N + " (tuned for this phone)" : "") : ewi) + "\n\n" +
         (PHONE ? "hold = gather · slide = turn it through the 4th dimension · double-tap = another degree · two fingers = orbit / zoom · listen = let it hear you\n\nThe maths is real (every point lies on the surface). Whether hidden dimensions of our universe look like this is string theory, and untested."
-               : "bend = turn it through the 4th dimension · breath = gather\nB breath · ← → turn · 3 4 5 degree · space drift · H hide · M listen · drag/wheel view")
+               : "pitch + bend = turn it through the 4th dimension · breath = gather + swell · attack = scatter · a held note = glow\nB breath · ← → turn · 3 4 5 degree · space drift · H hide · M listen · drag/wheel view")
       : "";
-    window.CalabiStudy.frames++; window.CalabiStudy.booted = true; window.CalabiStudy.alpha = alpha; window.CalabiStudy.gather = gather; window.CalabiStudy.n = n; window.CalabiStudy.N = N; window.CalabiStudy.touchB = touchB; window.CalabiStudy.dropped = gov.drops; window.CalabiStudy.fingers = fingers.size; window.CalabiStudy.listening = listening; window.CalabiStudy.soundB = soundB; window.CalabiStudy.soundTurn = soundTurn; window.CalabiStudy.kick = kick;
+    window.CalabiStudy.frames++; window.CalabiStudy.booted = true; window.CalabiStudy.alpha = alpha; window.CalabiStudy.gather = gather; window.CalabiStudy.n = n; window.CalabiStudy.N = N; window.CalabiStudy.touchB = touchB; window.CalabiStudy.dropped = gov.drops; window.CalabiStudy.fingers = fingers.size; window.CalabiStudy.listening = listening; window.CalabiStudy.soundB = soundB; window.CalabiStudy.soundTurn = soundTurn; window.CalabiStudy.kick = kick; window.CalabiStudy.noteTurn = noteTurn; window.CalabiStudy.sustainG = sustainG;
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
