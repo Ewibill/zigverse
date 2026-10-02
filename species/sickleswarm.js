@@ -46,7 +46,7 @@
   const LETTER = global.ZIG_LETTER || "sicklePetal";
   const PETAL = Object.assign({}, ZM && ZM.presets[LETTER] ? ZM.presets[LETTER] : {});
 
-  const Sickle = global.SickleField = { version: "0.38.0", flock: null, gpu: null, stage: "loaded", booted: false };   // 0.28: MEDIUM · 0.29: FORCES · 0.30: ENVIRONMENT·CURRENT (ZIG_CURRENT drift/gyre/eddy — the world's flow the field rides, composes with medium+forces)   // 0.26: note-impulse + MIDI monitor + ribbon-off bugfix · 0.27: SMOKE/FOG (ZIG_SMOKE — breath lifts & billows luminous puffs, notes puff bursts, silence thins them)   // 0.25: melodic ribbon (shelved) · 0.26: NOTE-IMPULSE (ZIG_NOTEPULSE — each note is a nerve pulse traveling through the organism, flaring the tissue; energy of the notes INTO the body)   // 0.24.1: fly dolly smoothed · 0.25: MELODIC RIBBON (ZIG_RIBBON — pitch draws a glowing streamer through the field; the note-twin of breath, so the ribbon of notes finally has a body)
+  const Sickle = global.SickleField = { version: "0.40.1", flock: null, gpu: null, stage: "loaded", booted: false };   // 0.40.1: FRAME (ZIG_FRAMEFIT whole|body|core, default body) - auto-frame fits the body across the screen, not 93% of shards in a sphere, so wanderers and floor-spread no longer shrink it to a speck · 0.40.0: ANGLE (ZIG_ANGLE side|overhead - the camera can look straight down, turning slowly) + the CHLADNI plate spans the camera's right AND up at note-on (stands facing you from the side, lies flat from overhead; engine 0.54 Sim.chl[5]) · 0.39.2: CHLADNI plate SET at note-on (frozen while it sings, set again each new note) - eyeZ: a plate following the camera turned 97 deg in 4 s and no figure formed; latched it draws (ratio 0.20) · 0.39.1: #chtune probe fields - 5th "sin" (old shake random), centre "latch" (plate set at note-on, frozen while it sings) · 0.39.0: CHLADNI (ZIG_CHLADNI_SWARM gentle|firm - a held note sings a standing wave that faces you; the swarm draws the figure on its still lines; engine 0.53)   // 0.28: MEDIUM · 0.29: FORCES · 0.30: ENVIRONMENT·CURRENT (ZIG_CURRENT drift/gyre/eddy — the world's flow the field rides, composes with medium+forces)   // 0.26: note-impulse + MIDI monitor + ribbon-off bugfix · 0.27: SMOKE/FOG (ZIG_SMOKE — breath lifts & billows luminous puffs, notes puff bursts, silence thins them)   // 0.25: melodic ribbon (shelved) · 0.26: NOTE-IMPULSE (ZIG_NOTEPULSE — each note is a nerve pulse traveling through the organism, flaring the tissue; energy of the notes INTO the body)   // 0.24.1: fly dolly smoothed · 0.25: MELODIC RIBBON (ZIG_RIBBON — pitch draws a glowing streamer through the field; the note-twin of breath, so the ribbon of notes finally has a body)
   /* v0.2 — THE PULSE: the ZigPhase heartbeat in the spectral register.
      Every stroke carries a blink oscillator; breath = coupling. In spectral
      ink (P), the flash is a surge of pure rainbow — six thousand color-
@@ -492,6 +492,35 @@
       ? ZC.Swell.resolve(String(global.ZIG_SWELL).toLowerCase(), ANCHOR[1] + 12) : null;
     let swellE = 0.2;
     const NATURE_OPT = (ZC.Nature && global.ZIG_NATURE) ? ZC.Nature.resolve(String(global.ZIG_NATURE).toLowerCase()) : null;
+    /* CHLADNI (0.39.0 · engine 0.53 · ZigChladni.swarmAccel): window.ZIG_CHLADNI_SWARM =
+       "gentle" | "firm" — THE AIR SINGS. A held note sets a standing wave on a
+       plate that faces you (centred on the body, sized to it); its loud places
+       shake the shards off and its still lines grip them, so the swarm itself
+       draws Chladni's figure for that note - the same fixed note->figure map as
+       the Chladni study (E4 = the (4,3) figure). Breath is the bow, bend morphs
+       the figure, silence lets the plate go quiet. MASS makes a heavy swarm
+       answer slower, NATURE makes it react a beat late; the Bee is exempt.
+       Needs engine/zigchladni.js loaded by the host. Absent = byte-identical. */
+    const CH = global.ZigChladni || null;
+    const CH_BASE = (CH && CH.SWARM && global.ZIG_CHLADNI_SWARM && CH.SWARM[String(global.ZIG_CHLADNI_SWARM).toLowerCase()]) || null;
+    /* #chtune=K,J,D,centre (the eyeZ probe): override the preset's numbers and
+       choose the plate's centre - "aim" (the camera's aim, default) or "body"
+       (the measured centre of the swarm itself). Absent = the preset exactly. */
+    const CH_TUNE = (global.ZIG_CHLADNI_TUNE && CH_BASE) ? global.ZIG_CHLADNI_TUNE : null;   // centre: latch (default) | aim | body
+    const CHLADNI_OPT = CH_BASE ? Object.assign({}, CH_BASE, CH_TUNE && CH_TUNE.K != null ? { K: CH_TUNE.K } : {}, CH_TUNE && CH_TUNE.J != null ? { J: CH_TUNE.J } : {}, CH_TUNE && CH_TUNE.D != null ? { D: CH_TUNE.D } : {}, CH_TUNE && CH_TUNE.hash ? { hash: CH_TUNE.hash } : {}) : null;
+    const CH_BODY = !!(CH_TUNE && CH_TUNE.centre === "body");
+    /* THE PLATE IS SET WHEN A NOTE BEGINS (0.39.2, the default): centre, facing and
+       size are frozen while it sings, set again on each new note (a new note is a
+       new figure), and let go in silence. eyeZ 2026-09-30: a plate that followed
+       the camera turned 97 deg in the first 4 s of a note (and 124, 17, 159 deg
+       at 8/12/16 s - the camera swings while you play) and shrank by a third, so the figure walked out from
+       under the shards - ratio stayed ~1 at any strength. Set at note-on: 0.20.
+       #chtune centre "aim" / "body" keep the old live plate for A/B. */
+    const CH_LATCH = !(CH_TUNE && (CH_TUNE.centre === "aim" || CH_TUNE.centre === "body"));
+    let chLatch = null;
+    const chModes = CHLADNI_OPT ? CH.modes(10) : null;
+    let chMode = CHLADNI_OPT ? CH.pick(chModes, CH.kFor(64)) : null, chPrev = null, chFade = 1, chE = 0, chBend = 0, chS = -1, chL = 45, chNote = 64;
+    const chArr = new Float32Array(20);
     const MASS_OPT = (ZC.Mass && global.ZIG_MASS) ? ZC.Mass.resolve(String(global.ZIG_MASS).toLowerCase()) : null;
     const SOLID_OPT = (+global.ZIG_SOLID > 0)
       ? { sun: DUSK ? [0.60, 0.16, -0.36] : [0.35, 0.62, -0.30], r: 1.25 * (+global.ZIG_SIZE || 1.8) } : null;
@@ -501,6 +530,7 @@
       mass: MASS_OPT || undefined,
       nature: NATURE_OPT || undefined,
       swell: SWELL_OPT || undefined,
+      chladni: CHLADNI_OPT || undefined,
       solid: SOLID_OPT || undefined,
       ground: GROUND || undefined,   // GROUND: a sceneless build still has a floor of light
       contact: CONTACT_R > 0 ? { r: CONTACT_R, k: 45, damp: 4, max: 12 } : null,
@@ -565,6 +595,7 @@
         mass: MASS_OPT || undefined,
         nature: NATURE_OPT || undefined,
         swell: SWELL_OPT || undefined,
+        chladni: CHLADNI_OPT || undefined,
         solid: SOLID_OPT || undefined,
         ground: GROUND || undefined,
         contact: CONTACT_R > 0 ? { r: CONTACT_R, k: 45, damp: 4, max: 12 } : null,
@@ -782,6 +813,22 @@
       return v;
     })();
     let frameZoom = VIEW0[0];
+    /* ANGLE (0.40.0) — where the camera looks FROM. "side" = the orbit, exactly as
+       before. "overhead" = straight down onto the aim at the same auto-framed
+       distance; the slow orbit becomes a slow TURN of the frame (the "up" of the
+       picture walks round the compass), so nothing ever goes edge-on. */
+    const OVERHEAD = String(global.ZIG_ANGLE || "side").toLowerCase() === "overhead";
+    /* FRAME (0.40.1) - what auto-frame fits. "whole" = 93% of the shards in a
+       sphere (the old rule): a handful of wanderers, or a swarm that spreads
+       across the floor, push the camera back until the body is a speck - Bill,
+       v6.1 overhead: "the organism is shrinking... close keeps getting smaller"
+       (close only multiplies a distance that keeps growing). "body" = 80% of the
+       shards measured ACROSS THE SCREEN (depth along the view does not make
+       anything look bigger, so it no longer pushes the camera back). "core" =
+       60% across the screen: the dense heart fills the frame, strays leave it. */
+    const FRAMEFIT = { whole: 0, body: 0.80, core: 0.60 }[String(global.ZIG_FRAMEFIT || "body").toLowerCase()];
+    const FRAME_PCT = FRAMEFIT === undefined ? 0.80 : FRAMEFIT;
+    let fitR = 0;   // the radius auto-frame is fitting right now (shown on the HUD)
     const dial = { ink: (global.ZIG_INK !== undefined ? +global.ZIG_INK : 1.8), moon: 1.6, camRad: AUTOFRAME ? CAM0 : CAM0 * VIEW0[0], fov: VIEW0[1], spectral: false, Kmax: 3.0, paceGain: 2.2, time: 0.55,
                    audio: (global.ZIG_AUDIOGAIN !== undefined ? Math.max(0, Math.min(4, +global.ZIG_AUDIOGAIN)) : 1),   // AUDIO GAIN (Alt+[ / Alt+]): how far the horn reaches into the body. 0 = audio drives NOTHING (the mappings vanish, not fade) · 1 = the conservative defaults · 4 = as far as they go. Scales BOTH the voice path and the ambience path, so one dial means the same thing whichever is armed.
                    hueRot: HUEROT0, hueSpan: HUESPAN0,   // ZIGSPECTRUM: rotation around the wheel (Q) · base→tip span
@@ -903,11 +950,12 @@
         measureAcc += dt;
         if (measureAcc > 0.25) {                       // four times a second is plenty
           measureAcc = 0;
-          flock.measure((m) => { if (m.n > 8 && isFinite(m.r)) measured = m; }, 7);
+          flock.measure((m) => { if (m.n > 8 && isFinite(m.r)) measured = m; }, 7, FRAME_PCT ? [view[28], view[29], view[30]] : undefined);
         }
         if (measured && measured.r > 1) {
           const aspect2 = gpu.canvas.clientWidth / Math.max(1, gpu.canvas.clientHeight);
-          const want = ZC.Frame.fit(measured.r, dial.fov, aspect2, FRAME_MARGIN) * frameZoom;
+          fitR = (FRAME_PCT && measured.scr) ? (FRAME_PCT >= 0.8 ? measured.scr.p80 : measured.scr.p60) : measured.r;   // FRAME: whole | body | core
+          const want = ZC.Frame.fit(Math.max(1, fitR), dial.fov, aspect2, FRAME_MARGIN) * frameZoom;
           /* CAMERA HOLD (0.33.0): while a hand is the nucleus, auto-frame keeps
              its distance and its aim. Otherwise the gather tightens the body,
              the camera dives after it, and the shards turn into props — you
@@ -934,12 +982,30 @@
       }
       const baseRad = AUTOFRAME ? autoRad : dial.camRad;
       const rad = Math.max(11, baseRad * (1 - 0.55 * flyDolly));  // SMOOTHED dolly — glides IN over a phrase, eases out on real rest (no yo-yo)
+      const aspect = gpu.canvas.clientWidth / Math.max(1, gpu.canvas.clientHeight);
+      const fov = dial.fov;
+      if (OVERHEAD) {
+        /* straight down; the picture's "up" turns with the orbit angle. right =
+           up0 x fwd, up = fwd x right - the side branch's own formulas, with a
+           horizontal up0 instead of world up (which is degenerate looking down). */
+        const eyeO = [aimP[0], aimP[1] + rad, aimP[2]], ctrO = aimP;
+        const u0 = [Math.cos(ang), 0, Math.sin(ang)];
+        const vpO = ZG.mat.mul(ZG.mat.persp(fov, aspect, 0.5, 1200), ZG.mat.lookAt(eyeO, ctrO, u0));
+        view.set(vpO, 0);
+        const f = [0, -1, 0];
+        let rx = u0[1] * f[2] - u0[2] * f[1], ry = u0[2] * f[0] - u0[0] * f[2], rz = u0[0] * f[1] - u0[1] * f[0];
+        const rl = Math.hypot(rx, ry, rz) || 1; rx /= rl; ry /= rl; rz /= rl;
+        const ux = f[1] * rz - f[2] * ry, uy = f[2] * rx - f[0] * rz, uz = f[0] * ry - f[1] * rx;
+        setV4(16, eyeO[0], eyeO[1], eyeO[2], t);
+        setV4(20, rx, ry, rz, aspect);
+        setV4(24, ux, uy, uz, Math.tan(fov / 2));
+        setV4(28, f[0], f[1], f[2], 0);
+        return;
+      }
       const eye = [aimP[0] + Math.cos(ang) * rad,
                    aimP[1] + 8 + 5 * Math.sin(t * 0.05 + hPhase),
                    aimP[2] + Math.sin(ang) * rad];
       const ctr = aimP;
-      const aspect = gpu.canvas.clientWidth / Math.max(1, gpu.canvas.clientHeight);
-      const fov = dial.fov;
       const vp = ZG.mat.mul(ZG.mat.persp(fov, aspect, 0.5, 1200), ZG.mat.lookAt(eye, ctr, [0, 1, 0]));
       view.set(vp, 0);
       let fx = ctr[0] - eye[0], fy = ctr[1] - eye[1], fz = ctr[2] - eye[2];
@@ -1553,6 +1619,48 @@
 
       camera(t, dt);
 
+      /* CHLADNI: which figure, how hard the plate is bowed, and where it stands.
+         The note is the last one played (the figure holds between notes); the
+         drive is the performer's live breath while a note is held, and decays in
+         silence; the plate is centred on the camera's aim, sized to the measured
+         body and turned to face the camera (its right vector, up = world up). */
+      if (CHLADNI_OPT) {
+        const held = ZC.Perf.held && ZC.Perf.held.size > 0, liveP = ZC.Perf.live || ZC.Perf._sim > 0;
+        if (held && ZC.Perf.lastNote >= 0 && ZC.Perf.lastNote !== chNote) {
+          chNote = ZC.Perf.lastNote; chLatch = null;   // a new note sets the plate again
+          const md = CH.pick(chModes, CH.kFor(chNote));
+          if (md !== chMode) { chPrev = { n: chMode.n, m: chMode.m, s: chS }; chMode = md; chFade = 0; }
+        }
+        const want = (held && liveP) ? Math.min(1.2, state.liveBreath + 0.4 * ZC.Perf.attack) : 0;
+        chE += (want - chE) * Math.min(1, dt * (want > chE ? 6 : 1.5));
+        chBend += ((ZC.Perf.live ? ZC.Perf.bend : 0) - chBend) * Math.min(1, dt * 4);
+        chS = CH.morph(chBend);
+        if (chFade < 1) chFade = Math.min(1, chFade + dt / 0.15);
+        if (measured && measured.r > 1) chL += (Math.max(12, measured.r * 1.15) - chL) * Math.min(1, dt * 0.5);
+        const pv = chPrev || { n: chMode.n, m: chMode.m, s: chS };
+        chArr[0] = chMode.n; chArr[1] = chMode.m; chArr[2] = chS; chArr[3] = chE;
+        chArr[4] = pv.n; chArr[5] = pv.m; chArr[6] = pv.s; chArr[7] = chFade;
+        /* the plate spans the camera's RIGHT and UP (0.40.0): from the side it stands
+           facing you, from overhead it lies flat - every angle sees the figure face-on */
+        const chUpRaw = [view[24], view[25], view[26]], chRtRaw = [view[20], view[21], view[22]];
+        const rN = Math.hypot(chRtRaw[0], chRtRaw[1], chRtRaw[2]) || 1, chRt3 = [chRtRaw[0] / rN, chRtRaw[1] / rN, chRtRaw[2] / rN];
+        const ud = chUpRaw[0] * chRt3[0] + chUpRaw[1] * chRt3[1] + chUpRaw[2] * chRt3[2];
+        let chUp3 = [chUpRaw[0] - ud * chRt3[0], chUpRaw[1] - ud * chRt3[1], chUpRaw[2] - ud * chRt3[2]];
+        const uN = Math.hypot(chUp3[0], chUp3[1], chUp3[2]); chUp3 = uN > 1e-4 ? [chUp3[0] / uN, chUp3[1] / uN, chUp3[2] / uN] : [0, 1, 0];
+        let chC = (CH_BODY && measured) ? [measured.cx, measured.cy, measured.cz] : aimP, chR = chRt3, chU = chUp3, chLL = chL;
+        if (CH_LATCH) {
+          if (held && !chLatch) chLatch = { c: [chC[0], chC[1], chC[2]], r: chR, u: chU, L: chL };
+          else if (!held && chE < 0.001) chLatch = null;
+          if (chLatch) { chC = chLatch.c; chR = chLatch.r; chU = chLatch.u; chLL = chLatch.L; }
+        }
+        chArr[8] = chC[0]; chArr[9] = chC[1]; chArr[10] = chC[2]; chArr[11] = chLL;
+        chArr[12] = chR[0]; chArr[13] = chR[1]; chArr[14] = chR[2]; chArr[15] = 0;
+        chArr[16] = chU[0]; chArr[17] = chU[1]; chArr[18] = chU[2]; chArr[19] = 0;
+        state.chladni = chArr;
+        Sickle.chladni = { n: chMode.n, m: chMode.m, s: chS, E: chE, note: chNote, L: chLL, c: [chC[0], chC[1], chC[2]], right: [chR[0], chR[1], chR[2]], up: [chU[0], chU[1], chU[2]], angle: OVERHEAD ? "overhead" : "side",
+          body: measured ? [measured.cx, measured.cy, measured.cz, measured.r] : null, K: CHLADNI_OPT.K, J: CHLADNI_OPT.J, D: CHLADNI_OPT.D, centre: CH_LATCH ? "latch" : CH_BODY ? "body" : "aim", hash: CHLADNI_OPT.hash || "pcg", simRate: dial.time };   // read by the boot test and the eyeZ probe
+      }
+
       /* MELODIC RIBBON — the note-twin of breath. PITCH (avPitch) sets the height
          of a new spine point each frame while you play; points flow away in x with
          age and fade, so your melody draws itself as a glowing streamer threading
@@ -1690,7 +1798,7 @@
           (flock.presence ? " · BEE " + (flock.presence.sign < 0 ? "agitate" : "cozy") +
                             " reach " + flock.presence.r.toFixed(0) + (zt && zt.nucleus ? "\u2192" + zt.reachMax : "") : "") +
           (MAT ? " · " + matName + (WORLD && !global.ZIG_MATERIAL ? " (native)" : "") : "") +
-          " · cam " + (AUTOFRAME ? autoRad.toFixed(0) + (measured ? "\u2194" + measured.r.toFixed(0) : "") + (Math.abs(frameZoom-1) > 0.01 ? " \u00d7" + frameZoom.toFixed(2) : "") : dial.camRad.toFixed(0)) + " · fov " + dial.fov.toFixed(2) +
+          " · cam " + (AUTOFRAME ? autoRad.toFixed(0) + (measured ? "\u2194" + (fitR || measured.r).toFixed(0) + (FRAME_PCT ? (FRAME_PCT >= 0.8 ? " body" : " core") : " whole") : "") + (Math.abs(frameZoom-1) > 0.01 ? " \u00d7" + frameZoom.toFixed(2) : "") : dial.camRad.toFixed(0)) + " · fov " + dial.fov.toFixed(2) +
           " · " + (WNAMES.length > 1
             ? "wardrobe " + WNAMES[state.letter] + (state.mix > 0.05 ? " ⟶ " + WNAMES[state.letterB] + " " + Math.round(state.mix * 100) + "%" : "") + " (N steps)"
             : LETTER + (PETAL.gen === "arc" ? "[sweep " + PETAL.sweep + " twist " + PETAL.twist + "]" : "[curve " + PETAL.curve + " twist " + PETAL.twist + " taper " + PETAL.taper + "]")));

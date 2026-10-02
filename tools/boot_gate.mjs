@@ -65,8 +65,16 @@ if (!FILE) {
 const HASHES = process.argv.slice(3).length ? process.argv.slice(3) : [""];
 
 /* ---- console noise that is not the engine's fault ----------------------- */
+/* DEVICE LOST ("A valid external Instance reference no longer exists") is NOT
+   benign, and was listed here as if it were until 2026-09-30. Headless software
+   GPUs (SwiftShader in Glyph's container) lose the device a few frames after the
+   first submit, every time - so there the kernels are COMPILED and ACCEPTED but
+   never RUN, and a PASS means only that. It is now reported on every row as
+   "DEVICE LOST (compiled, not run)". It stays non-fatal so the compile gate still
+   works in the container; set ZIG_STRICT_DEVICE=1 (eyeZ, the Air) to make it fatal. */
+const LOST_RE = /valid external Instance reference no longer exists|device lost/i;
+const STRICT_DEVICE = process.env.ZIG_STRICT_DEVICE === "1";
 const BENIGN = [
-  /valid external Instance reference no longer exists/i,
   /favicon/i,
   /Failed to load resource.*404/i,
   /powerPreference option is currently ignored/i,   // Chrome on Windows, informational
@@ -114,10 +122,12 @@ let failed = 0;
 for (const hash of HASHES) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   const gpuErrs = [], otherErrs = [];
+  let lost = false;
 
   page.on("console", (m) => {
-    if (m.type() !== "error") return;
     const t = m.text();
+    if (LOST_RE.test(t)) { lost = true; return; }
+    if (m.type() !== "error") return;
     if (BENIGN.some((r) => r.test(t))) return;
     (/\[ZigWebGPU\]/.test(t) ? gpuErrs : otherErrs).push(t);
   });
@@ -167,7 +177,7 @@ for (const hash of HASHES) {
   /* THE VERDICT. A driver error is fatal on its own — that is the whole point
      of this rewrite. Frames must also actually be submitted: a page that boots,
      reports fps and never submits a command buffer is not rendering. */
-  const ok = probe.live && gpuErrs.length === 0 && otherErrs.length === 0 && probe.submits > 10;
+  const ok = probe.live && gpuErrs.length === 0 && otherErrs.length === 0 && probe.submits > 10 && !(lost && STRICT_DEVICE);
   if (!ok) failed++;
 
   console.log("  " + (ok ? "PASS " : "FAIL ") + (hash || "(no hash)").padEnd(24) +
@@ -177,6 +187,7 @@ for (const hash of HASHES) {
     " \u00b7 clears " + (probe.clears || "\u2014"));
   console.log("         core " + probe.core + " \u00b7 laws: " + probe.laws +
               " \u00b7 frame.light: " + probe.order);
+  if (lost) console.log("         DEVICE LOST (compiled and accepted, NOT run - a headless software GPU does this; " + (STRICT_DEVICE ? "FATAL under ZIG_STRICT_DEVICE" : "set ZIG_STRICT_DEVICE=1 on real hardware") + ")");
   for (const e of gpuErrs.slice(0, 2))
     console.log("         DRIVER  " + e.replace(/\s+/g, " ").slice(0, 150));
   if (gpuErrs.length > 2)

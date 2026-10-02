@@ -63,6 +63,8 @@ chk("MIC absent → no listener at all (v5.6.1: listen OR pulse arms it)", SP.in
 chk("a phone starts the gain at 1.5 unless #audio= says otherwise", HT.includes("window.ZIG_AUDIOGAIN = 1.5;"));
 chk("MIC and SKY ride the tail AND the rail", HT.includes('"&sky=" + (skysel ? skysel.value : "lit") + "&mic="') && /vwsel, skysel, micsel, nfsel/.test(HT));
 
+chk("SOLO is the default (the music moves 100%); #solo=alive starts ALIVE; U still toggles", HT.includes('window.ZIG_SOLO = !/[#&]solo=(alive|off)/i.test(location.hash);') && SP.includes("const SOLO_START = (global.ZIG_SOLO != null && global.ZIG_SOLO !== false);") && SP.includes('if (e.code === "KeyU") { solo = !solo;'));
+
 console.log("\nF — bundle --app");
 chk("--app is a flag any species can use", BU.includes('const APP = ARGS.includes("--app");'));
 chk("the icon is inlined (the app keeps its face off-line)", BU.includes('"data:image/png;base64," + readFileSync(iconPath)'));

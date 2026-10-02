@@ -30,6 +30,25 @@
      step(P, n, m, s, E, dt, rnd, opts)   one tick of the sand
      orient(P, n, m, s, E, dt)            long grains turn to lie ALONG the lines
      MEDIA.sand / MEDIA.rice              what is on the plate (0.2.0)
+     swarmAccel(ug, E, K, J, D, vX, vY, h1, h2)   THE SWARM LAW (0.3.0): the same idea as a
+                                          FORCE for flying agents (see below)
+
+   THE SWARM LAW (0.3.0, 2026-09-30). Bill: "your first step is my first step" -
+   Chladni folded INTO the living swarm (ZigWebGPU opts.chladni). Sand is a random
+   walk; a Zigverse shard is a body with a velocity, a speed band, neighbours and
+   (with MASS / NATURE) weight and reactions. So here the plate is a FORCE:
+     slide  toward the still line - down the slope of |u| - with a pull that grows
+            with how loud the spot is (K), so a shard ON a line feels nothing
+     shake  a random kick scaled by how hard its spot moves (+ the same small
+            floor as the sand), so loud places cannot hold a shard (J)
+     grip   the plate's friction: velocity IN the plate's plane bleeds (D). Sand
+            has no momentum; a shard does, and without grip it overshoots every
+            line and swings across it. Motion in DEPTH is free, so a settled
+            shard streams along its sheet instead of stopping.
+   both times the drive E (breath while a note is held). The plate faces the
+   viewer: a standing wave in the air between you and the swarm, so its still
+   lines read as Chladni's figures and in depth they are sheets to stream along.
+   The Bee is exempt (charisma is performance, not physics).
 
    MEDIA (0.2.0, 2026-09-30). Bill: "an option between rice and grains of sand".
    They are not the same experiment. SAND is fine and numerous: the figure
@@ -45,7 +64,8 @@
   const PI = Math.PI;
 
   const ZigChladni = {
-    VERSION: "0.2.0",
+    VERSION: "0.3.0",
+    SWARM: { gentle: { K: 8, J: 8, D: 2 }, firm: { K: 12, J: 10, D: 2 } },   // presets for the swarm law - tuned on a stand-in flock with the real speed band (vmin 0.35, vmax 4.2 + breath), spacing 3.6 and a 45-unit body: the figure forms in ~3 s (plate motion under the shards 0.13-0.25 of a plate-less control)
     MEDIA: {
       sand: { count: 40000, phone: 16000, size: 0.016, shake: 0.16, floor: 0.07, slide: 0.0012, hop: 0.9, hopRate: 6, align: 0, tilt: 1.7 },
       rice: { count: 5000, phone: 5000, size: 0.045, shake: 0.13, floor: 0.05, slide: 0.0012, hop: 1.5, hopRate: 4, align: 4.0, tilt: 0.45 }
@@ -154,6 +174,19 @@
         const along = Math.atan2(A[2], A[1]) + PI / 2, d2 = 2 * (along - P.a[i]);
         P.a[i] += 0.5 * Math.atan2(Math.sin(d2), Math.cos(d2)) * k;
       }
+    },
+
+    /* THE SWARM LAW: plate-plane acceleration for one agent. ug = [u, du/dX, du/dY]
+       at its place on the plate; vX, vY = its velocity along the plate's right and
+       up; h1, h2 = two per-agent-per-frame randoms 0..1.
+       Returns [aX, aY] (world units / s^2 along the plate's right and up). */
+    swarmAccel(ug, E, K, J, D, vX, vY, h1, h2) {
+      if (!(E > 0)) return [0, 0];
+      const u = ug[0], gx = ug[1], gy = ug[2], amp = Math.abs(u), gl = Math.hypot(gx, gy);
+      let ax = 0, ay = 0;
+      if (gl > 1e-4) { const k = -Math.sign(u) * Math.min(amp, 1) * K / gl; ax = k * gx; ay = k * gy; }
+      const a = 6.2831853 * h1, j = (0.5 + h2) * (amp + 0.07) * J;
+      return [(ax + Math.cos(a) * j - D * vX) * E, (ay + Math.sin(a) * j - D * vY) * E];
     },
 
     /* sand scattered evenly across the plate (a fresh plate, or a shake) */
